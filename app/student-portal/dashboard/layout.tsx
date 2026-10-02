@@ -1,57 +1,37 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import ForceChangePasswordModal from './_components/ForceChangePasswordModal';
 
-const navItems = [
-  {
-    label: 'Home',
-    href: '/student-portal/dashboard',
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Attendance',
-    href: '/student-portal/dashboard/attendance',
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Assignments',
-    href: '/student-portal/dashboard/assignments',
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Lectures',
-    href: '/student-portal/dashboard/lecture-plan',
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s4.332.477 5.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-      </svg>
-    ),
-  },
-  {
-    label: 'Notices',
-    href: '/student-portal/dashboard/notices',
-    icon: (
-      <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 00-7.029-5.912c-.563.097-.994.577-.94 1.145l.152 1.596a3.75 3.75 0 01-1.052 3.06l-4.243 4.243a3.75 3.75 0 01-3.06 1.052l-1.596-.152c-.568-.054-1.048.377-1.145.94a6 6 0 005.911 7.03m4.5-8.25L14.25 15" />
-      </svg>
-    ),
-  },
-];
+/*
+ * Student Portal shell.
+ *  - Desktop (≥1024px): fixed left sidebar.
+ *  - Tablet (768–1023px): top bar + slide-in navigation drawer.
+ *  - Mobile (<768px): top bar + bottom navigation (Home, Schedule, Tasks, More);
+ *    "More" opens a sheet with the remaining pages.
+ * The dashboard uses the full content width; the other portal pages were built
+ * for a phone-width column, so they stay in a centered narrow column until they
+ * are redesigned.
+ */
+
+type NavItem = { label: string; href: string; icon: React.ReactNode };
+
+const icon = (d: string) => (
+  <svg className="w-[18px] h-[18px] shrink-0" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24" aria-hidden>
+    <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+  </svg>
+);
+
+const HOME = { label: 'Home', href: '/student-portal/dashboard', icon: icon('M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6') };
+const SCHEDULE = { label: 'Schedule', href: '/student-portal/dashboard/lecture-plan', icon: icon('M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z') };
+const ATTENDANCE = { label: 'Attendance', href: '/student-portal/dashboard/attendance', icon: icon('M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4') };
+const ASSIGNMENTS = { label: 'Assignments', href: '/student-portal/dashboard/assignments', icon: icon('M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z') };
+const NOTICES = { label: 'Notices', href: '/student-portal/dashboard/notices', icon: icon('M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3A6 6 0 006 11v3.2c0 .5-.2 1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9') };
+
+const SIDEBAR_ITEMS: NavItem[] = [HOME, SCHEDULE, ATTENDANCE, ASSIGNMENTS, NOTICES];
+const MORE_ITEMS: NavItem[] = [ATTENDANCE, NOTICES];
 
 export default function StudentDashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -59,103 +39,177 @@ export default function StudentDashboardLayout({ children }: { children: React.R
   const [studentName, setStudentName] = useState('');
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
         const res = await fetch('/api/student-portal/auth/session');
-        if (res.status === 401) { router.push('/student-portal/signin'); return; }
-        const data = await res.json();
-        if (active) {
-          const name = data.user?.name ?? '';
-          sessionStorage.setItem('sit_student_name', name);
-          setStudentName(name);
-          setMustChangePassword(Boolean(data.user?.mustChangePassword));
-          setSessionChecked(true);
-        }
-      } catch { /* silent */ }
+        const data = await res.json().catch(() => null);
+        if (!active) return;
+        // The session check answers 200 with authenticated:false when signed out.
+        if (!res.ok || !data?.authenticated) { router.push('/student-portal/signin'); return; }
+        const name = data.user?.name ?? '';
+        try { sessionStorage.setItem('sit_student_name', name); } catch { /* storage blocked */ }
+        setStudentName(name);
+        setMustChangePassword(Boolean(data.user?.mustChangePassword));
+        setSessionChecked(true);
+      } catch { /* network blip — pages show their own error state */ }
     })();
     return () => { active = false; };
   }, [router]);
 
-  const handleLogout = async () => {
-    await fetch('/api/student-portal/auth/logout', { method: 'POST' });
+  // Overlays close when a link in them is followed (closeOverlays) or on Escape.
+  const closeOverlays = useCallback(() => { setDrawerOpen(false); setMoreOpen(false); }, []);
+  useEffect(() => {
+    if (!drawerOpen && !moreOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setDrawerOpen(false); setMoreOpen(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawerOpen, moreOpen]);
+
+  const handleLogout = useCallback(async () => {
+    await fetch('/api/student-portal/auth/logout', { method: 'POST' }).catch(() => {});
     router.push('/student-portal/signin');
-  };
+  }, [router]);
 
   const isActive = (href: string) =>
     href === '/student-portal/dashboard' ? pathname === href : pathname.startsWith(href);
-
-  const initials = (studentName || 'S').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const isDashboard = pathname === '/student-portal/dashboard';
+  const pageTitle = SIDEBAR_ITEMS.find((i) => isActive(i.href))?.label ?? 'Student Portal';
+  const initials = (studentName || 'S').split(' ').filter(Boolean).map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 
   if (sessionChecked && mustChangePassword) {
     return <ForceChangePasswordModal onDone={() => setMustChangePassword(false)} />;
   }
 
-  // No extra centering/max-width wrapper here — app/student-portal/layout.tsx
-  // (the parent layout for every /student-portal route) already provides a
-  // single centered, width-constrained (max-w-[430px] sm:max-w-xl) container.
-  // A second, differently-sized wrapper here previously fought with it: since
-  // the bottom nav below is `fixed` (positions against the viewport, not any
-  // ancestor), it was sized/centered against ITS OWN max-width rather than the
-  // actual visible content's, so the two drifted out of alignment.
-  return (
-    <div className="min-h-screen bg-[#f0f2f8] flex flex-col">
+  const navLink = (item: NavItem) => {
+    const active = isActive(item.href);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        aria-current={active ? 'page' : undefined}
+        onClick={closeOverlays}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          active ? 'bg-[#2E3093]/[0.07] text-[#2E3093]' : 'text-[#52525B] hover:bg-[#F4F4F5] hover:text-[#18181B]'
+        }`}
+      >
+        {item.icon}
+        {item.label}
+      </Link>
+    );
+  };
 
-      {/* App bar */}
-      <header className="sticky top-0 z-20 bg-white border-b border-gray-100">
-        <div className="flex items-center gap-3 px-4 lg:px-8 h-14">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/sit.png" alt="SIT" className="h-7 w-auto object-contain" />
-          <div className="w-px h-4 bg-gray-200" />
-          <p className="text-sm font-bold text-[#2E3093] flex-1 truncate">
-            {navItems.find(item => isActive(item.href))?.label ?? 'Dashboard'}
-          </p>
-          <button
-            onClick={handleLogout}
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1.5"
-            title="Sign out"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
-          <div className="w-8 h-8 rounded-lg bg-[#2E3093] flex items-center justify-center text-[10px] font-black text-white">
-            {initials}
-          </div>
+  const sidebarBody = (
+    <>
+      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-[#E4E4E7]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/sit.png" alt="SIT" className="h-7 w-auto object-contain" />
+        <span className="text-sm font-semibold text-[#18181B]">Student Portal</span>
+      </div>
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" aria-label="Student portal">
+        {SIDEBAR_ITEMS.map(navLink)}
+      </nav>
+      <div className="border-t border-[#E4E4E7] p-3">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <div className="w-8 h-8 rounded-full bg-[#2E3093] text-white text-[11px] font-semibold flex items-center justify-center shrink-0">{initials}</div>
+          <p className="min-w-0 flex-1 truncate text-sm font-medium text-[#18181B]">{studentName || 'Student'}</p>
         </div>
-      </header>
+        <button onClick={handleLogout}
+          className="mt-1 w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-[#71717A] hover:bg-[#F4F4F5] hover:text-[#18181B]">
+          Sign out
+        </button>
+      </div>
+    </>
+  );
 
-      {/* Page content */}
-      <main className="flex-1 overflow-y-auto pb-[68px]">
-        {children}
-      </main>
+  return (
+    <div className="min-h-screen bg-[#F8F9FB]">
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex fixed inset-y-0 left-0 z-30 w-60 flex-col bg-white border-r border-[#E4E4E7]">
+        {sidebarBody}
+      </aside>
 
-      {/* Bottom nav — width must match app/student-portal/layout.tsx's
-          container exactly (max-w-[430px] sm:max-w-xl), since `fixed`
-          positions against the viewport rather than that container. */}
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] sm:max-w-xl z-30 bg-white border-t border-gray-100 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
-        <div className="flex" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-          {navItems.map(item => {
+      {/* Tablet drawer */}
+      {drawerOpen && (
+        <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Navigation">
+          <button className="absolute inset-0 bg-black/30" aria-label="Close navigation" onClick={() => setDrawerOpen(false)} />
+          <aside className="absolute inset-y-0 left-0 w-64 max-w-[85vw] flex flex-col bg-white shadow-xl">
+            {sidebarBody}
+          </aside>
+        </div>
+      )}
+
+      <div className="lg:pl-60 min-w-0">
+        {/* Top bar (tablet + mobile) */}
+        <header className="lg:hidden sticky top-0 z-20 bg-white border-b border-[#E4E4E7]">
+          <div className="flex items-center gap-3 px-4 h-14">
+            <button
+              onClick={() => setDrawerOpen(true)}
+              className="hidden md:inline-flex -ml-1 p-2 rounded-lg text-[#52525B] hover:bg-[#F4F4F5]"
+              aria-label="Open navigation"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/sit.png" alt="SIT" className="h-6 w-auto object-contain" />
+            <p className="flex-1 truncate text-sm font-semibold text-[#18181B]">{pageTitle}</p>
+            <div className="w-8 h-8 rounded-full bg-[#2E3093] text-white text-[11px] font-semibold flex items-center justify-center" aria-hidden>
+              {initials}
+            </div>
+          </div>
+        </header>
+
+        <main className={`pb-[76px] md:pb-0 ${isDashboard ? '' : 'max-w-2xl mx-auto'}`}>
+          {children}
+        </main>
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white border-t border-[#E4E4E7]" aria-label="Student portal">
+        <div className="grid grid-cols-4" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          {[
+            { ...HOME },
+            { ...SCHEDULE },
+            { ...ASSIGNMENTS, label: 'Tasks' },
+          ].map((item) => {
             const active = isActive(item.href);
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex-1 flex flex-col items-center justify-center gap-1 pt-2 pb-3 relative transition-colors
-                  ${active ? 'text-[#2E3093]' : 'text-gray-400'}`}
-              >
-                {active && (
-                  <span className="absolute top-0 inset-x-0 h-[3px] bg-[#FAE452] rounded-b" />
-                )}
+              <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center justify-center gap-1 h-14 text-[11px] font-medium ${active ? 'text-[#2E3093]' : 'text-[#71717A]'}`}>
                 {item.icon}
-                <span className="text-[9px] font-bold uppercase tracking-wide leading-none">{item.label}</span>
+                {item.label}
               </Link>
             );
           })}
+          <button onClick={() => setMoreOpen(true)} aria-haspopup="dialog" aria-expanded={moreOpen}
+            className={`flex flex-col items-center justify-center gap-1 h-14 text-[11px] font-medium ${MORE_ITEMS.some((i) => isActive(i.href)) ? 'text-[#2E3093]' : 'text-[#71717A]'}`}>
+            {icon('M4 6h16M4 12h16M4 18h16')}
+            More
+          </button>
         </div>
       </nav>
+
+      {/* Mobile "More" sheet */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="More">
+          <button className="absolute inset-0 bg-black/30" aria-label="Close" onClick={() => setMoreOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-white p-3 pb-6 shadow-xl" style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}>
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-[#E4E4E7]" />
+            <div className="space-y-0.5">{MORE_ITEMS.map(navLink)}</div>
+            <div className="mt-2 border-t border-[#E4E4E7] pt-2">
+              <button onClick={handleLogout} className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#71717A] hover:bg-[#F4F4F5]">
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

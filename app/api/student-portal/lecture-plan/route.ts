@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getStudentSession } from '@/app/api/student-portal/auth/session/route';
+import { getStudentPortalContext } from '@/lib/student-portal/context';
 
 export async function GET(req: NextRequest) {
   try {
@@ -9,29 +10,8 @@ export async function GET(req: NextRequest) {
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const pool = getPool();
-    const studentId = session.studentId;
-
-    // Same "latest active admission" batch resolution as
-    // app/api/student-portal/academics/route.ts — student_master.Batch_Code
-    // goes stale after a transfer/re-admission.
-    const [studentRows] = await pool.query<any[]>(
-      `SELECT b.Batch_Id
-       FROM student_master s
-       LEFT JOIN (
-         SELECT Student_Id, MAX(Admission_Id) AS Admission_Id
-         FROM admission_master
-         WHERE IsDelete = 0 AND IsActive = 1
-         GROUP BY Student_Id
-       ) latest ON latest.Student_Id = s.Student_Id
-       LEFT JOIN admission_master a ON a.Admission_Id = latest.Admission_Id
-       LEFT JOIN batch_mst b ON b.Batch_Id = COALESCE(
-         a.Batch_Id,
-         (SELECT Batch_Id FROM batch_mst WHERE Batch_code = s.Batch_Code AND Course_Id = s.Course_Id ORDER BY Batch_Id DESC LIMIT 1)
-       )
-       WHERE s.Student_Id = ?`,
-      [studentId]
-    );
-    const batchId = studentRows[0]?.Batch_Id ?? null;
+    const ctx = await getStudentPortalContext(pool, Number(session.studentId));
+    const batchId = ctx?.batchId ?? null;
     if (!batchId) return NextResponse.json({ lectures: [] });
 
     // batch_slecture_master is the table staff actually maintain via the Batch
@@ -43,6 +23,9 @@ export async function GET(req: NextRequest) {
       `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_name, s.date,
               s.starttime, s.endtime, s.class_room, s.assignment, s.unit_test, u.utdate AS unit_test_date,
               s.session,
+              -- normal | cancelled | replacement | pending (set on the Batch Master
+              -- lecture plan); read-only, used for the dashboard's Cancelled filter.
+              s.lecture_status,
               (lt.Take_Id IS NOT NULL) AS taken
        FROM batch_slecture_master s
        LEFT JOIN lecture_taken_master lt

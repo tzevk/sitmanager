@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { buildFinalExamReport, parseClassBoundaries } from '@/lib/final-exam-report';
 import { isReExamSitting, MAX_FINAL_EXAM_ATTEMPT, recordedAttempt } from '@/lib/final-exam-attempt';
+import { parseMark } from '@/lib/student-portal/academic-status';
 
 /**
  * Performance Report (form F/TD/08/02) for one batch.
@@ -9,18 +10,18 @@ import { isReExamSitting, MAX_FINAL_EXAM_ATTEMPT, recordedAttempt } from '@/lib/
  * the same live calculation as the Final Exam and Student Interview reports.
  * This module only adds how each individual mark is DISPLAYED:
  *
- *  Assignments — assignment_given_child.Status defaults to 'Present' even for
- *  students who never attended, so it can't on its own tell "absent" from
- *  "scored 0". Lecture attendance is the authority instead. There is no direct
- *  assignment → lecture link (lecture_taken_master.Assignment_Id/_No are not
- *  filled in), so the only reliable correlation is the assignment date: a cell
- *  shows "Absent" only when the student was marked Absent in EVERY lecture
- *  session held that day. Days with mixed attendance keep the recorded mark.
- *  Precedence per cell:
+ *  Assignments — attendance never overrides a recorded mark (institute
+ *  decision): a recorded mark, including 0, is always shown. When the student
+ *  was marked Absent in EVERY lecture session on the assignment date, the cell
+ *  is flagged absentOnLectureDate (printed as a "†" marker) so the combination
+ *  is visible and can be questioned. There is no direct assignment → lecture
+ *  link (lecture_taken_master.Assignment_Id/_No are not filled in), so the
+ *  correlation is by date. Precedence per cell:
  *    no record for the student         → "-"
- *    absent all day (lecture records)  → "Absent"      (marks still count in totals)
  *    Status 'Absent' and 0 marks       → "Not Submitted"
  *    otherwise                         → the mark, including a genuine 0
+ *  Duplicate rows per sheet+student (staff saves insert instead of update):
+ *  the newest row wins.
  *
  *  Unit tests / final exam — their own Status column is the authority:
  *  'Absent' with 0 marks → "Absent", otherwise the mark.
@@ -43,6 +44,8 @@ export interface PerformanceCell {
   marks: number | null;
   max: number;
   display: string;
+  /** Assignments: marked Absent in every lecture that day. Never changes the mark. */
+  absentOnLectureDate?: boolean;
 }
 
 export interface PerformanceAttempt {
@@ -76,19 +79,20 @@ export interface PerformanceReport {
 const ATTEMPT_LABELS = ['First Attempt', 'Second Attempt', 'Third Attempt', 'Fourth Attempt', 'Fifth Attempt'];
 
 function cellFor(
-  row: { marks: number; status: string } | undefined,
+  row: { marks: number | null; status: string } | undefined,
   max: number,
   no: number,
   opts: { absentAllDay?: boolean; zeroAbsentLabel: 'absent' | 'not_submitted' }
 ): PerformanceCell {
   if (!row) return { no, status: 'not_recorded', marks: null, max, display: '-' };
-  if (opts.absentAllDay) return { no, status: 'absent', marks: row.marks, max, display: 'Absent' };
-  if (row.status === 'Absent' && row.marks === 0) {
+  const flag = opts.absentAllDay ? { absentOnLectureDate: true } : {};
+  if (row.status === 'Absent' && (row.marks === 0 || row.marks === null)) {
     return opts.zeroAbsentLabel === 'absent'
-      ? { no, status: 'absent', marks: 0, max, display: 'Absent' }
-      : { no, status: 'not_submitted', marks: 0, max, display: 'Not Submitted' };
+      ? { no, status: 'absent', marks: 0, max, display: 'Absent', ...flag }
+      : { no, status: 'not_submitted', marks: 0, max, display: 'Not Submitted', ...flag };
   }
-  return { no, status: 'marks', marks: row.marks, max, display: String(row.marks) };
+  if (row.marks === null) return { no, status: 'not_recorded', marks: null, max, display: '-', ...flag };
+  return { no, status: 'marks', marks: row.marks, max, display: String(row.marks), ...flag };
 }
 
 export async function buildPerformanceReport(pool: any, batchId: number): Promise<PerformanceReport | null> {
@@ -115,22 +119,25 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
   const [asgRows, testRows, examRows, asgDates, lectureRows] = await Promise.all([
     givenIds.length
       ? pool.query(
-          `SELECT Given_Id, Student_Id, IFNULL(Marks_Given, 0) AS Marks, Status FROM assignment_given_child
-           WHERE Given_Id IN (${inList(givenIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          `SELECT Given_Id, Student_Id, Marks_Given AS Marks, Status FROM assignment_given_child
+           WHERE Given_Id IN (${inList(givenIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY ID`,
           givenIds
         ).then(([r]: any) => r)
       : [],
     testTakeIds.length
       ? pool.query(
-          `SELECT Take_Id, Student_Id, IFNULL(Marks_Given, 0) AS Marks, Status FROM test_taken_child
-           WHERE Take_Id IN (${inList(testTakeIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          `SELECT Take_Id, Student_Id, Marks_Given AS Marks, Status FROM test_taken_child
+           WHERE Take_Id IN (${inList(testTakeIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY ID`,
           testTakeIds
         ).then(([r]: any) => r)
       : [],
     examTakeIds.length
       ? pool.query(
-          `SELECT Take_Id, Student_Id, IFNULL(Marks_Given, 0) AS Marks, Status FROM exam_taken_child
-           WHERE Take_Id IN (${inList(examTakeIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          `SELECT Take_Id, Student_Id, Marks_Given AS Marks, Status FROM exam_taken_child
+           WHERE Take_Id IN (${inList(examTakeIds)}) AND (IsDelete = 0 OR IsDelete IS NULL)
+           ORDER BY ID`,
           examTakeIds
         ).then(([r]: any) => r)
       : [],
@@ -156,8 +163,9 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
   ]);
 
   const toMap = (rows: any[], idCol: string) =>
-    new Map<string, { marks: number; status: string }>(
-      rows.map((r) => [key(r[idCol], sidOf(r.Student_Id)), { marks: Number(r.Marks) || 0, status: String(r.Status || '').trim() }])
+    new Map<string, { marks: number | null; status: string }>(
+      // A blank mark stays null ("-"), never 0 — 0 is a real mark.
+      rows.map((r) => [key(r[idCol], sidOf(r.Student_Id)), { marks: parseMark(r.Marks), status: String(r.Status || '').trim() }])
     );
   const asgMap = toMap(asgRows, 'Given_Id');
   const testMap = toMap(testRows, 'Take_Id');
@@ -232,10 +240,11 @@ export async function buildPerformanceReport(pool: any, batchId: number): Promis
       const label = ATTEMPT_LABELS[n - 1] ?? `Attempt ${n}`;
       const papers = attemptGroups.get(n) ?? [];
       const max = papers.reduce((sum: number, f: any) => sum + (Number(f.Max_Marks) || 0), 0);
-      const recorded = papers.map((f: any) => examMap.get(key(f.Take_Id, sid))).filter(Boolean) as { marks: number; status: string }[];
+      const recorded = papers.map((f: any) => examMap.get(key(f.Take_Id, sid))).filter(Boolean) as { marks: number | null; status: string }[];
       if (recorded.length === 0) return { label, status: 'not_recorded', obtained: null, max, display: '-' };
-      if (recorded.every((r) => r.status === 'Absent' && r.marks === 0)) return { label, status: 'absent', obtained: 0, max, display: 'Absent' };
-      const obtained = recorded.reduce((sum, r) => sum + r.marks, 0);
+      if (recorded.every((r) => r.status === 'Absent' && (r.marks === 0 || r.marks === null))) return { label, status: 'absent', obtained: 0, max, display: 'Absent' };
+      if (recorded.every((r) => r.marks === null)) return { label, status: 'not_recorded', obtained: null, max, display: '-' };
+      const obtained = recorded.reduce((sum, r) => sum + (r.marks ?? 0), 0);
       return { label, status: 'marks', obtained, max, display: `${obtained} / ${max}` };
     });
 

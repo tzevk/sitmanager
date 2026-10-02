@@ -26,12 +26,20 @@ export function renderPerformanceReportHtml(data: any): string {
   // Not Submitted / -) underneath. Absent-type cells are bold so they stand out.
   // Columns are ~7mm wide on the printed form, so "Not Submitted" prints as "NS"
   // with a key under the grid; "Absent" fits at the smaller flag size.
-  const cellText = (c: any) => (c.status === 'not_submitted' ? 'NS' : c.display);
+  // "†" marks an assignment entry on a day the student was absent from every
+  // lecture — shown alongside the mark, never replacing it.
+  const cellText = (c: any) => `${c.status === 'not_submitted' ? 'NS' : c.display}${c.absentOnLectureDate ? '†' : ''}`;
   const markGrid = (cells: any[], prefix: string) => cells.length === 0
     ? '<span class="muted">None recorded</span>'
     : `<table class="grid"><tr>${cells.map((c) => `<th>${prefix}${esc(c.no)}</th>`).join('')}</tr>
          <tr>${cells.map((c) => `<td class="${c.status === 'marks' ? '' : 'flag'}">${esc(cellText(c))}</td>`).join('')}</tr></table>${
-        cells.some((c) => c.status === 'not_submitted') ? '<div class="key">NS = Not Submitted</div>' : ''}`;
+        (() => {
+          const keys = [
+            cells.some((c) => c.status === 'not_submitted') ? 'NS = Not Submitted' : '',
+            cells.some((c) => c.absentOnLectureDate) ? '† = Absent on lecture date' : '',
+          ].filter(Boolean);
+          return keys.length ? `<div class="key">${keys.join(' · ')}</div>` : '';
+        })()}`;
 
   // Signatories in the printed form's order: Training Coordinator, Faculty,
   // Managing Director. Results from the legacy system store the coordinator in

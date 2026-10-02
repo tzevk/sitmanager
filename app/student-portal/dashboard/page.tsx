@@ -1,499 +1,493 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { toBatchNumber } from '@/lib/batch-display';
+
+/* ── API shapes (existing endpoints, unchanged) ─────────────────────────── */
 
 interface AcademicsData {
-  fees: {
-    total: number;
-    paid: number;
-    pending: number;
-  };
-  fee_ledger: Array<{
-    fees_id: number;
-    receipt_code: string | null;
-    date: string | null;
-    payment_type: string | null;
-    type: 'paid' | 'charged';
-    amount: number;
-    notes: string | null;
-  }>;
   student: {
-    student_id: number;
-    student_name: string;
-    email: string;
-    mobile: string;
-    course_name: string;
-    batch_code: string;
-    batch_timings: string;
-    batch_start: string;
-    batch_end: string;
-    percentage: string;
-    trainer_name?: string | null;
-    trainer_time_from?: string | null;
-    trainer_time_to?: string | null;
-    trainer_link?: string | null;
-    trainer_date?: string | null;
+    student_name: string | null;
+    roll_no: string | null;
+    course_name: string | null;
+    batch_code: string | null;
+    batch_timings: string | null;
   };
-  attendance: {
-    total_lectures: number;
-    attended: number;
-    absent: number;
-    percentage: number;
-  };
-  assignments: {
-    total_given: number;
-    received: number;
-    pending: number;
-    percentage: number;
-  };
-  recent_assignments: Array<{
-    Take_Id: number;
-    Take_Dt: string;
-    Topic: string;
-    Faculty_Name: string;
-    received: number;
-  }>;
-  recent_lectures: Array<{
-    Take_Id: number;
-    Take_Dt: string;
-    Topic: string;
-    Faculty_Name: string;
-    present: number;
-    Late: number;
-    session?: 'first_half' | 'second_half';
-  }>;
-  upcoming_lectures: Array<{
-    id: number;
-    lecture_no: number;
-    subject_topic: string;
-    subject: string;
-    faculty_name: string;
-    date: string;
-    starttime: string;
-    endtime: string;
-    assignment: string;
-    unit_test: string;
-    unit_test_date: string | null;
-    session: string | null;
-  }>;
-  final_exams: Array<{
-    take_id: number;
-    date: string | null;
-    attempt: number;
-    label: string;
-    max_marks: number | null;
-    status: 'upcoming' | 'held';
-  }>;
+  attendance: { total_lectures: number; attended: number; absent: number; percentage: number };
+  fees: { total: number; paid: number; pending: number };
+  fee_ledger: Array<{ fees_id: number; receipt_code: string | null; date: string | null; payment_type: string | null; type: 'paid' | 'charged'; amount: number; notes: string | null }>;
+  final_exams: Array<{ take_id: number; date: string | null; attempt: number; label: string; max_marks: number | null; status: 'upcoming' | 'held' }>;
 }
 
-function cleanTimings(t: string): string {
-  // Strip "Monday To Saturday " or "Mon To Sat " prefix
-  return t.replace(/^[A-Za-z]+\s+[Tt]o\s+[A-Za-z]+\s*/i, '').trim();
+interface Lecture {
+  id: number;
+  lecture_no: number | null;
+  subject_topic: string | null;
+  subject: string | null;
+  faculty_name: string | null;
+  date: string | null;
+  starttime: string | null;
+  endtime: string | null;
+  class_room: string | null;
+  session: string | null;
+  lecture_status: string | null;
+  taken: number | boolean | null;
 }
 
-function fmtDate(s: string) {
-  return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+interface AssignmentRecord {
+  parentId: number;
+  assessmentName: string;
+  assessmentNo: number | null;
+  date: string | null;
+  maxMarks: number | null;
+  marksObtained: number | null;
+  status: 'EVALUATED' | 'ABSENT' | 'NOT_SUBMITTED' | 'NOT_EVALUATED' | 'RESULT_PENDING' | 'NOT_APPLICABLE';
+  published: boolean;
+  absentOnLectureDate: boolean | null;
 }
 
-function fmtINR(n: number): string {
-  return '₹' + Math.round(Math.abs(n)).toLocaleString('en-IN');
+interface Notice { id: number; title: string | null; specification: string | null }
+
+type Load<T> = { state: 'loading' } | { state: 'error' } | { state: 'ready'; data: T };
+
+/* ── Formatting ─────────────────────────────────────────────────────────── */
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+
+function fmtDate(iso: string | null, withWeekday = false): string {
+  if (!iso) return '—';
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-IN', withWeekday ? { weekday: 'short', day: '2-digit', month: 'short' } : { day: '2-digit', month: 'short', year: 'numeric' });
 }
+
+function fmtTime(t: string | null): string {
+  const m = String(t ?? '').trim().match(/^(\d{1,2})[:.](\d{2})/);
+  if (!m) return String(t ?? '').trim();
+  const h = Number(m[1]);
+  return `${((h + 11) % 12) + 1}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+const timeRange = (l: Lecture) => [fmtTime(l.starttime), fmtTime(l.endtime)].filter(Boolean).join(' – ');
+const fmtINR = (n: number) => '₹' + Math.round(Math.abs(n)).toLocaleString('en-IN');
+const isUrl = (v: string | null) => /^https?:\/\//i.test(String(v ?? '').trim());
+
+/* ── Lecture status (from the lecture plan; no guessing) ────────────────── */
+
+type LectureKey = 'cancelled' | 'completed' | 'today' | 'upcoming' | 'past' | 'unscheduled';
+
+function lectureStatus(l: Lecture, today: string): { key: LectureKey; label: string } {
+  const replacement = String(l.lecture_status ?? '').toLowerCase() === 'replacement';
+  if (String(l.lecture_status ?? '').toLowerCase() === 'cancelled') return { key: 'cancelled', label: 'Cancelled' };
+  if (l.taken === true || Number(l.taken) === 1) return { key: 'completed', label: 'Completed' };
+  if (!l.date) return { key: 'unscheduled', label: 'Date TBA' };
+  if (l.date === today) return { key: 'today', label: replacement ? 'Today · Replacement' : 'Today' };
+  if (l.date > today) return { key: 'upcoming', label: replacement ? 'Replacement' : 'Upcoming' };
+  return { key: 'past', label: 'Not recorded' };
+}
+
+const LECTURE_TONE: Record<LectureKey, string> = {
+  cancelled: 'bg-red-50 text-red-700 border-red-200',
+  completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  today: 'bg-[#FAE452]/40 text-[#3F3A00] border-[#E6CF2E]',
+  upcoming: 'bg-[#2E3093]/[0.06] text-[#2E3093] border-[#2E3093]/20',
+  past: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
+  unscheduled: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]',
+};
+
+/* ── Assignment status (0 is a mark; null is "no mark") ─────────────────── */
+
+function assignmentDisplay(r: AssignmentRecord): { text: string; tone: string } {
+  if (r.status === 'EVALUATED' && r.marksObtained !== null) {
+    return { text: r.maxMarks !== null ? `${r.marksObtained} / ${r.maxMarks}` : String(r.marksObtained), tone: 'bg-[#2E3093]/[0.06] text-[#2E3093] border-[#2E3093]/20' };
+  }
+  switch (r.status) {
+    case 'RESULT_PENDING': return { text: 'Result pending', tone: 'bg-[#F4F4F5] text-[#52525B] border-[#E4E4E7]' };
+    case 'NOT_EVALUATED': return { text: 'Pending', tone: 'bg-amber-50 text-amber-800 border-amber-200' };
+    case 'NOT_SUBMITTED': return { text: 'Not submitted', tone: 'bg-red-50 text-red-700 border-red-200' };
+    case 'ABSENT': return { text: 'Absent', tone: 'bg-red-50 text-red-700 border-red-200' };
+    default: return { text: '—', tone: 'bg-[#F4F4F5] text-[#71717A] border-[#E4E4E7]' };
+  }
+}
+
+/* ── Small building blocks ──────────────────────────────────────────────── */
+
+function Card({ title, action, children, className = '' }: { title?: string; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={`min-w-0 rounded-xl border border-[#E4E4E7] bg-white ${className}`}>
+      {(title || action) && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 pt-4 sm:px-5">
+          {title && <h2 className="text-sm font-semibold text-[#18181B]">{title}</h2>}
+          {action}
+        </div>
+      )}
+      <div className="p-4 sm:px-5">{children}</div>
+    </section>
+  );
+}
+
+const linkCls = 'shrink-0 text-xs font-medium text-[#2A6BB5] hover:text-[#2E3093] hover:underline underline-offset-2';
+
+function Chip({ text, tone }: { text: string; tone: string }) {
+  return <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium ${tone}`}>{text}</span>;
+}
+
+function Skeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="space-y-2.5" aria-hidden>
+      {Array.from({ length: rows }, (_, i) => <div key={i} className="h-4 animate-pulse rounded bg-[#F4F4F5]" style={{ width: `${90 - i * 12}%` }} />)}
+    </div>
+  );
+}
+
+function ErrorState({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[#71717A]" role="alert">
+      <span>Couldn&apos;t load {what}.</span>
+      <button onClick={onRetry} className="rounded-md border border-[#E4E4E7] px-2.5 py-1 text-xs font-medium text-[#18181B] hover:bg-[#F4F4F5]">Retry</button>
+    </div>
+  );
+}
+
+const Empty = ({ children }: { children: React.ReactNode }) => <p className="py-2 text-sm text-[#71717A]">{children}</p>;
+
+/* ── Fees dialog (full-screen on phones, centered on larger screens) ────── */
+
+function FeesDialog({ data, onClose }: { data: AcademicsData; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  const { fees, fee_ledger: ledger } = data;
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="fees-title">
+      <button className="absolute inset-0 bg-black/30" aria-label="Close" onClick={onClose} />
+      <div className="relative flex h-full w-full flex-col bg-white sm:h-auto sm:max-h-[85vh] sm:max-w-lg sm:rounded-xl sm:border sm:border-[#E4E4E7] sm:shadow-xl">
+        <div className="flex items-center justify-between border-b border-[#E4E4E7] px-5 py-4">
+          <h2 id="fees-title" className="text-base font-semibold text-[#18181B]">Fees</h2>
+          <button onClick={onClose} className="rounded-md p-1 text-[#71717A] hover:bg-[#F4F4F5]" aria-label="Close">
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 border-b border-[#E4E4E7] px-5 py-4 text-sm">
+          <div><p className="text-xs text-[#71717A]">Total</p><p className="font-semibold">{fmtINR(fees.total)}</p></div>
+          <div><p className="text-xs text-[#71717A]">Paid</p><p className="font-semibold text-emerald-700">{fmtINR(fees.paid)}</p></div>
+          <div><p className="text-xs text-[#71717A]">Outstanding</p><p className={`font-semibold ${fees.pending > 0 ? 'text-red-700' : ''}`}>{fmtINR(Math.max(0, fees.pending))}</p></div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          <p className="pb-2 text-xs text-[#71717A]">Recent transactions{ledger.length ? ` (latest ${ledger.length})` : ''}</p>
+          {ledger.length === 0 ? <Empty>No fee transactions on record.</Empty> : (
+            <ul className="divide-y divide-[#F4F4F5]">
+              {ledger.map((row) => (
+                <li key={row.fees_id} className="flex items-start justify-between gap-3 py-2.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-[#18181B]">{row.type === 'paid' ? 'Payment' : 'Charge'}{row.receipt_code ? ` · ${row.receipt_code}` : ''}</p>
+                    <p className="truncate text-xs text-[#71717A]">{fmtDate(row.date)}{row.payment_type ? ` · ${row.payment_type}` : ''}</p>
+                  </div>
+                  <p className={`shrink-0 font-semibold ${row.type === 'paid' ? 'text-emerald-700' : 'text-[#18181B]'}`}>{fmtINR(row.amount)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Page ───────────────────────────────────────────────────────────────── */
+
+const LECTURE_FILTERS = ['all', 'upcoming', 'completed', 'cancelled'] as const;
+type LectureFilter = (typeof LECTURE_FILTERS)[number];
 
 export default function StudentDashboardPage() {
   const router = useRouter();
-  const [data, setData] = useState<AcademicsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [greeting, setGreeting] = useState('');
+  const [academics, setAcademics] = useState<Load<AcademicsData>>({ state: 'loading' });
+  const [lectures, setLectures] = useState<Load<Lecture[]>>({ state: 'loading' });
+  const [assignments, setAssignments] = useState<Load<AssignmentRecord[]>>({ state: 'loading' });
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [lectureFilter, setLectureFilter] = useState<LectureFilter>('all');
+  const [feesOpen, setFeesOpen] = useState(false);
   const [today, setToday] = useState('');
-  const [notices, setNotices] = useState<Array<{ id: number; title: string | null; specification: string | null }>>([]);
 
-  useEffect(() => {
-    (async () => {
-      // Time-based greeting is set here (after the first await) rather than in a
-      // synchronous effect body — keeps it client-only and avoids cascading renders.
-      try {
-        const res = await fetch('/api/student-portal/academics');
-        const h = new Date().getHours();
-        setGreeting(h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening');
-        setToday(new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' }));
-        if (res.status === 401) { router.push('/student-portal/signin'); return; }
-        const json = await res.json();
-        setData(json);
-      } catch { /* silent */ }
-      setLoading(false);
-    })();
-    // Notices are non-critical — fetched independently so a failure here
-    // never blocks the main dashboard from loading.
-    (async () => {
-      try {
-        const res = await fetch('/api/student-portal/notices');
-        if (res.status === 401) return;
-        const json = await res.json();
-        setNotices(Array.isArray(json?.notices) ? json.notices.slice(0, 3) : []);
-      } catch { /* silent */ }
-    })();
+  const fetchJson = useCallback(async (url: string) => {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (res.status === 401) { router.push('/student-portal/signin'); throw new Error('signed out'); }
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
   }, [router]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
-      </div>
+  const loadAcademics = useCallback(() => {
+    setAcademics({ state: 'loading' });
+    fetchJson('/api/student-portal/academics')
+      .then((d) => { setToday(localToday()); setAcademics({ state: 'ready', data: d }); })
+      .catch(() => setAcademics({ state: 'error' }));
+  }, [fetchJson]);
+  const loadLectures = useCallback(() => {
+    setLectures({ state: 'loading' });
+    fetchJson('/api/student-portal/lecture-plan')
+      .then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); })
+      .catch(() => setLectures({ state: 'error' }));
+  }, [fetchJson]);
+  const loadAssignments = useCallback(() => {
+    setAssignments({ state: 'loading' });
+    fetchJson('/api/student-portal/assignments')
+      .then((d) => setAssignments({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] }))
+      .catch(() => setAssignments({ state: 'error' }));
+  }, [fetchJson]);
+
+  useEffect(() => {
+    // Promise callbacks (not the effect body) set state.
+    const academicsP = fetchJson('/api/student-portal/academics');
+    const lecturesP = fetchJson('/api/student-portal/lecture-plan');
+    const assignmentsP = fetchJson('/api/student-portal/assignments');
+    academicsP.then((d) => { setToday(localToday()); setAcademics({ state: 'ready', data: d }); }).catch(() => setAcademics({ state: 'error' }));
+    lecturesP.then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); }).catch(() => setLectures({ state: 'error' }));
+    assignmentsP.then((d) => setAssignments({ state: 'ready', data: Array.isArray(d.records) ? d.records : [] })).catch(() => setAssignments({ state: 'error' }));
+    // Notices are secondary — a failure just hides them.
+    fetchJson('/api/student-portal/notices').then((d) => setNotices(Array.isArray(d.notices) ? d.notices.slice(0, 2) : [])).catch(() => {});
+  }, [fetchJson]);
+
+  const closeFees = useCallback(() => setFeesOpen(false), []);
+
+  const lectureView = useMemo(() => {
+    if (lectures.state !== 'ready' || !today) return null;
+    const withStatus = lectures.data.map((l) => ({ l, s: lectureStatus(l, today) }));
+    const key = (l: Lecture) => `${l.date ?? '9999-99-99'} ${l.starttime ?? ''}`;
+    const upcomingNext = withStatus
+      .filter(({ l, s }) => l.date && l.date >= today && s.key !== 'completed')
+      .sort((a, b) => key(a.l).localeCompare(key(b.l)))
+      .slice(0, 5);
+    const counts = {
+      all: withStatus.length,
+      upcoming: withStatus.filter(({ s }) => s.key === 'upcoming' || s.key === 'today').length,
+      completed: withStatus.filter(({ s }) => s.key === 'completed').length,
+      cancelled: withStatus.filter(({ s }) => s.key === 'cancelled').length,
+    };
+    const filtered = withStatus.filter(({ s }) =>
+      lectureFilter === 'all' ? true
+        : lectureFilter === 'upcoming' ? s.key === 'upcoming' || s.key === 'today'
+        : s.key === lectureFilter
     );
-  }
+    filtered.sort((a, b) => lectureFilter === 'upcoming' ? key(a.l).localeCompare(key(b.l)) : key(b.l).localeCompare(key(a.l)));
+    return { upcomingNext, counts, list: filtered.slice(0, 8), total: filtered.length };
+  }, [lectures, today, lectureFilter]);
 
-  const att    = data?.attendance  ?? { total_lectures: 0, attended: 0, absent: 0, percentage: 0 };
-  const assign = data?.assignments ?? { total_given: 0, received: 0, pending: 0, percentage: 0 };
-  const fees   = data?.fees        ?? { total: 0, paid: 0, pending: 0 };
-  const feeLedger = data?.fee_ledger ?? [];
-  const feesCleared = fees.pending <= 0;
-  const paidPct = fees.total > 0 ? Math.min(100, Math.round((fees.paid / fees.total) * 100)) : (feesCleared ? 100 : 0);
-  const student       = data?.student;
-  const recentLectures     = data?.recent_lectures     ?? [];
-  const recentAssignments  = data?.recent_assignments  ?? [];
-  const upcoming           = data?.upcoming_lectures   ?? [];
-  const exams              = data?.final_exams         ?? [];
+  const assignmentView = useMemo(() => {
+    if (assignments.state !== 'ready') return null;
+    const all = assignments.data;
+    return {
+      total: all.length,
+      pending: all.filter((r) => r.status === 'NOT_EVALUATED').length,
+      // Recorded by staff but not published yet. This also covers entries recorded
+      // as not submitted, so it must not be labelled "Submitted".
+      awaiting: all.filter((r) => r.status === 'RESULT_PENDING').length,
+      evaluated: all.filter((r) => r.status === 'EVALUATED' && r.published).length,
+      recent: [...all].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, 6),
+    };
+  }, [assignments]);
 
-  const firstName = student?.student_name?.split(' ')[0] ?? 'Student';
-  const timings = student?.batch_timings ? cleanTimings(student.batch_timings) : '';
+  const a = academics.state === 'ready' ? academics.data : null;
 
   return (
-    <div className="pb-6">
+    <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-5 md:px-6 md:py-6 lg:px-8">
 
-      {/* ── Hero ─────────────────────────────────────────── */}
-      <div className="relative bg-[#2E3093] px-5 sm:px-8 lg:px-10 pt-7 sm:pt-10 pb-14 sm:pb-16 overflow-hidden">
-        <div aria-hidden className="pointer-events-none absolute top-0 right-0 w-56 h-56 sm:w-72 sm:h-72 bg-white/5 rounded-full blur-3xl -translate-y-1/3 translate-x-1/4" />
-        <div aria-hidden className="pointer-events-none absolute bottom-0 left-0 w-40 h-40 bg-[#FAE452]/10 rounded-full blur-3xl translate-y-1/3 -translate-x-1/4" />
-
-        <div className="relative max-w-5xl mx-auto">
-          <p className="text-white/40 text-[11px] font-semibold uppercase tracking-[0.22em]">{today}</p>
-
-          <div className="mt-2 flex items-start justify-between gap-4">
-            <div>
-              <p className="text-white/50 text-xs sm:text-sm font-medium">{greeting},</p>
-              <h1 className="text-[2rem] sm:text-[2.6rem] font-black text-white leading-tight mt-0.5">{firstName}</h1>
-              {student?.course_name && (
-                <p className="text-white/60 text-xs sm:text-sm mt-2 leading-relaxed">
-                  {student.course_name}
-                  {student.batch_code ? <><br className="sm:hidden" /><span className="text-white/40 hidden sm:inline"> · </span><span className="text-white/40">{toBatchNumber(student.batch_code)}</span></> : ''}
-                  {timings ? <><span className="text-white/30"> · </span><span className="text-[#FAE452]/80">{timings}</span></> : ''}
-                </p>
-              )}
-            </div>
-            <div className="hidden sm:flex w-16 h-16 rounded-2xl bg-white/10 border border-white/15 items-center justify-center shrink-0">
-              <span className="text-xl font-black text-[#FAE452]">
-                {firstName.slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto">
-
-        {/* ── Stat cards — overlap hero ──────────────────────── */}
-        <div className="px-4 sm:px-8 lg:px-10 -mt-8 sm:-mt-10 grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-
-          {/* Attendance */}
-          <div className="bg-white rounded-2xl overflow-hidden border border-gray-100" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.10)' }}>
-            <div className="h-[3px] w-full bg-[#2E3093]" />
-            <div className="p-4 sm:p-5">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Attendance</p>
-              <p className="text-3xl sm:text-4xl font-black text-[#2E3093] mt-1 leading-none">
-                {att.attended}
-                <span className="text-base font-bold text-gray-200">/{att.total_lectures}</span>
-              </p>
-              <div className="mt-3 h-1 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#2E3093] rounded-full transition-all" style={{ width: `${att.percentage}%` }} />
-              </div>
-              <p className="text-[10px] text-gray-400 mt-1.5">{att.percentage}% this semester</p>
-            </div>
-          </div>
-
-          {/* Assignments */}
-          <div className="bg-white rounded-2xl overflow-hidden border border-gray-100" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.10)' }}>
-            <div className="h-[3px] w-full bg-[#FAE452]" />
-            <div className="p-4 sm:p-5">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Assignments</p>
-              <p className="text-3xl sm:text-4xl font-black text-[#2E3093] mt-1 leading-none">
-                {assign.received}
-                <span className="text-base font-bold text-gray-200">/{assign.total_given}</span>
-              </p>
-              <div className="mt-3 h-1 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#FAE452] rounded-full transition-all" style={{ width: `${assign.percentage}%` }} />
-              </div>
-              <p className="text-[10px] text-gray-400 mt-1.5">
-                {assign.pending > 0 ? `${assign.pending} pending` : 'All submitted'}
-              </p>
-            </div>
-          </div>
-
-          {/* Pending fees (compact, sits alongside on desktop) */}
-          <div className="col-span-2 sm:col-span-1 bg-white rounded-2xl overflow-hidden border border-gray-100" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.10)' }}>
-            <div className={`h-[3px] w-full ${feesCleared ? 'bg-green-500' : 'bg-red-500'}`} />
-            <div className="p-4 sm:p-5">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Fees</p>
-              {feesCleared ? (
-                <p className="text-xl sm:text-2xl font-black text-green-600 mt-1 leading-none flex items-center gap-1.5">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                  Fully Paid
-                </p>
-              ) : (
-                <p className="text-3xl sm:text-4xl font-black text-red-600 mt-1 leading-none">{fmtINR(fees.pending)}</p>
-              )}
-              <div className="mt-3 h-1 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${feesCleared ? 'bg-green-500' : 'bg-[#2E3093]'}`} style={{ width: `${paidPct}%` }} />
-              </div>
-              <p className="text-[10px] text-gray-400 mt-1.5">{paidPct}% paid{!feesCleared ? ` · due` : ''}</p>
-            </div>
-          </div>
-
-        </div>
-
-        {/* ── Notice Board ─────────────────────────────────── */}
-        {notices.length > 0 && (
-          <div className="px-4 sm:px-8 lg:px-10 mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Notice Board</h2>
-              <Link href="/student-portal/dashboard/notices"
-                className="text-[11px] font-bold text-gray-400 hover:text-[#2E3093] transition-colors">
-                See all →
-              </Link>
-            </div>
-            <div className="space-y-2.5">
-              {notices.slice(0, 3).map((n) => (
-                <Link key={n.id} href="/student-portal/dashboard/notices" className="block">
-                  <div className="bg-white rounded-2xl border border-gray-100 px-4 py-3 flex items-start gap-3 hover:border-[#2A6BB5]/35 transition-colors" style={{ boxShadow: '0 4px 20px rgba(46,48,147,0.06)' }}>
-                    <div className="w-8 h-8 rounded-lg bg-[#2A6BB5]/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <svg className="w-4 h-4 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 00-7.029-5.912c-.563.097-.994.577-.94 1.145l.152 1.596a3.75 3.75 0 01-1.052 3.06l-4.243 4.243a3.75 3.75 0 01-3.06 1.052l-1.596-.152c-.568-.054-1.048.377-1.145.94a6 6 0 005.911 7.03m4.5-8.25L14.25 15" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-gray-800 truncate">{n.title || 'Announcement'}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-2">{n.specification}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
+      {/* 1. Student details */}
+      <section className="rounded-xl border border-[#E4E4E7] bg-white px-4 py-4 sm:px-5" aria-label="Student details">
+        {academics.state === 'loading' && <Skeleton rows={2} />}
+        {academics.state === 'error' && <ErrorState what="your details" onRetry={loadAcademics} />}
+        {a && (
+          <>
+            <h1 className="text-lg font-semibold text-[#18181B] sm:text-xl">{a.student.student_name || 'Student'}</h1>
+            <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
+              <div className="min-w-0"><dt className="text-xs text-[#71717A]">Roll Number</dt><dd className="truncate font-medium text-[#18181B]">{a.student.roll_no || '—'}</dd></div>
+              <div className="min-w-0"><dt className="text-xs text-[#71717A]">Batch</dt><dd className="truncate font-medium text-[#18181B]">{a.student.batch_code && a.student.batch_code !== 'N/A' ? a.student.batch_code : '—'}</dd></div>
+              <div className="col-span-2 min-w-0"><dt className="text-xs text-[#71717A]">Training Programme</dt><dd className="font-medium text-[#18181B]">{a.student.course_name && a.student.course_name !== 'N/A' ? a.student.course_name : '—'}</dd></div>
+            </dl>
+          </>
         )}
+      </section>
 
-        {/* ── Fee details (crisp ledger) ───────────────────── */}
-        <div className="px-4 sm:px-8 lg:px-10 mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Fee Details</h2>
-            <div className="text-[11px] text-gray-400 font-semibold">
-              Paid <span className="text-[#2E3093] font-black">{fmtINR(fees.paid)}</span>
-              {' · '}
-              {feesCleared ? <span className="text-green-600 font-black">Cleared</span> : <>Due <span className="text-red-500 font-black">{fmtINR(fees.pending)}</span></>}
-            </div>
-          </div>
-          {feeLedger.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 px-4 py-6 text-center text-sm text-gray-300">
-              No fee transactions on record
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs sm:text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-left">
-                      <th className="px-4 py-2.5 font-bold text-gray-400 text-[10px] uppercase tracking-wide">Date</th>
-                      <th className="px-4 py-2.5 font-bold text-gray-400 text-[10px] uppercase tracking-wide">Receipt</th>
-                      <th className="px-4 py-2.5 font-bold text-gray-400 text-[10px] uppercase tracking-wide hidden sm:table-cell">Mode</th>
-                      <th className="px-4 py-2.5 font-bold text-gray-400 text-[10px] uppercase tracking-wide text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {feeLedger.map(row => (
-                      <tr key={row.fees_id}>
-                        <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{row.date ? fmtDate(row.date) : '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-800 font-semibold whitespace-nowrap">{row.receipt_code || '—'}</td>
-                        <td className="px-4 py-2.5 text-gray-500 hidden sm:table-cell">{row.payment_type || '—'}</td>
-                        <td className={`px-4 py-2.5 text-right font-black whitespace-nowrap ${row.type === 'paid' ? 'text-green-600' : 'text-gray-700'}`}>
-                          {row.type === 'paid' ? '+' : ''}{fmtINR(row.amount)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {/* 2. Attendance · Fees · Assignments */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <Card title="Attendance" action={<Link href="/student-portal/dashboard/attendance" className={linkCls}>View attendance</Link>}>
+          {academics.state === 'loading' && <Skeleton rows={2} />}
+          {academics.state === 'error' && <ErrorState what="attendance" onRetry={loadAcademics} />}
+          {a && (a.attendance.total_lectures === 0 ? <Empty>No lectures recorded yet.</Empty> : (
+            <>
+              <p className="text-3xl font-semibold text-[#18181B]">{a.attendance.percentage}%</p>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#F4F4F5]" role="progressbar" aria-valuenow={a.attendance.percentage} aria-valuemin={0} aria-valuemax={100} aria-label="Attendance">
+                <div className="h-full rounded-full bg-[#2E3093]" style={{ width: `${Math.min(100, a.attendance.percentage)}%` }} />
               </div>
-            </div>
-          )}
-        </div>
+              <p className="mt-2 text-sm text-[#71717A]">{a.attendance.attended} of {a.attendance.total_lectures} lectures attended</p>
+            </>
+          ))}
+        </Card>
 
-        {/* ── Lower sections: 2-column on large screens ────── */}
-        <div className="lg:grid lg:grid-cols-2 lg:gap-6 lg:items-start">
+        <Card title="Fees" action={a ? <button onClick={() => setFeesOpen(true)} className={linkCls}>View fees</button> : undefined}>
+          {academics.state === 'loading' && <Skeleton rows={2} />}
+          {academics.state === 'error' && <ErrorState what="fees" onRetry={loadAcademics} />}
+          {a && (a.fees.total === 0 && a.fees.paid === 0 ? <Empty>No fee records yet.</Empty> : (
+            <>
+              <p className="text-xs text-[#71717A]">Outstanding</p>
+              <p className={`text-3xl font-semibold ${a.fees.pending > 0 ? 'text-red-700' : 'text-emerald-700'}`}>
+                {a.fees.pending > 0 ? fmtINR(a.fees.pending) : 'No dues'}
+              </p>
+              <p className="mt-2 text-sm text-[#71717A]">{fmtINR(a.fees.paid)} paid of {fmtINR(a.fees.total)}</p>
+            </>
+          ))}
+        </Card>
 
-          {/* Recent sessions */}
-          <div className="px-4 sm:px-8 lg:px-10 mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Recent Sessions</h2>
-              <Link href="/student-portal/dashboard/attendance"
-                className="text-[11px] font-bold text-gray-400 hover:text-[#2E3093] transition-colors">
-                See all →
-              </Link>
-            </div>
-
-            {recentLectures.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 px-4 py-8 text-center text-sm text-gray-300">
-                No sessions recorded yet
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                {recentLectures.map(lec => {
-                  const isPresent = !!lec.present;
-                  const isLate    = !!lec.Late;
-                  const barColor  = isPresent ? (isLate ? '#f59e0b' : '#22c55e') : '#ef4444';
-                  return (
-                    <div key={lec.Take_Id} className="flex items-center gap-0">
-                      {/* Status bar */}
-                      <div className="w-1 self-stretch rounded-r-full shrink-0" style={{ background: barColor }} />
-                      <div className="flex items-center justify-between flex-1 px-4 py-3 gap-3">
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-gray-800 truncate">
-                            {lec.Topic || (lec.session === 'second_half' ? 'Second Half' : 'First Half')}
-                          </p>
-                          <p className="text-[11px] text-gray-400 mt-0.5">
-                            {lec.Take_Dt ? new Date(lec.Take_Dt).toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' }) : '—'}
-                            {lec.Faculty_Name ? ` · ${lec.Faculty_Name}` : ''}
-                          </p>
-                        </div>
-                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide shrink-0 ${
-                          isPresent
-                            ? isLate ? 'bg-amber-50 text-amber-600' : 'bg-green-50 text-green-600'
-                            : 'bg-red-50 text-red-500'
-                        }`}>
-                          {isPresent ? (isLate ? 'Late' : 'Present') : 'Absent'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Upcoming */}
-          {upcoming.length > 0 && (
-            <div className="px-4 sm:px-8 lg:px-10 mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Upcoming</h2>
-                <Link href="/student-portal/dashboard/lecture-plan"
-                  className="text-[11px] font-bold text-gray-400 hover:text-[#2E3093] transition-colors">
-                  See all →
-                </Link>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                {upcoming.map(lec => {
-                  const hasUnitTest = Boolean(lec.unit_test) && Boolean(lec.unit_test_date);
-                  const noSession = !lec.session;
-                  const rowClass = noSession
-                    ? 'bg-pink-50/70 border-l-2 border-pink-400'
-                    : hasUnitTest ? 'bg-amber-50/70 border-l-2 border-amber-400' : '';
-                  return (
-                    <div key={lec.id} className={`flex items-start justify-between px-4 py-3 gap-3 ${rowClass}`}>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-gray-800 truncate">
-                          {lec.subject_topic || lec.subject || `Lecture ${lec.lecture_no}`}
-                        </p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
-                          {lec.faculty_name || 'TBD'}
-                          {lec.date && ` · ${fmtDate(lec.date)}`}
-                        </p>
-                        {noSession && (
-                          <p className="text-[11px] text-pink-600 font-semibold mt-0.5">Session not set</p>
-                        )}
-                        {hasUnitTest && (
-                          <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
-                            Unit Test · {fmtDate(lec.unit_test_date as string)}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0 mt-0.5">
-                        {lec.assignment === '1' && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-[#FAE452] text-[#2E3093] rounded-md">ASSGN</span>
-                        )}
-                        {noSession && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-pink-500 text-white rounded-md">SESSION</span>
-                        )}
-                        {hasUnitTest && (
-                          <span className="text-[9px] font-black px-1.5 py-0.5 bg-amber-400 text-white rounded-md">TEST</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Recent assignments */}
-          {recentAssignments.length > 0 && (
-            <div className="px-4 sm:px-8 lg:px-10 mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em]">Assignments</h2>
-                <Link href="/student-portal/dashboard/assignments"
-                  className="text-[11px] font-bold text-gray-400 hover:text-[#2E3093] transition-colors">
-                  See all →
-                </Link>
-              </div>
-              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                {recentAssignments.map(a => (
-                  <div key={a.Take_Id} className="flex items-center justify-between px-4 py-3 gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate">{a.Topic || 'Assignment'}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {a.Faculty_Name || '—'}
-                        {a.Take_Dt && ` · ${fmtDate(a.Take_Dt)}`}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wide shrink-0 ${
-                      a.received ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-500'
-                    }`}>
-                      {a.received ? 'Done' : 'Pending'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Final examinations — schedule only. Obtained marks are not shown
-              until marks publishing exists; max marks is labelled as such. */}
-          {exams.length > 0 && (
-            <div className="px-4 sm:px-8 lg:px-10 mt-6">
-              <h2 className="text-[11px] font-black text-[#2E3093] uppercase tracking-[0.18em] mb-3">Final Examinations</h2>
-              <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden divide-y divide-gray-50">
-                {exams.map(exam => (
-                  <div key={exam.take_id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-gray-800">{exam.label}</p>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {exam.date
-                          ? new Date(`${exam.date}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          : 'Date to be announced'}
-                        {exam.max_marks ? ` · Max. ${exam.max_marks} marks` : ''}
-                      </p>
-                    </div>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${exam.status === 'upcoming' ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-gray-100 text-gray-500'}`}>
-                      {exam.status === 'upcoming' ? 'Upcoming' : 'Held'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-gray-400">Results will appear here once they are published.</p>
-            </div>
-          )}
-
-        </div>
+        <Card title="Assignments" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
+          {assignments.state === 'loading' && <Skeleton rows={2} />}
+          {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
+          {assignmentView && (assignmentView.total === 0 ? <Empty>No assignments given yet.</Empty> : (
+            <>
+              <p className="text-3xl font-semibold text-[#18181B]">{assignmentView.total}</p>
+              <p className="text-xs text-[#71717A]">assignments given</p>
+              <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                <div><dt className="text-xs text-[#71717A]">Pending</dt><dd className="font-medium">{assignmentView.pending}</dd></div>
+                <div><dt className="text-xs text-[#71717A]">Awaiting result</dt><dd className="font-medium">{assignmentView.awaiting}</dd></div>
+                <div><dt className="text-xs text-[#71717A]">Evaluated</dt><dd className="font-medium">{assignmentView.evaluated}</dd></div>
+              </dl>
+            </>
+          ))}
+        </Card>
       </div>
 
+      {/* 3. Upcoming lectures · 4. All lectures */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card title="Upcoming Lectures" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>Schedule</Link>}>
+          {lectures.state === 'loading' && <Skeleton rows={4} />}
+          {lectures.state === 'error' && <ErrorState what="lectures" onRetry={loadLectures} />}
+          {lectureView && (lectureView.upcomingNext.length === 0 ? <Empty>No upcoming lectures scheduled.</Empty> : (
+            <ul className="divide-y divide-[#F4F4F5]">
+              {lectureView.upcomingNext.map(({ l, s }) => (
+                <li key={l.id} className="py-2.5 first:pt-0 last:pb-0">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className={`truncate text-sm font-medium ${s.key === 'cancelled' ? 'text-[#71717A] line-through' : 'text-[#18181B]'}`}>{l.subject_topic || l.subject || 'Lecture'}</p>
+                      <p className="mt-0.5 text-xs text-[#71717A]">
+                        {fmtDate(l.date, true)}{timeRange(l) ? ` · ${timeRange(l)}` : ''}{l.faculty_name ? ` · ${l.faculty_name}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <Chip text={s.label} tone={LECTURE_TONE[s.key]} />
+                      {isUrl(l.class_room) && s.key !== 'cancelled' && (
+                        <a href={l.class_room!.trim()} target="_blank" rel="noreferrer" className={linkCls}>Join</a>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </Card>
+
+        <Card title="All Lectures" action={<Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>View all</Link>}>
+          {lectures.state === 'loading' && <Skeleton rows={4} />}
+          {lectures.state === 'error' && <ErrorState what="lectures" onRetry={loadLectures} />}
+          {lectureView && (
+            <>
+              <div className="-mx-1 mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Filter lectures">
+                {LECTURE_FILTERS.map((f) => (
+                  <button key={f} role="tab" aria-selected={lectureFilter === f} onClick={() => setLectureFilter(f)}
+                    className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${lectureFilter === f ? 'border-[#2E3093] bg-[#2E3093] text-white' : 'border-[#E4E4E7] text-[#52525B] hover:bg-[#F4F4F5]'}`}>
+                    {f} <span className={lectureFilter === f ? 'text-white/70' : 'text-[#A1A1AA]'}>{lectureView.counts[f]}</span>
+                  </button>
+                ))}
+              </div>
+              {lectureView.list.length === 0 ? <Empty>No {lectureFilter === 'all' ? '' : `${lectureFilter} `}lectures.</Empty> : (
+                <ul className="divide-y divide-[#F4F4F5]">
+                  {lectureView.list.map(({ l, s }) => (
+                    <li key={l.id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-[#18181B]">{l.subject_topic || l.subject || 'Lecture'}</p>
+                        <p className="mt-0.5 text-xs text-[#71717A]">
+                          {fmtDate(l.date, true)}{timeRange(l) ? ` · ${timeRange(l)}` : ''}{l.faculty_name ? ` · ${l.faculty_name}` : ''}
+                        </p>
+                      </div>
+                      <Chip text={s.label} tone={LECTURE_TONE[s.key]} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {lectureView.total > lectureView.list.length && (
+                <p className="mt-2 text-xs text-[#71717A]">Showing {lectureView.list.length} of {lectureView.total}. <Link href="/student-portal/dashboard/lecture-plan" className={linkCls}>View all</Link></p>
+              )}
+            </>
+          )}
+        </Card>
+      </div>
+
+      {/* 5. Assignments */}
+      <Card title="Assignments" action={<Link href="/student-portal/dashboard/assignments" className={linkCls}>View all</Link>}>
+        {assignments.state === 'loading' && <Skeleton rows={4} />}
+        {assignments.state === 'error' && <ErrorState what="assignments" onRetry={loadAssignments} />}
+        {assignmentView && (assignmentView.recent.length === 0 ? <Empty>No assignments given yet.</Empty> : (
+          <>
+            <ul className="divide-y divide-[#F4F4F5]">
+              {assignmentView.recent.map((r) => {
+                const shown = assignmentDisplay(r);
+                return (
+                  <li key={r.parentId} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-[#18181B]">{r.assessmentName}</p>
+                      <p className="mt-0.5 text-xs text-[#71717A]">
+                        {fmtDate(r.date)}{r.maxMarks !== null ? ` · Max. ${r.maxMarks} marks` : ''}
+                        {r.absentOnLectureDate === true && <span className="text-amber-700"> · Absent on lecture date</span>}
+                      </p>
+                    </div>
+                    <Chip text={shown.text} tone={shown.tone} />
+                  </li>
+                );
+              })}
+            </ul>
+            {assignmentView.awaiting > 0 && assignmentView.evaluated === 0 && (
+              <p className="mt-3 text-xs text-[#71717A]">Marks will appear here once results are published.</p>
+            )}
+          </>
+        ))}
+      </Card>
+
+      {/* Existing sections kept from the previous dashboard: exam schedule and notices */}
+      {(a?.final_exams.length || notices.length > 0) ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {a && a.final_exams.length > 0 && (
+            <Card title="Final Examinations">
+              <ul className="divide-y divide-[#F4F4F5]">
+                {a.final_exams.map((e) => (
+                  <li key={e.take_id} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#18181B]">{e.label}</p>
+                      <p className="mt-0.5 text-xs text-[#71717A]">{e.date ? fmtDate(e.date) : 'Date to be announced'}{e.max_marks ? ` · Max. ${e.max_marks} marks` : ''}</p>
+                    </div>
+                    <Chip text={e.status === 'upcoming' ? 'Upcoming' : 'Held'} tone={e.status === 'upcoming' ? LECTURE_TONE.upcoming : LECTURE_TONE.past} />
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-[#71717A]">Results will appear once they are published.</p>
+            </Card>
+          )}
+          {notices.length > 0 && (
+            <Card title="Notices" action={<Link href="/student-portal/dashboard/notices" className={linkCls}>View all</Link>}>
+              <ul className="divide-y divide-[#F4F4F5]">
+                {notices.map((n) => (
+                  <li key={n.id} className="py-2.5 first:pt-0">
+                    <p className="text-sm font-medium text-[#18181B]">{n.title || 'Notice'}</p>
+                    {n.specification && <p className="mt-0.5 line-clamp-2 text-xs text-[#71717A]">{n.specification}</p>}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+        </div>
+      ) : null}
+
+      {feesOpen && a && <FeesDialog data={a} onClose={closeFees} />}
     </div>
   );
 }

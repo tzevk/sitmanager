@@ -1,94 +1,70 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getStudentSession } from '@/app/api/student-portal/auth/session/route';
+import { getStudentPortalContext } from '@/lib/student-portal/context';
+import { getStudentAcademicRecords, toStudentView } from '@/lib/student-portal/academic-records';
 
+/**
+ * The student's assignments, from the Assignments module (assignment_taken +
+ * assignment_given_child) via the shared academic-records contract.
+ *
+ * Previously this listed lectures flagged Assign_Given (never set, so always
+ * empty), read marks from a column that doesn't exist (agc.Marks — the real
+ * column is Marks_Given), and found the batch from student_master.Batch_Code.
+ *
+ * Marks are only shown once published (not built yet), so `marks` is empty and
+ * `records` carries RESULT_PENDING for anything evaluated.
+ */
 export async function GET(req: NextRequest) {
   try {
     const session = await getStudentSession(req);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const pool = getPool();
-    const studentId = session.studentId;
+    const ctx = await getStudentPortalContext(pool, Number(session.studentId));
+    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Get batch info
-    const [studentRows] = await pool.query<any[]>(
-      `SELECT s.Batch_Code, s.Course_Id, b.Batch_Id
-       FROM student_master s
-       LEFT JOIN batch_mst b ON b.Batch_code = s.Batch_Code AND b.Course_Id = s.Course_Id
-       WHERE s.Student_Id = ?`,
-      [studentId]
-    );
-    const batchId = studentRows[0]?.Batch_Id ?? null;
+    const all = await getStudentAcademicRecords(pool, ctx, ['ASSIGNMENT']);
+    const totalGiven = all.length;
+    const received = all.filter((r) => r.status === 'EVALUATED').length;
 
-    if (!batchId) {
-      return NextResponse.json({
-        summary: { total_given: 0, received: 0, pending: 0, percentage: 0 },
-        assignments: [],
-      });
-    }
+    // Existing page contract (list + "Done/Pending"); no marks in it.
+    const assignments = [...all]
+      .sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')))
+      .map((r) => ({
+        Take_Id: r.parentId,
+        Take_Dt: r.date,
+        Topic: r.assessmentName,
+        Lecture_Name: r.assessmentName,
+        Duration: null,
+        ClassRoom: null,
+        Faculty_Name: null,
+        received: r.status === 'EVALUATED' ? 1 : 0,
+        // Attendance on the assignment date, kept separate from the record's status.
+        was_present: r.absentOnLectureDate === null ? null : r.absentOnLectureDate ? 0 : 1,
+      }));
 
-    // Summary counts
-    const [givenRows] = await pool.query<any[]>(
-      `SELECT COUNT(*) as total FROM lecture_taken_master
-       WHERE Batch_Id = ? AND Assign_Given = 1
-         AND (IsDelete = 0 OR IsDelete IS NULL)`,
-      [batchId]
-    );
-    const totalGiven = givenRows[0]?.total ?? 0;
-
-    const [receivedRows] = await pool.query<any[]>(
-      `SELECT COUNT(*) as received FROM lecture_taken_child ltc
-       INNER JOIN lecture_taken_master ltm ON ltc.Take_Id = ltm.Take_Id
-       WHERE ltm.Batch_Id = ? AND ltc.Student_Id = ?
-         AND ltm.Assign_Given = 1 AND ltc.AssignmentReceived = 1
-         AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)
-         AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)`,
-      [batchId, studentId]
-    );
-    const received = receivedRows[0]?.received ?? 0;
-    const pending = totalGiven - received;
-    const percentage = totalGiven > 0 ? Math.round((received / totalGiven) * 100) : 0;
-
-    // All assignments with details
-    const [assignments] = await pool.query<any[]>(
-      `SELECT ltm.Take_Id, ltm.Take_Dt, ltm.Topic, ltm.Lecture_Name,
-              ltm.Duration, ltm.ClassRoom,
-              f.Faculty_Name,
-              COALESCE(ltc.AssignmentReceived, 0) as received,
-              COALESCE(ltc.Student_Atten, 0) as was_present
-       FROM lecture_taken_master ltm
-       LEFT JOIN lecture_taken_child ltc ON ltm.Take_Id = ltc.Take_Id AND ltc.Student_Id = ?
-       LEFT JOIN faculty_master f ON ltm.Faculty_Id = f.Faculty_Id
-       WHERE ltm.Batch_Id = ? AND ltm.Assign_Given = 1
-         AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-       ORDER BY ltm.Take_Dt DESC`,
-      [studentId, batchId]
-    );
-
-    // Marks from assignment_given_child (formal assignments entered by admin)
-    let marksData: any[] = [];
-    try {
-      const [marksRows] = await pool.query<any[]>(
-        `SELECT agc.Marks, agc.Status,
-                at.Assign_Dt, at.Return_Dt, at.Marks AS MaxMarks,
-                am.assignmentname, am.subjects
-         FROM assignment_given_child agc
-         JOIN assignment_taken at ON agc.Given_Id = at.Given_Id
-         LEFT JOIN assignmentstaken am ON at.Assignment_Id = am.id
-         WHERE agc.Student_Id = ? AND at.Batch_Id = ?
-           AND (agc.IsDelete = 0 OR agc.IsDelete IS NULL)
-           AND (at.IsDelete = 0 OR at.IsDelete IS NULL)
-         ORDER BY at.Assign_Dt DESC`,
-        [studentId, batchId]
-      );
-      marksData = marksRows;
-    } catch { /* ignore if table schema differs */ }
+    const records = all.map(toStudentView);
+    const marks = records
+      .filter((r) => r.published && r.marksObtained !== null)
+      .map((r) => ({
+        Marks: r.marksObtained,
+        MaxMarks: r.maxMarks,
+        Assign_Dt: r.date,
+        assignmentname: r.assessmentName,
+        subjects: null,
+      }));
 
     return NextResponse.json({
-      summary: { total_given: totalGiven, received, pending, percentage },
+      summary: {
+        total_given: totalGiven,
+        received,
+        pending: totalGiven - received,
+        percentage: totalGiven > 0 ? Math.round((received / totalGiven) * 100) : 0,
+      },
       assignments,
-      marks: marksData,
+      marks,
+      records,
     });
   } catch (err: unknown) {
     console.error('Student assignments API error:', err);

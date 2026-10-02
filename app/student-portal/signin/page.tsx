@@ -62,7 +62,10 @@ export default function StudentSigninPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#2E3093]">
+    // Centered phone-width column on every screen size (the portal layout no
+    // longer imposes one).
+    <div className="min-h-screen bg-[#2E3093] flex justify-center">
+    <div className="w-full max-w-[430px] min-h-screen flex flex-col bg-[#2E3093]">
 
       {/* Top — branding */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-14 pb-10 gap-5">
@@ -151,6 +154,7 @@ export default function StudentSigninPage() {
           <span className="text-[#2E3093] font-bold">Contact the Placement Cell</span>
         </p>
       </div>
+    </div>
     </div>
   );
 }

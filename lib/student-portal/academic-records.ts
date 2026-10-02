@@ -57,7 +57,8 @@ export interface AcademicRecord {
  * publication; no publishing mechanism exists yet, so nothing is published.
  * The later Academics phase replaces this with the real check.
  */
-export function isPublished(_record: Pick<AcademicRecord, 'sourceModule' | 'parentId'>): boolean {
+export function isPublished(record: Pick<AcademicRecord, 'sourceModule' | 'parentId'>): boolean {
+  void record; // per-record once publishing exists
   return false;
 }
 
@@ -228,9 +229,9 @@ export async function getStudentAcademicRecords(
     const rows = vivaIds.length
       ? (await pool.query(
           `SELECT id, viva_id, Marks, Discipline_Marks, Status FROM viva_moc_child
-           WHERE viva_id IN (?) AND (Student_Id IN (?) OR Admission_Id IN (?)) AND (IsDelete = 0 OR IsDelete IS NULL)
+           WHERE viva_id IN (?) AND (Student_Id = ? OR Admission_Id IN (?)) AND (IsDelete = 0 OR IsDelete IS NULL)
            ORDER BY id`,
-          [vivaIds, ids, ids.length ? ids : [0]]
+          [vivaIds, ctx.studentId, ctx.batchAdmissionIds.length ? ctx.batchAdmissionIds : [0]]
         ))[0]
       : [];
     const mine = newestByParent(rows as any[], 'viva_id');
