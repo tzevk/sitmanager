@@ -74,6 +74,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Role Right > Add Employee': '/dashboard/masters/employee/add',
   'Role Right > Portal Accounts': '/dashboard/portal-accounts',
   'Daily Activities > Attendance': '/dashboard/daily-activities/attendance',
+  'Daily Activities > Attendance Taken': '/dashboard/daily-activities/attendance-taken',
   'Daily Activities > Study Material Record': '/dashboard/daily-activities/study-material-record',
   'Daily Activities > Allot Roll Number': '/dashboard/daily-activities/allot-roll-number',
   'Daily Activities > Batch Communication': '/dashboard/daily-activities/batch-communication',
@@ -155,6 +156,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Daily Activities': [
     'Attendance',
+    'Attendance Taken',
     'Study Material Record',
     'Allot Roll Number',
     'Batch Communication',
@@ -313,6 +315,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Role Right > Add Employee': ['employee.create'],
   'Role Right > Portal Accounts': ['user.create'],
   'Daily Activities > Attendance': ['attendance.view'],
+  'Daily Activities > Attendance Taken': ['attendance.view'],
   'Daily Activities > Study Material Record': ['study_material_record.view'],
   'Daily Activities > Allot Roll Number': ['roll_number.view'],
   'Daily Activities > Batch Communication': ['annual_batch.view'],

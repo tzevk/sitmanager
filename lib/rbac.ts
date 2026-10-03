@@ -661,6 +661,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/appointments/calendar': ['appointment.view'],
   '/dashboard/appointments/settings': ['appointment_settings.manage', 'calendly.view', 'calendly.manage'],
   '/dashboard/academic-issues': ['academic_issue.view'],
+  '/dashboard/daily-activities/attendance-taken': ['attendance.view'],
 
   // Monitoring
   '/dashboard/monitoring': ['monitoring.view'],
