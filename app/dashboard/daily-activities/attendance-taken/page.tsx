@@ -527,12 +527,12 @@ function SessionEditor({ batchId, batchLabel, date, session, canEdit, canDelete,
     }
   };
 
-  const timeCls = 'h-8 w-[92px] rounded-md border border-gray-200 px-1.5 text-xs disabled:bg-gray-50 disabled:text-gray-400 focus:border-[#2E3093] focus:outline-none';
+  const timeCls = 'h-8 w-[112px] rounded-md border border-gray-200 px-1.5 text-xs disabled:bg-gray-50 disabled:text-gray-400 focus:border-[#2E3093] focus:outline-none';
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="editor-title">
-      <button className="absolute inset-0 bg-black/30" aria-label="Close" onClick={requestClose} />
-      <div className="relative flex h-full w-full flex-col bg-white shadow-xl sm:max-w-3xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+      <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={requestClose} />
+      <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl sm:max-h-[88vh]">
         <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
           <div>
             <p className="text-xs text-gray-400">{batchLabel ? `Batch ${batchLabel} · ` : ''}{SESSION_LABEL[session]}</p>
@@ -563,7 +563,7 @@ function SessionEditor({ batchId, batchLabel, date, session, canEdit, canDelete,
             className="h-8 w-full rounded-md border border-gray-200 px-3 text-xs focus:border-[#2E3093] focus:outline-none sm:w-64" />
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {loadError ? (
             <p className="p-8 text-center text-sm text-red-600">{loadError}</p>
           ) : !rows ? (
