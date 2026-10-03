@@ -120,7 +120,10 @@ export async function GET(req: NextRequest) {
            AND (IsDelete = 0 OR IsDelete IS NULL)
          GROUP BY Take_Dt, Lecture_Start
        ) dedup ON lt.Take_Id = dedup.Take_Id
-       ORDER BY lt.Take_Dt, lt.Lecture_Start`,
+       ORDER BY lt.Take_Dt,
+                -- by real time, not text: '02:00PM' must come after '09:00AM'
+                COALESCE(STR_TO_DATE(REPLACE(UPPER(TRIM(lt.Lecture_Start)), ' ', ''), '%h:%i%p'), TIME('23:59')),
+                lt.Take_Id`,
       [batchIdInt]
     );
     const lectureRows = lectures as any[];

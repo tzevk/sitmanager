@@ -277,26 +277,41 @@ export async function POST(req: NextRequest) {
     }
 
     const conn = await pool.getConnection();
+    // Each P/A/L click saves on its own, so several saves for the same
+    // batch/date/half arrive at once. Run them one at a time — otherwise each
+    // one misses the others' lecture_taken_master row and creates its own
+    // (several "lectures" for one half-day, each holding one student's mark).
+    const lockName = `sit:att:${Number(batchId)}:${date}:${session}`;
+    const [[lock]] = await conn.query<any[]>('SELECT GET_LOCK(?, 15) AS ok', [lockName]);
+    if (Number(lock?.ok) !== 1) {
+      conn.release();
+      return NextResponse.json({ error: 'Attendance is busy saving — please try again.' }, { status: 409 });
+    }
     try {
       await conn.beginTransaction();
 
-      // 1. Save to student_attendance
+      // 1. Save to student_attendance. Production has no unique key on
+      // (Batch_Id, Student_Id, Attendance_Date, Session) — it can't be added
+      // while duplicates exist — so ON DUPLICATE KEY never fired and every save
+      // inserted a new row. Update the existing row(s) first; insert only when
+      // there are none.
       for (const rec of records) {
-        await conn.query(
-          `INSERT INTO student_attendance
-             (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, In_Time, Out_Time, Remarks, IsDelete)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-           ON DUPLICATE KEY UPDATE
-             Status     = VALUES(Status),
-             Admission_Id = VALUES(Admission_Id),
-             Session    = VALUES(Session),
-             In_Time    = VALUES(In_Time),
-             Out_Time   = VALUES(Out_Time),
-             Remarks    = VALUES(Remarks),
-             IsDelete   = 0,
-             Updated_At = CURRENT_TIMESTAMP`,
-          [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null, rec.Remarks || null]
+        const [upd] = await conn.query<any>(
+          `UPDATE student_attendance
+           SET Status = ?, Admission_Id = ?, In_Time = ?, Out_Time = ?, Remarks = ?,
+               IsDelete = 0, Updated_At = CURRENT_TIMESTAMP
+           WHERE Batch_Id = ? AND Student_Id = ? AND Attendance_Date = ? AND Session = ?`,
+          [rec.status, rec.admissionId, rec.In_Time || null, rec.Out_Time || null, rec.Remarks || null,
+            batchId, rec.studentId, date, session]
         );
+        if (!upd.affectedRows) {
+          await conn.query(
+            `INSERT INTO student_attendance
+               (Batch_Id, Student_Id, Admission_Id, Attendance_Date, Session, Status, In_Time, Out_Time, Remarks, IsDelete)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+            [batchId, rec.studentId, rec.admissionId, date, session, rec.status, rec.In_Time || null, rec.Out_Time || null, rec.Remarks || null]
+          );
+        }
       }
 
       // 2. Sync to lecture_taken_master + lecture_taken_child for final report
@@ -396,6 +411,7 @@ export async function POST(req: NextRequest) {
       await conn.rollback();
       throw txErr;
     } finally {
+      await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
       conn.release();
     }
 
