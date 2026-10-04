@@ -60,6 +60,7 @@ interface CalendlyBooking {
   mobile: string | null;
   eventStartTime: string | null;
   eventType: string | null;
+  questions: { question: string; answer: string }[];
   receivedAt: string;
   calledAt: string | null;
   minutesSinceReceived: number;
@@ -464,7 +465,7 @@ export default function InquiryPage() {
                     <th className="text-left py-2 px-3 font-black">Name</th>
                     <th className="text-left py-2 px-3 font-black">Mobile</th>
                     <th className="text-left py-2 px-3 font-black">Email</th>
-                    <th className="text-left py-2 px-3 font-black">Event Type</th>
+                    <th className="text-left py-2 px-3 font-black">Questions</th>
                     <th className="text-left py-2 px-3 font-black">Received</th>
                     <th className="text-center py-2 px-3 font-black">⏱ Time Left</th>
                     <th className="text-center py-2 px-3 font-black">Actions</th>
@@ -485,19 +486,35 @@ export default function InquiryPage() {
                     const receivedDate = new Date(b.receivedAt);
                     const receivedStr = receivedDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
+                    // Build notes string from all Q&A for passing to inquiry form
+                    const notesFromQA = (b.questions || [])
+                      .map(q => `${q.question}: ${q.answer}`)
+                      .join('\n');
+
                     return (
                       <tr key={b.id} className={`border-b border-blue-100/60 hover:bg-blue-50/40 transition-colors ${rowBg}`}>
-                        <td className="py-2 px-3 font-bold text-slate-800">{b.name || '—'}</td>
+                        <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">{b.name || '—'}</td>
                         <td className="py-2 px-3 font-mono text-slate-700 whitespace-nowrap">
                           {b.mobile
                             ? <a href={`tel:${b.mobile}`} className="text-blue-600 hover:underline font-bold">{b.mobile}</a>
                             : <span className="text-slate-400">—</span>}
                         </td>
-                        <td className="py-2 px-3 text-slate-600 max-w-[180px]">
+                        <td className="py-2 px-3 text-slate-600 max-w-[160px]">
                           <span className="truncate block">{b.email || '—'}</span>
                         </td>
-                        <td className="py-2 px-3 text-slate-600 max-w-[140px]">
-                          <span className="truncate block">{b.eventType || 'Calendly Event'}</span>
+                        <td className="py-2 px-3 max-w-[260px]">
+                          {b.questions && b.questions.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {b.questions.map((q, qi) => (
+                                <div key={qi} className="text-[10px] leading-snug">
+                                  <span className="font-semibold text-slate-500">{q.question}:</span>{' '}
+                                  <span className="text-slate-700">{q.answer}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-[10px]">No questions</span>
+                          )}
                         </td>
                         <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{receivedStr}</td>
                         <td className="py-2 px-3 text-center">
@@ -506,7 +523,7 @@ export default function InquiryPage() {
                           </span>
                         </td>
                         <td className="py-2 px-3">
-                          <div className="flex items-center justify-center">
+                          <div className="flex items-center justify-center gap-1.5">
                             <button
                               title="Mark as Called"
                               disabled={calendlyMarkingId === b.id}
@@ -529,6 +546,7 @@ export default function InquiryPage() {
                                 if (b.name) params.set('prefillName', b.name);
                                 if (b.email) params.set('prefillEmail', b.email);
                                 if (b.mobile) params.set('prefillMobile', b.mobile);
+                                if (notesFromQA) params.set('prefillNotes', notesFromQA);
                                 params.set('calendlyBookingId', String(b.id));
                                 params.set('returnTo', encodeURIComponent(buildReturnTo()));
                                 router.push(`/dashboard/inquiry/add?${params}`);

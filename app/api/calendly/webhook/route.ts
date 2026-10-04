@@ -14,6 +14,7 @@ async function ensureTable(pool: any) {
       event_start_time DATETIME DEFAULT NULL,
       event_type VARCHAR(255) DEFAULT NULL,
       calendly_uri VARCHAR(500) DEFAULT NULL,
+      questions_json TEXT DEFAULT NULL,
       received_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       called_at DATETIME DEFAULT NULL,
       inquiry_id INT DEFAULT NULL,
@@ -23,6 +24,17 @@ async function ensureTable(pool: any) {
       INDEX idx_is_delete (IsDelete)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+  // Add questions_json if the table already existed without it
+  await pool.query(`
+    ALTER TABLE calendly_bookings
+    ADD COLUMN IF NOT EXISTS questions_json TEXT DEFAULT NULL
+  `).catch(() => {});
+}
+
+function extractMobile(qna: any[]): string | null {
+  if (!Array.isArray(qna)) return null;
+  const hit = qna.find((q: any) => /phone|mobile|contact\s*no|number/i.test(String(q.question || '')));
+  return hit?.answer ? String(hit.answer).trim() : null;
 }
 
 export async function POST(req: NextRequest) {
@@ -35,20 +47,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    // Support both Calendly webhook format and manual entry format
     let invitee_name = '';
     let invitee_email = '';
     let invitee_mobile: string | null = null;
     let event_start_time: string | null = null;
     let event_type: string | null = null;
     let calendly_uri: string | null = null;
+    let questions_json: string | null = null;
 
     // Calendly webhook v2 format: { event: 'invitee.created', payload: { ... } }
     if (body.event === 'invitee.created' && body.payload) {
       const p = body.payload;
       invitee_name = p.name || '';
       invitee_email = p.email || '';
-      invitee_mobile = p.questions_and_answers?.find((qa: any) => /phone|mobile/i.test(qa.question))?.answer || null;
+
+      const qna: any[] = Array.isArray(p.questions_and_answers) ? p.questions_and_answers : [];
+      invitee_mobile = extractMobile(qna);
+
+      // Store all non-empty Q&A pairs (sorted by position)
+      const allQA = qna
+        .filter((q: any) => q.answer && String(q.answer).trim())
+        .sort((a: any, b: any) => (a.position ?? 0) - (b.position ?? 0))
+        .map((q: any) => ({ question: String(q.question || '').trim(), answer: String(q.answer || '').trim() }));
+      if (allQA.length > 0) questions_json = JSON.stringify(allQA);
+
       event_start_time = p.scheduled_event?.start_time || p.event?.start_time || null;
       event_type = p.scheduled_event?.name || p.event_type?.name || null;
       calendly_uri = p.uri || p.scheduled_event?.uri || null;
@@ -60,6 +82,9 @@ export async function POST(req: NextRequest) {
       event_start_time = body.event_start_time || body.start_time || null;
       event_type = body.event_type || null;
       calendly_uri = body.calendly_uri || body.uri || null;
+      if (body.questions && typeof body.questions === 'object') {
+        questions_json = JSON.stringify(body.questions);
+      }
     }
 
     if (!invitee_name && !invitee_email) {
@@ -68,9 +93,9 @@ export async function POST(req: NextRequest) {
 
     const [result] = await pool.query(
       `INSERT INTO calendly_bookings
-        (invitee_name, invitee_email, invitee_mobile, event_start_time, event_type, calendly_uri, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [invitee_name, invitee_email, invitee_mobile, event_start_time, event_type, calendly_uri]
+        (invitee_name, invitee_email, invitee_mobile, event_start_time, event_type, calendly_uri, questions_json, received_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [invitee_name, invitee_email, invitee_mobile, event_start_time, event_type, calendly_uri, questions_json]
     ) as any;
 
     return NextResponse.json({ ok: true, id: (result as any).insertId }, { status: 201 });

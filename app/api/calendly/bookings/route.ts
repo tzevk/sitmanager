@@ -38,26 +38,33 @@ export async function GET(req: NextRequest) {
 
     const [rows] = await pool.query(
       `SELECT id, invitee_name, invitee_email, invitee_mobile, event_start_time,
-              event_type, calendly_uri, received_at, called_at, inquiry_id
+              event_type, calendly_uri, questions_json, received_at, called_at, inquiry_id
        FROM calendly_bookings
        WHERE ${conditions.join(' AND ')}
        ORDER BY received_at DESC
        LIMIT 50`
     ) as any;
 
-    const bookings = (rows as any[]).map((r: any) => ({
-      id: r.id,
-      name: r.invitee_name || '',
-      email: r.invitee_email || '',
-      mobile: r.invitee_mobile || null,
-      eventStartTime: r.event_start_time ? String(r.event_start_time) : null,
-      eventType: r.event_type || null,
-      calendlyUri: r.calendly_uri || null,
-      receivedAt: String(r.received_at),
-      calledAt: r.called_at ? String(r.called_at) : null,
-      inquiryId: r.inquiry_id || null,
-      minutesSinceReceived: Math.floor((Date.now() - new Date(r.received_at).getTime()) / 60000),
-    }));
+    const bookings = (rows as any[]).map((r: any) => {
+      let questions: { question: string; answer: string }[] = [];
+      try {
+        if (r.questions_json) questions = JSON.parse(r.questions_json);
+      } catch { /* ignore */ }
+      return {
+        id: r.id,
+        name: r.invitee_name || '',
+        email: r.invitee_email || '',
+        mobile: r.invitee_mobile || null,
+        eventStartTime: r.event_start_time ? String(r.event_start_time) : null,
+        eventType: r.event_type || null,
+        calendlyUri: r.calendly_uri || null,
+        questions,
+        receivedAt: String(r.received_at),
+        calledAt: r.called_at ? String(r.called_at) : null,
+        inquiryId: r.inquiry_id || null,
+        minutesSinceReceived: Math.floor((Date.now() - new Date(r.received_at).getTime()) / 60000),
+      };
+    });
 
     return NextResponse.json({ bookings, total: bookings.length });
   } catch (error: any) {

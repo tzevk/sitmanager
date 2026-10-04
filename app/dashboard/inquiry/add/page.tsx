@@ -72,6 +72,7 @@ export default function AddInquiryPage() {
   const prefillName = searchParams.get('prefillName') || '';
   const prefillEmail = searchParams.get('prefillEmail') || '';
   const prefillMobile = searchParams.get('prefillMobile') || '';
+  const prefillNotes = searchParams.get('prefillNotes') || '';
   const calendlyBookingId = searchParams.get('calendlyBookingId') || '';
   const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
 
@@ -136,6 +137,7 @@ export default function AddInquiryPage() {
     if (prefillName) setName(prefillName);
     if (prefillEmail) setEmail(prefillEmail);
     if (prefillMobile) setMobile(prefillMobile);
+    if (prefillNotes) setNotes(prefillNotes);
     if (calendlyBookingId) setInquiryMode('Calendly');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
