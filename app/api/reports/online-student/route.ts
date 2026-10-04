@@ -60,9 +60,9 @@ export async function GET(req: NextRequest) {
     const dateFrom = url.searchParams.get('dateFrom') || '';
     const dateTo = url.searchParams.get('dateTo') || '';
 
-    if (!courseId || !statusId || !dateFrom || !dateTo) {
+    if (!statusId || !dateFrom || !dateTo) {
       return NextResponse.json(
-        { error: 'Course, Admission Status, From Date and To Date are all required' },
+        { error: 'Admission Status, From Date and To Date are required' },
         { status: 400 },
       );
     }
@@ -81,10 +81,14 @@ export async function GET(req: NextRequest) {
       'a.IsDelete = 0',
       'a.Admission_Date >= ?',
       'a.Admission_Date <= ?',
-      'c.Course_Id = ?',
       's.Status_id = ?',
     ];
-    const params: (string | number)[] = [dateFrom, dateTo, parseInt(courseId), parseInt(statusId)];
+    const params: (string | number)[] = [dateFrom, dateTo, parseInt(statusId)];
+
+    if (courseId) {
+      conditions.push('c.Course_Id = ?');
+      params.push(parseInt(courseId));
+    }
 
     const where = conditions.join(' AND ');
 

@@ -175,7 +175,7 @@ function OnlineStudentReportContent({ canExport }: { canExport: boolean }) {
 
   /* ---- Search ---- */
   const handleSearch = useCallback(async () => {
-    if (!courseId || !statusId || !dateFrom || !dateTo) return;
+    if (!statusId || !dateFrom || !dateTo) return;
     setLoading(true);
     setSearched(true);
     setError('');
@@ -466,7 +466,7 @@ function OnlineStudentReportContent({ canExport }: { canExport: boolean }) {
     window.print();
   }, []);
 
-  const isFormValid = courseId && statusId && dateFrom && dateTo;
+  const isFormValid = statusId && dateFrom && dateTo;
 
   /* ================================================================ */
   /*  RENDER                                                          */
@@ -504,14 +504,13 @@ function OnlineStudentReportContent({ canExport }: { canExport: boolean }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-4">
           {/* Course */}
           <div>
-            <label className="label">Select Course<span className="text-red-500 ml-0.5">*</span></label>
+            <label className="label">Select Course</label>
             <select
               value={courseId}
               onChange={(e) => setCourseId(e.target.value)}
               className="input-sm !max-w-full"
-              required
             >
-              <option value="">Select Course</option>
+              <option value="">All Courses</option>
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
