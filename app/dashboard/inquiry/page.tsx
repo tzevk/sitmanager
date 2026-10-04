@@ -522,6 +522,24 @@ export default function InquiryPage() {
                               )}
                               Called
                             </button>
+                            <button
+                              title="Convert to Inquiry"
+                              onClick={() => {
+                                const params = new URLSearchParams();
+                                if (b.name) params.set('prefillName', b.name);
+                                if (b.email) params.set('prefillEmail', b.email);
+                                if (b.mobile) params.set('prefillMobile', b.mobile);
+                                params.set('calendlyBookingId', String(b.id));
+                                params.set('returnTo', encodeURIComponent(buildReturnTo()));
+                                router.push(`/dashboard/inquiry/add?${params}`);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 transition-all shadow-sm"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                              </svg>
+                              Convert
+                            </button>
                           </div>
                         </td>
                       </tr>

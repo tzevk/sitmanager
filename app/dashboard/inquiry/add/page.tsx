@@ -69,6 +69,10 @@ export default function AddInquiryPage() {
   const searchParams = useSearchParams();
   const editId = searchParams.get('editId') ? parseInt(searchParams.get('editId')!) : null;
   const returnToParam = searchParams.get('returnTo') || '';
+  const prefillName = searchParams.get('prefillName') || '';
+  const prefillEmail = searchParams.get('prefillEmail') || '';
+  const prefillMobile = searchParams.get('prefillMobile') || '';
+  const calendlyBookingId = searchParams.get('calendlyBookingId') || '';
   const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
 
   const goBackToList = useCallback(() => {
@@ -124,6 +128,16 @@ export default function AddInquiryPage() {
 
   useEffect(() => {
     fetch('/api/inquiry/options').then(r => r.json()).then(setOpts).catch(console.error);
+  }, []);
+
+  // Pre-populate form from Calendly (only for new inquiries)
+  useEffect(() => {
+    if (editId) return;
+    if (prefillName) setName(prefillName);
+    if (prefillEmail) setEmail(prefillEmail);
+    if (prefillMobile) setMobile(prefillMobile);
+    if (calendlyBookingId) setInquiryMode('Calendly');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -200,6 +214,14 @@ export default function AddInquiryPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+      // If this inquiry came from a Calendly booking, link it back
+      if (!editId && calendlyBookingId && data.Student_Id) {
+        fetch('/api/calendly/webhook', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: parseInt(calendlyBookingId), inquiry_id: data.Student_Id }),
+        }).catch(() => {});
+      }
       goBackToList();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed');
