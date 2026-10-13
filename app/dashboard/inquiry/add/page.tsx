@@ -393,9 +393,13 @@ export default function AddInquiryPage() {
     return parts.join('\n');
   };
 
+  const isFirstDiscussion = discussions.length === 0;
+  const canAddDiscussion = isFirstDiscussion
+    ? [discN, discF, discA, discB, discT, discU].some(v => v.trim())
+    : Boolean(newDiscussion.trim());
+
   const handleAddDiscussion = async () => {
-    const structured = buildStructuredDiscussion();
-    const finalText = structured || newDiscussion.trim();
+    const finalText = isFirstDiscussion ? buildStructuredDiscussion() : newDiscussion.trim();
     if (!finalText || !newNextDate || !editId) return;
     setDiscLoading(true);
     try {
@@ -908,6 +912,7 @@ export default function AddInquiryPage() {
                     <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
                   </td>
                   <td className="py-2 px-3 min-w-[340px]">
+                    {isFirstDiscussion ? (
                     <div className="space-y-1">
                       {([
                         { key: 'N', label: 'Name / Background', val: discN, set: setDiscN, color: 'text-violet-600', placeholder: 'Prospect name, experience, location…' },
@@ -925,9 +930,12 @@ export default function AddInquiryPage() {
                         </div>
                       ))}
                     </div>
+                    ) : (
+                      <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up notes…" rows={4} className={`${ctrl} py-2 resize-y leading-relaxed`} />
+                    )}
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button onClick={handleAddDiscussion} disabled={discLoading || (!discN.trim() && !discF.trim() && !discA.trim() && !discB.trim() && !discT.trim() && !discU.trim() && !newDiscussion.trim()) || !newNextDate}
+                    <button onClick={handleAddDiscussion} disabled={discLoading || !canAddDiscussion || !newNextDate}
                       className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
                       {discLoading
                         ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
