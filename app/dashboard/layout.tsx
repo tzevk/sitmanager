@@ -49,7 +49,6 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Add Inquiry': '/dashboard/inquiry/add',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
-  'Admission Activity > Appointments': '/dashboard/appointments',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
   'Admission Activity > Alumni Association': '/dashboard/alumni-association',
