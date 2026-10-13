@@ -117,8 +117,8 @@ function AppointmentsManager() {
       {error && <p className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700">{error}</p>}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full table-fixed text-sm">
-          <thead className="bg-gray-50 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
+        <table className="w-full table-fixed border-collapse text-sm [&_td]:border-l [&_td]:border-gray-200 [&_td:first-child]:border-l-0 [&_th]:border-l [&_th]:border-gray-200 [&_th:first-child]:border-l-0">
+          <thead className="border-b border-gray-200 bg-gray-50 text-left text-[11px] font-bold uppercase tracking-wide text-gray-500">
             <tr>
               <th className="w-[110px] px-3 py-2.5">Date</th>
               <th className="px-3 py-2.5">Applicant</th>
@@ -130,7 +130,7 @@ function AppointmentsManager() {
               <th className="w-[120px] px-3 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-200">
             {loading ? (
               <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">Loading…</td></tr>
             ) : rows.length === 0 ? (
