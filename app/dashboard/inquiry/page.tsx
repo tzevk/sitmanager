@@ -52,6 +52,19 @@ function formatName(name: string | null | undefined): string {
   return [(first.charAt(0).toUpperCase() + first.slice(1).toLowerCase()), ...rest].filter(Boolean).join(' ');
 }
 
+interface CalendlyBooking {
+  id: number;
+  name: string;
+  email: string;
+  mobile: string | null;
+  eventStartTime: string | null;
+  eventType: string | null;
+  questions: { question: string; answer: string }[];
+  receivedAt: string;
+  calledAt: string | null;
+  minutesSinceReceived: number;
+}
+
 interface InquiryRow {
   Student_Id: number;
   Student_Name: string;

@@ -369,6 +369,13 @@ export default function AddInquiryPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Save failed');
+      if (!editId && calendlyBookingId && data.Student_Id) {
+        fetch('/api/calendly/webhook', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: parseInt(calendlyBookingId), inquiry_id: data.Student_Id }),
+        }).catch(() => {});
+      }
       goBackToList(editId ? undefined : Number(data.Student_Id));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed');
