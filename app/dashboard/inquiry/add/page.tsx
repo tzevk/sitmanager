@@ -944,7 +944,7 @@ export default function AddInquiryPage() {
                           className="w-full min-h-[180px] text-xs leading-relaxed border border-slate-300 rounded-md p-2 resize-y focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
                         />
                       ) : (
-                        {renderDiscussion(d.discussion)}
+                        renderDiscussion(d.discussion)
                       )}
                     </td>
                     <td className="py-2 px-3 text-center">
