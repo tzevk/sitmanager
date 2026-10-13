@@ -637,6 +637,139 @@ export default function InquiryPage() {
         </div>
       )}
 
+      {/* Calendly Bookings — 30-Minute Call Alert */}
+      {calendlyBookings.length > 0 && (
+        <div className="rounded-xl overflow-hidden shadow-lg ring-2 ring-[#0ae448]/60 animate-pulse-ring" style={{ background: 'linear-gradient(135deg, #00a2ff 0%, #0ae448 100%)' }}>
+          <style>{`
+            @keyframes pulse-ring {
+              0%, 100% { box-shadow: 0 0 0 0 rgba(10,228,72,0.5), 0 4px 24px rgba(0,162,255,0.25); }
+              50% { box-shadow: 0 0 0 8px rgba(10,228,72,0), 0 4px 24px rgba(0,162,255,0.4); }
+            }
+            .animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; }
+          `}</style>
+          <button type="button" onClick={() => setCalendlyExpanded(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:brightness-110 transition-all"
+          >
+            <span className="shrink-0 w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </span>
+            <span className="flex-1">
+              <span className="text-white font-black text-sm tracking-tight drop-shadow">
+                Calendly Booking{calendlyBookings.length > 1 ? 's' : ''} — Call Within 30 Minutes!
+              </span>
+              <span className="ml-2 text-xs font-semibold text-white/80">(received in last 2 hours, uncalled)</span>
+            </span>
+            <span className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white text-[#0070cc] font-black text-sm shadow">
+              {calendlyBookings.length}
+            </span>
+            <svg className={`w-4 h-4 text-white/80 transition-transform shrink-0 ${calendlyExpanded ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {calendlyExpanded && (
+            <div className="overflow-x-auto border-t border-white/20 bg-white/95 backdrop-blur-sm">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-[#0070cc] bg-gradient-to-r from-blue-50 to-green-50 border-b border-blue-100">
+                    <th className="text-left py-2 px-3 font-black">Name</th>
+                    <th className="text-left py-2 px-3 font-black">Mobile</th>
+                    <th className="text-left py-2 px-3 font-black">Email</th>
+                    <th className="text-left py-2 px-3 font-black">Questions</th>
+                    <th className="text-left py-2 px-3 font-black">Received</th>
+                    <th className="text-center py-2 px-3 font-black">Time Left</th>
+                    <th className="text-center py-2 px-3 font-black">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calendlyBookings.map(b => {
+                    const minsLeft = Math.max(0, 30 - b.minutesSinceReceived);
+                    const isUrgent = minsLeft <= 10;
+                    const isWarning = minsLeft <= 20;
+                    const urgencyClass = isUrgent
+                      ? 'bg-red-100 text-red-700 font-black animate-pulse'
+                      : isWarning
+                        ? 'bg-amber-100 text-amber-700 font-bold'
+                        : 'bg-emerald-100 text-emerald-700 font-semibold';
+                    const rowBg = isUrgent ? 'bg-red-50/60' : isWarning ? 'bg-amber-50/40' : '';
+                    const receivedStr = new Date(b.receivedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                    const notesFromQA = (b.questions || []).map(q => `${q.question}: ${q.answer}`).join('\n');
+                    return (
+                      <tr key={b.id} className={`border-b border-blue-100/60 hover:bg-blue-50/40 transition-colors ${rowBg}`}>
+                        <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">{b.name || '—'}</td>
+                        <td className="py-2 px-3 font-mono text-slate-700 whitespace-nowrap">
+                          {b.mobile ? <a href={`tel:${b.mobile}`} className="text-blue-600 hover:underline font-bold">{b.mobile}</a> : <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 max-w-[160px]"><span className="truncate block">{b.email || '—'}</span></td>
+                        <td className="py-2 px-3 max-w-[260px]">
+                          {b.questions && b.questions.length > 0 ? (
+                            <div className="space-y-0.5">
+                              {b.questions.map((q, qi) => (
+                                <div key={qi} className="text-[10px] leading-snug">
+                                  <span className="font-semibold text-slate-500">{q.question}:</span>{' '}
+                                  <span className="text-slate-700">{q.answer}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : <span className="text-slate-300 text-[10px]">No questions</span>}
+                        </td>
+                        <td className="py-2 px-3 text-slate-500 whitespace-nowrap">{receivedStr}</td>
+                        <td className="py-2 px-3 text-center">
+                          <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] ${urgencyClass}`}>
+                            {minsLeft === 0 ? 'OVERDUE!' : `${minsLeft}m left`}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              title="Mark as Called"
+                              disabled={calendlyMarkingId === b.id}
+                              onClick={() => markCalendlyCalled(b.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-blue-500 to-emerald-500 text-white hover:from-blue-600 hover:to-emerald-600 transition-all shadow-sm disabled:opacity-50"
+                            >
+                              {calendlyMarkingId === b.id ? (
+                                <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+                              ) : (
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                              )}
+                              Called
+                            </button>
+                            <button
+                              title="Convert to Inquiry"
+                              onClick={() => {
+                                const p = new URLSearchParams();
+                                if (b.name) p.set('prefillName', b.name);
+                                if (b.email) p.set('prefillEmail', b.email);
+                                if (b.mobile) p.set('prefillMobile', b.mobile);
+                                if (notesFromQA) p.set('prefillNotes', notesFromQA);
+                                p.set('calendlyBookingId', String(b.id));
+                                p.set('returnTo', encodeURIComponent(buildReturnTo()));
+                                router.push(`/dashboard/inquiry/add?${p}`);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-white border border-blue-300 text-blue-700 hover:bg-blue-50 transition-all shadow-sm"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                              </svg>
+                              Convert
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <FilterBar>
         <input
           type="text" value={search} placeholder="Search name, mobile, email…"
