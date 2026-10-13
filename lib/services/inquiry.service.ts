@@ -813,32 +813,37 @@ async function ensureSchemaIndexes(
   );
 }
 
-async function ensureLeadTemperatureColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
-  await cached(`schema:inquiry_lead_temperature:${inquiryTable}`, 60 * 60 * 1000, async () => {
-    const [colRows] = await pool.query(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-         AND COLUMN_NAME = 'lead_temperature'`,
-      [inquiryTable]
+// student_inquiry is at InnoDB's row-size limit and cannot take new columns,
+// so lead temperature lives in its own table keyed by Inquiry_Id.
+async function ensureLeadTemperatureTable(pool: ReturnType<typeof getPool>): Promise<void> {
+  await cached('schema:inquiry_lead_temperature_table', 60 * 60 * 1000, async () => {
+    await pool.query(
+      `CREATE TABLE IF NOT EXISTS inquiry_lead_temperature (
+         Inquiry_Id INT NOT NULL PRIMARY KEY,
+         Temperature ENUM('hot','warm','cold') NOT NULL,
+         Updated_At DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+       )`
     );
-    if ((colRows as any[]).length > 0) return true;
-    try {
-      await pool.query(
-        `ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature ENUM('hot','warm','cold') DEFAULT NULL`
-      );
-    } catch (err) {
-      // Row is near InnoDB's size limit; TEXT is stored off-page (see Preferred_Location).
-      if ((err as { errno?: number }).errno !== 1118) throw err;
-      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature TEXT NULL`);
-    }
     return true;
   });
+}
+
+async function setLeadTemperature(pool: ReturnType<typeof getPool>, inquiryId: number, value: unknown): Promise<void> {
+  const temp = typeof value === 'string' && ['hot', 'warm', 'cold'].includes(value) ? value : null;
+  if (temp) {
+    await pool.query(
+      `INSERT INTO inquiry_lead_temperature (Inquiry_Id, Temperature) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE Temperature = VALUES(Temperature)`,
+      [inquiryId, temp]
+    );
+  } else {
+    await pool.query('DELETE FROM inquiry_lead_temperature WHERE Inquiry_Id = ?', [inquiryId]);
+  }
 }
 
 async function ensureInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
   await cached('schema:inquiry_indexes', 60 * 60 * 1000, async () => {
     await ensureInquiryDateColumn(pool, inquiryTable);
-    await ensureLeadTemperatureColumn(pool, inquiryTable);
     await ensureSchemaIndexes(pool, [
       ...getStudentInquiryTargetIndexes(inquiryTable),
       ...getDiscussionTargetIndexes(),
@@ -1151,7 +1156,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
-  await ensureLeadTemperatureColumn(pool, inquiryTable);
+  await ensureLeadTemperatureTable(pool);
   await ensureInquiryPersonColumns(pool, inquiryTable);
 
   const resolved = await resolvePersonForEnquiry({
@@ -1169,10 +1174,10 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
        Email, Nationality, Present_Country, Discussion,
        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
        Course_Id, Batch_Category_id, Batch_Code,
-       Qualification, Discipline, Percentage, Preferred_Location, lead_temperature,
+       Qualification, Discipline, Percentage, Preferred_Location,
        Person_Id, Is_Re_Enquiry,
        IsDelete, Inquiry, Date_Added, Created_By
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW(),?)`,
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW(),?)`,
     [
       studentName,
       data.Sex ?? null,
@@ -1194,13 +1199,13 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Discipline ?? null,
       data.Percentage ?? null,
       data.Preferred_Location ?? null,
-      data.lead_temperature ?? null,
       resolved.personId,
       isReEnquiry ? 1 : 0,
       createdBy,
     ]
   );
   const insertId = (result as any).insertId as number;
+  if (data.lead_temperature) await setLeadTemperature(pool, insertId, data.lead_temperature);
 
   if (resolved.conflict) {
     await recordIdentityConflict({
@@ -1229,7 +1234,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
-  await ensureLeadTemperatureColumn(pool, inquiryTable);
+  await ensureLeadTemperatureTable(pool);
   await ensureInquiryReminderColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
@@ -1247,10 +1252,11 @@ export async function getInquiryById(id: number): Promise<any | null> {
         si.Inquiry_Dt, si.Date_Added, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
-       si.Preferred_Location, si.Reminder_At, si.lead_temperature,
+       si.Preferred_Location, si.Reminder_At, ilt.Temperature as lead_temperature,
        c.Course_Name as CourseName
     FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
+     LEFT JOIN inquiry_lead_temperature ilt ON ilt.Inquiry_Id = si.Inquiry_Id
      ${disciplineJoin}
      WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
     [id]
@@ -1271,7 +1277,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryStatusChangedColumn(pool, inquiryTable);
-  await ensureLeadTemperatureColumn(pool, inquiryTable);
+  await ensureLeadTemperatureTable(pool);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
     ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
@@ -1401,7 +1407,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     queryParams.push(leadSearch, leadSearch, leadSearch);
   }
   if (leadTemperature && ['hot', 'warm', 'cold'].includes(leadTemperature)) {
-    conditions.push('si.lead_temperature = ?');
+    conditions.push('EXISTS (SELECT 1 FROM inquiry_lead_temperature ilt WHERE ilt.Inquiry_Id = si.Inquiry_Id AND ilt.Temperature = ?)');
     queryParams.push(leadTemperature);
   }
   if (normalizedLocation && locationColumn) {
@@ -1655,7 +1661,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
          sm.Status as StatusLabelFromMaster,
          si.Discussion as InlineDiscussion,
-         si.lead_temperature,
+         (SELECT ilt.Temperature FROM inquiry_lead_temperature ilt WHERE ilt.Inquiry_Id = si.Inquiry_Id) as lead_temperature,
          ${metaSelect}
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
          ld.nextdate as NextFollowUpDate, ld.created_by as LatestDiscussionById,
@@ -2103,7 +2109,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
-  await ensureLeadTemperatureColumn(pool, inquiryTable);
+  await ensureLeadTemperatureTable(pool);
   await ensureInquiryStatusChangedColumn(pool, inquiryTable);
   const previousRows = await pool.query(
     `SELECT Discussion FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? LIMIT 1`,
@@ -2122,7 +2128,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Inquiry_Dt=?,
        Inquiry_From=?, Inquiry_Type=?,
        Course_Id=?, Batch_Category_id=?, Batch_Code=?,
-       Qualification=?, Discipline=?, Percentage=?, Preferred_Location=?, lead_temperature=?
+       Qualification=?, Discipline=?, Percentage=?, Preferred_Location=?
      WHERE Inquiry_Id=?`,
     [
       studentName,
@@ -2148,10 +2154,10 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Discipline ?? null,
       data.Percentage ?? null,
       data.Preferred_Location ?? null,
-      data.lead_temperature ?? null,
       id,
     ]
   );
+  if ('lead_temperature' in data) await setLeadTemperature(pool, id, data.lead_temperature);
 
   if (nextDiscussion && nextDiscussion !== previousDiscussion) {
     await pool.query(
