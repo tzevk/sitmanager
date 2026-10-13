@@ -89,6 +89,7 @@ export async function GET(req: NextRequest) {
       discipline: url.searchParams.get('discipline') || '',
       inquiryType: url.searchParams.get('inquiryType') || '',
       leadTag: url.searchParams.get('leadTag')?.trim() || '',
+      leadTemperature: url.searchParams.get('leadTemperature') || '',
       location: (url.searchParams.get('location') || '').trim(),
       training: url.searchParams.get('training') || '',
       statusId: url.searchParams.get('status') || '',

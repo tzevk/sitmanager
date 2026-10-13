@@ -38,6 +38,32 @@ interface Discussion {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const NFABTU_COLORS: Record<string, string> = {
+  N: 'text-violet-600', F: 'text-blue-600', A: 'text-teal-600',
+  B: 'text-green-700', T: 'text-amber-700', U: 'text-red-600',
+};
+
+function renderDiscussion(text: string) {
+  const lines = text.split('\n').filter(Boolean);
+  const isStructured = lines.some(l => /^[NFABTU]: /.test(l));
+  if (!isStructured) return <span className="text-slate-700 whitespace-pre-wrap text-[11px]">{text}</span>;
+  return (
+    <div className="space-y-0.5">
+      {lines.map((line, idx) => {
+        const m = line.match(/^([NFABTU]): (.*)/);
+        if (!m) return <span key={idx} className="text-[11px] text-slate-500 block">{line}</span>;
+        const [, key, val] = m;
+        return (
+          <div key={idx} className="flex items-baseline gap-1 text-[11px]">
+            <span className={`font-black w-4 shrink-0 ${NFABTU_COLORS[key] || 'text-slate-500'}`}>{key}</span>
+            <span className="text-slate-700">{val}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function fmtDate(value?: string | Date | null): string {
   if (!value) return '—';
   if (value instanceof Date) {
@@ -98,6 +124,7 @@ export default function AddInquiryPage() {
   const [nationality, setNationality] = useState('');
   const [country, setCountry] = useState('');
   const [notes, setNotes] = useState('');
+  const [leadTemp, setLeadTemp] = useState<'hot' | 'warm' | 'cold' | ''>('');
   const [statusId, setStatusId] = useState<number>(1);
   const [inquiryDate, setInquiryDate] = useState(today());
   const [inquiryMode, setInquiryMode] = useState('');
@@ -110,6 +137,13 @@ export default function AddInquiryPage() {
   const [percentage, setPercentage] = useState('');
 
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  // Structured NFABTU discussion fields
+  const [discN, setDiscN] = useState('');
+  const [discF, setDiscF] = useState('');
+  const [discA, setDiscA] = useState('');
+  const [discB, setDiscB] = useState('');
+  const [discT, setDiscT] = useState('');
+  const [discU, setDiscU] = useState('');
   const [newDiscussion, setNewDiscussion] = useState('');
   const [newNextDate, setNewNextDate] = useState(today());
   const [discLoading, setDiscLoading] = useState(false);
@@ -166,6 +200,7 @@ export default function AddInquiryPage() {
       setQualification(d.Qualification || '');
       setDiscipline(d.DisciplineName || d.Discipline || '');
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
+      setLeadTemp((d.lead_temperature as 'hot' | 'warm' | 'cold' | '') || '');
     }).catch(console.error);
   }, [editId]);
 
@@ -212,6 +247,7 @@ export default function AddInquiryPage() {
           Batch_Category_id: category || null, Batch_Code: batchCode || null,
           Qualification: qualification || null, Discipline: discipline || null,
           Percentage: percentage ? parseFloat(percentage) : null,
+          lead_temperature: leadTemp || null,
         }),
       });
       const data = await res.json();
@@ -230,15 +266,29 @@ export default function AddInquiryPage() {
     } finally { setSaving(false); }
   };
 
+  const buildStructuredDiscussion = () => {
+    const parts: string[] = [];
+    if (discN.trim()) parts.push(`N: ${discN.trim()}`);
+    if (discF.trim()) parts.push(`F: ${discF.trim()}`);
+    if (discA.trim()) parts.push(`A: ${discA.trim()}`);
+    if (discB.trim()) parts.push(`B: ${discB.trim()}`);
+    if (discT.trim()) parts.push(`T: ${discT.trim()}`);
+    if (discU.trim()) parts.push(`U: ${discU.trim()}`);
+    return parts.join('\n');
+  };
+
   const handleAddDiscussion = async () => {
-    if (!newDiscussion.trim() || !newNextDate || !editId) return;
+    const structured = buildStructuredDiscussion();
+    const finalText = structured || newDiscussion.trim();
+    if (!finalText || !newNextDate || !editId) return;
     setDiscLoading(true);
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: editId, discussion: newDiscussion, nextFollowUpDate: newNextDate }),
+        body: JSON.stringify({ inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate }),
       });
       if (!res.ok) throw new Error('Failed');
+      setDiscN(''); setDiscF(''); setDiscA(''); setDiscB(''); setDiscT(''); setDiscU('');
       setNewDiscussion(''); setNewNextDate(today()); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
     setDiscLoading(false);
@@ -386,6 +436,27 @@ export default function AddInquiryPage() {
               <label className={lbl}>Notes</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes…" rows={1} className={`${ctrl} resize-none`} />
             </div>
+            <div className="col-span-2">
+              <label className={lbl}>Lead Temperature</label>
+              <div className="flex gap-2 mt-0.5">
+                {(['hot', 'warm', 'cold'] as const).map(t => {
+                  const cfg = {
+                    hot:  { label: 'Hot',  bg: 'bg-red-500',    ring: 'ring-red-400',    text: 'text-white',       icon: '🔥' },
+                    warm: { label: 'Warm', bg: 'bg-amber-400',  ring: 'ring-amber-300',  text: 'text-amber-900',   icon: '☀️' },
+                    cold: { label: 'Cold', bg: 'bg-blue-400',   ring: 'ring-blue-300',   text: 'text-white',       icon: '❄️' },
+                  }[t];
+                  const active = leadTemp === t;
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => setLeadTemp(active ? '' : t)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold transition-all border ${active ? `${cfg.bg} ${cfg.text} border-transparent ring-2 ${cfg.ring} shadow` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                      <span>{cfg.icon}</span>{cfg.label}
+                    </button>
+                  );
+                })}
+                {leadTemp && <button type="button" onClick={() => setLeadTemp('')} className="text-[10px] text-slate-400 hover:text-slate-600 px-1">✕ Clear</button>}
+              </div>
+            </div>
 
             {/* Inquiry Details */}
             <div className="col-span-4 border-t border-slate-100 mt-0.5" />
@@ -481,15 +552,31 @@ export default function AddInquiryPage() {
               </thead>
               <tbody>
                 <tr className="border-b border-slate-100 bg-slate-50/60">
-                  <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500">{fmtDate(today())}</td>
-                  <td className="py-2 px-3 min-w-[160px]">
+                  <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500 align-top">{fmtDate(today())}</td>
+                  <td className="py-2 px-3 min-w-[160px] align-top">
                     <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
                   </td>
-                  <td className="py-2 px-3 min-w-[280px]">
-                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up discussion…" rows={1} className={`${ctrl} resize-none`} />
+                  <td className="py-2 px-3 min-w-[340px]">
+                    <div className="space-y-1">
+                      {([
+                        { key: 'N', label: 'Name / Background', val: discN, set: setDiscN, color: 'text-violet-600', placeholder: 'Prospect name, experience, location…' },
+                        { key: 'F', label: 'Finding / Need', val: discF, set: setDiscF, color: 'text-blue-600', placeholder: 'What they are looking for…' },
+                        { key: 'A', label: 'Authority', val: discA, set: setDiscA, color: 'text-teal-600', placeholder: 'own / manager / parent…' },
+                        { key: 'B', label: 'Budget', val: discB, set: setDiscB, color: 'text-green-700', placeholder: 'ok / concern / pending…' },
+                        { key: 'T', label: 'Training Recommendation', val: discT, set: setDiscT, color: 'text-amber-700', placeholder: 'Course recommended, batch discussed…' },
+                        { key: 'U', label: 'Urgency', val: discU, set: setDiscU, color: 'text-red-600', placeholder: 'Current batch / next batch / no urgency…' },
+                      ] as const).map(({ key, label, val, set, color, placeholder }) => (
+                        <div key={key} className="flex items-start gap-1.5">
+                          <span className={`mt-1.5 w-5 text-[11px] font-black shrink-0 ${color}`}>{key}</span>
+                          <div className="flex-1 min-w-0">
+                            <input value={val} onChange={e => set(e.target.value)} placeholder={placeholder} className={`${ctrl} text-[11px] py-1`} title={label} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button onClick={handleAddDiscussion} disabled={discLoading || !newDiscussion.trim() || !newNextDate}
+                    <button onClick={handleAddDiscussion} disabled={discLoading || (!discN.trim() && !discF.trim() && !discA.trim() && !discB.trim() && !discT.trim() && !discU.trim() && !newDiscussion.trim()) || !newNextDate}
                       className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
                       {discLoading
                         ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -513,7 +600,7 @@ export default function AddInquiryPage() {
                           className="w-full text-xs border border-slate-300 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
                         />
                       ) : (
-                        <span className="text-slate-700 whitespace-pre-wrap">{d.discussion}</span>
+                        {renderDiscussion(d.discussion)}
                       )}
                     </td>
                     <td className="py-2 px-3 text-center">

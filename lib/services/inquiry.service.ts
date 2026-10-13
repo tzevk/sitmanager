@@ -124,6 +124,7 @@ export interface CreateInquiryInput {
   Qualification?: string | null;
   Discipline?: string | null;
   Percentage?: string | null;
+  lead_temperature?: 'hot' | 'warm' | 'cold' | null;
 }
 
 export interface UpdateInquiryInput extends Omit<CreateInquiryInput, 'Student_Name'> {
@@ -137,6 +138,7 @@ export interface InquiryListParams {
   discipline?: string;
   inquiryType?: string;
   leadTag?: string;
+  leadTemperature?: string;
   location?: string;
   training?: string;
   statusId?: string;
@@ -173,6 +175,7 @@ export interface InquiryRow {
   IsPuneInquiry?: boolean;
   PuneSourceLocation?: string | null;
   PunePageSource?: string | null;
+  lead_temperature?: 'hot' | 'warm' | 'cold' | null;
 }
 
 export interface StatusOption { id: number; label: string }
@@ -218,6 +221,7 @@ function getInquiryCountCacheKey(params: {
   discipline: string;
   inquiryType: string;
   leadTag: string;
+  leadTemperature: string;
   location: string;
   training: string;
   statusId: string;
@@ -442,9 +446,24 @@ async function ensureSchemaIndexes(
   );
 }
 
+async function ensureLeadTemperatureColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
+  const [colRows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+       AND COLUMN_NAME = 'lead_temperature'`,
+    [inquiryTable]
+  );
+  if ((colRows as any[]).length === 0) {
+    await pool.query(
+      `ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature ENUM('hot','warm','cold') DEFAULT NULL`
+    );
+  }
+}
+
 async function ensureInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
   await cached('schema:inquiry_indexes', 60 * 60 * 1000, async () => {
     await ensureInquiryDateColumn(pool, inquiryTable);
+    await ensureLeadTemperatureColumn(pool, inquiryTable);
     await ensureSchemaIndexes(pool, [
       ...getStudentInquiryTargetIndexes(inquiryTable),
       ...getDiscussionTargetIndexes(),
@@ -681,9 +700,9 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
        Email, Nationality, Present_Country, Discussion,
        OnlineState, Inquiry_Dt, Inquiry_From, Inquiry_Type,
        Course_Id, Batch_Category_id, Batch_Code,
-       Qualification, Discipline, Percentage,
+       Qualification, Discipline, Percentage, lead_temperature,
        IsDelete, Inquiry, Date_Added
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,'Inquiry',NOW())`,
     [
       data.Student_Name.trim(),
       data.Sex ?? null,
@@ -704,6 +723,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       data.Qualification ?? null,
       data.Discipline ?? null,
       data.Percentage ?? null,
+      data.lead_temperature ?? null,
     ]
   );
   const insertId = (result as any).insertId as number;
@@ -740,6 +760,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
        si.Inquiry_Dt, si.Inquiry_From, si.Inquiry_Type,
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
+       si.lead_temperature,
        c.Course_Name as CourseName
     FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
@@ -772,6 +793,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   warmInquirySchema(pool, inquiryTable);
   const {
     page, limit, search = '', discipline = '', inquiryType = '', leadTag = '',
+    leadTemperature = '',
     location = '', training = '', statusId = '', duplicatesOnly = false, dateFrom = '', dateTo = '',
     puneOnly = false,
     followUpDue = false,
@@ -888,6 +910,10 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     );
     const leadSearch = `%${leadTag.toLowerCase()}%`;
     queryParams.push(leadSearch, leadSearch, leadSearch);
+  }
+  if (leadTemperature && ['hot', 'warm', 'cold'].includes(leadTemperature)) {
+    conditions.push('si.lead_temperature = ?');
+    queryParams.push(leadTemperature);
   }
   if (normalizedLocation && locationColumn) {
     conditions.push(`LOWER(TRIM(si.${locationColumn})) LIKE ?`);
@@ -1027,6 +1053,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         discipline,
         inquiryType,
         leadTag,
+        leadTemperature,
         location: normalizedLocation,
         training,
         statusId,
@@ -1114,6 +1141,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
          si.OnlineState as OnlineStateRaw,
          CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
          si.Discussion as InlineDiscussion,
+         si.lead_temperature,
          ${metaSelect}
          ld.discussion as LatestDiscussion, ld.date as LatestDiscDate,
          ld.nextdate as NextFollowUpDate, ld.created_by as LatestDiscussionById,
@@ -1247,6 +1275,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
         }
       })(),
       IsDuplicateLead: r.MetaDuplicateOfInquiryId != null,
+      lead_temperature: (r.lead_temperature as 'hot' | 'warm' | 'cold' | null) ?? null,
     };
   });
 
@@ -1288,7 +1317,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
        Discussion=?, OnlineState=?, Inquiry_Dt=?,
        Inquiry_From=?, Inquiry_Type=?,
        Course_Id=?, Batch_Category_id=?, Batch_Code=?,
-       Qualification=?, Discipline=?, Percentage=?
+       Qualification=?, Discipline=?, Percentage=?, lead_temperature=?
      WHERE Inquiry_Id=?`,
     [
       data.Student_Name.trim(),
@@ -1310,6 +1339,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
       data.Qualification ?? null,
       data.Discipline ?? null,
       data.Percentage ?? null,
+      data.lead_temperature ?? null,
       id,
     ]
   );

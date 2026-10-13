@@ -49,6 +49,7 @@ interface InquiryRow {
   IsPuneInquiry?: boolean;
   PuneSourceLocation?: string | null;
   PunePageSource?: string | null;
+  lead_temperature?: 'hot' | 'warm' | 'cold' | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
@@ -134,6 +135,7 @@ export default function InquiryPage() {
   const [dateTo, setDateTo] = useState(() => getInitParam('dateTo'));
   const [training, setTraining] = useState(() => getInitParam('training'));
   const [puneOnly, setPuneOnly] = useState(() => getInitParam('puneOnly'));
+  const [leadTemp, setLeadTemp] = useState(() => getInitParam('leadTemp'));
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [sendingId, setSendingId] = useState<number | null>(null);
@@ -166,6 +168,7 @@ export default function InquiryPage() {
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
       if (puneOnly) p.set('puneOnly', puneOnly);
+      if (leadTemp) p.set('leadTemperature', leadTemp);
       const res = await fetch(`/api/inquiry?${p}`, { signal: controller.signal });
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
@@ -187,7 +190,7 @@ export default function InquiryPage() {
     }
     finally { setLoading(false); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, puneOnly]);
+  }, [page, fetchTrigger, search, discipline, inquiryType, status, dateFrom, dateTo, training, puneOnly, leadTemp]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -207,6 +210,7 @@ export default function InquiryPage() {
       dateTo,
       training,
       puneOnly,
+      leadTemp,
     };
     syncUrl(params);
     setPage(1); setFetchTrigger(t => t + 1);
@@ -215,7 +219,7 @@ export default function InquiryPage() {
     router.replace(pathname, { scroll: false });
     setSearch(''); setDiscipline(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
-    setPuneOnly('');
+    setPuneOnly(''); setLeadTemp('');
     setPage(1); setFetchTrigger(t => t + 1);
   };
 
@@ -229,6 +233,7 @@ export default function InquiryPage() {
     if (dateTo) p.set('dateTo', dateTo);
     if (training) p.set('training', training);
     if (puneOnly) p.set('puneOnly', puneOnly);
+    if (leadTemp) p.set('leadTemp', leadTemp);
     if (page > 1) p.set('page', String(page));
     const qs = p.toString();
     return qs ? `${pathname}?${qs}` : pathname;
@@ -688,6 +693,23 @@ export default function InquiryPage() {
           <option value="">All Sources</option>
           <option value="1">Pune Only</option>
         </select>
+        <div className="flex items-center gap-1">
+          {(['hot', 'warm', 'cold'] as const).map(t => {
+            const cfg = {
+              hot:  { icon: '🔥', activeClass: 'bg-red-500 text-white border-red-500' },
+              warm: { icon: '☀️', activeClass: 'bg-amber-400 text-amber-900 border-amber-400' },
+              cold: { icon: '❄️', activeClass: 'bg-blue-400 text-white border-blue-400' },
+            }[t];
+            const active = leadTemp === t;
+            return (
+              <button key={t} type="button"
+                onClick={() => { setLeadTemp(active ? '' : t); setPage(1); setFetchTrigger(n => n + 1); }}
+                className={`flex items-center gap-0.5 px-2 py-1 rounded-full text-[11px] font-bold border transition-all ${active ? cfg.activeClass : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                {cfg.icon} {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            );
+          })}
+        </div>
         <button onClick={doSearch} className="flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -849,9 +871,20 @@ export default function InquiryPage() {
                       })()}
                     </td>
                     <td className="py-1 px-2 text-center">
-                      <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
-                        {r.StatusLabel}
-                      </span>
+                      <div className="inline-flex flex-col items-center gap-0.5">
+                        <span className={`inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusPill(r.Status_id, r.StatusLabel)}`}>
+                          {r.StatusLabel}
+                        </span>
+                        {r.lead_temperature && (
+                          <span className={`inline-block px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                            r.lead_temperature === 'hot' ? 'bg-red-100 text-red-600' :
+                            r.lead_temperature === 'warm' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-600'
+                          }`}>
+                            {r.lead_temperature === 'hot' ? '🔥' : r.lead_temperature === 'warm' ? '☀️' : '❄️'} {r.lead_temperature}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-1 px-2">
                       <div className="flex items-center justify-center gap-0.5 flex-wrap min-w-[150px]">
