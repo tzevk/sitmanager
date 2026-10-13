@@ -41,6 +41,32 @@ interface Discussion {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const NFABTU_COLORS: Record<string, string> = {
+  N: 'text-violet-600', F: 'text-blue-600', A: 'text-teal-600',
+  B: 'text-green-700', T: 'text-amber-700', U: 'text-red-600',
+};
+
+function renderDiscussion(text: string) {
+  const lines = text.split('\n').filter(Boolean);
+  const isStructured = lines.some(l => /^[NFABTU]: /.test(l));
+  if (!isStructured) return <span className="text-slate-700 whitespace-pre-wrap text-[11px]">{text}</span>;
+  return (
+    <div className="space-y-0.5">
+      {lines.map((line, idx) => {
+        const m = line.match(/^([NFABTU]): (.*)/);
+        if (!m) return <span key={idx} className="text-[11px] text-slate-500 block">{line}</span>;
+        const [, key, val] = m;
+        return (
+          <div key={idx} className="flex items-baseline gap-1 text-[11px]">
+            <span className={`font-black w-4 shrink-0 ${NFABTU_COLORS[key] || 'text-slate-500'}`}>{key}</span>
+            <span className="text-slate-700">{val}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function fmtDate(value?: string | Date | null): string {
   if (!value) return '—';
   if (value instanceof Date) {
@@ -109,6 +135,11 @@ export default function AddInquiryPage() {
   const searchParams = useSearchParams();
   const editId = searchParams.get('editId') ? parseInt(searchParams.get('editId')!) : null;
   const returnToParam = searchParams.get('returnTo') || '';
+  const prefillName = searchParams.get('prefillName') || '';
+  const prefillEmail = searchParams.get('prefillEmail') || '';
+  const prefillMobile = searchParams.get('prefillMobile') || '';
+  const prefillNotes = searchParams.get('prefillNotes') || '';
+  const calendlyBookingId = searchParams.get('calendlyBookingId') || '';
   const { canCreate, canUpdate, loading: permLoading } = useResourcePermissions('inquiry');
 
   const goBackToList = useCallback((pinnedInquiryId?: number) => {
@@ -139,6 +170,7 @@ export default function AddInquiryPage() {
   const [nationality, setNationality] = useState('');
   const [country, setCountry] = useState('');
   const [notes, setNotes] = useState('');
+  const [leadTemp, setLeadTemp] = useState<'hot' | 'warm' | 'cold' | ''>('');
   const [statusId, setStatusId] = useState<number>(1);
   const [inquiryDate, setInquiryDate] = useState(today());
   const [inquirySoftwareTime, setInquirySoftwareTime] = useState('');
@@ -153,6 +185,13 @@ export default function AddInquiryPage() {
   const [percentage, setPercentage] = useState('');
 
   const [discussions, setDiscussions] = useState<Discussion[]>([]);
+  // Structured NFABTU discussion fields
+  const [discN, setDiscN] = useState('');
+  const [discF, setDiscF] = useState('');
+  const [discA, setDiscA] = useState('');
+  const [discB, setDiscB] = useState('');
+  const [discT, setDiscT] = useState('');
+  const [discU, setDiscU] = useState('');
   const [newDiscussion, setNewDiscussion] = useState('');
   const [newNextDate, setNewNextDate] = useState(today());
   const [discLoading, setDiscLoading] = useState(false);
@@ -194,6 +233,17 @@ export default function AddInquiryPage() {
     fetch('/api/inquiry/options').then(r => r.json()).then(setOpts).catch(console.error);
   }, []);
 
+  // Pre-populate form from Calendly (only for new inquiries)
+  useEffect(() => {
+    if (editId) return;
+    if (prefillName) setName(prefillName);
+    if (prefillEmail) setEmail(prefillEmail);
+    if (prefillMobile) setMobile(prefillMobile);
+    if (prefillNotes) setNotes(prefillNotes);
+    if (calendlyBookingId) setInquiryMode('Calendly');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (editId || !opts?.statuses?.length) return;
     const newStatus = opts.statuses.find((status) => status.label.toLowerCase() === 'new');
@@ -232,6 +282,7 @@ export default function AddInquiryPage() {
       setDiscipline(d.DisciplineName || d.Discipline || '');
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
       setReminderAt(d.Reminder_At || null);
+      setLeadTemp((d.lead_temperature as 'hot' | 'warm' | 'cold' | '') || '');
     }).catch(console.error);
   }, [editId, opts]);
 
@@ -313,6 +364,7 @@ export default function AddInquiryPage() {
           Batch_Category_id: category || null, Batch_Code: batchCode || null,
           Qualification: qualification || null, Discipline: discipline || null,
           Percentage: percentage ? parseFloat(percentage) : null,
+          lead_temperature: leadTemp || null,
         }),
       });
       const data = await res.json();
@@ -323,15 +375,29 @@ export default function AddInquiryPage() {
     } finally { setSaving(false); }
   };
 
+  const buildStructuredDiscussion = () => {
+    const parts: string[] = [];
+    if (discN.trim()) parts.push(`N: ${discN.trim()}`);
+    if (discF.trim()) parts.push(`F: ${discF.trim()}`);
+    if (discA.trim()) parts.push(`A: ${discA.trim()}`);
+    if (discB.trim()) parts.push(`B: ${discB.trim()}`);
+    if (discT.trim()) parts.push(`T: ${discT.trim()}`);
+    if (discU.trim()) parts.push(`U: ${discU.trim()}`);
+    return parts.join('\n');
+  };
+
   const handleAddDiscussion = async () => {
-    if (!newDiscussion.trim() || !newNextDate || !editId) return;
+    const structured = buildStructuredDiscussion();
+    const finalText = structured || newDiscussion.trim();
+    if (!finalText || !newNextDate || !editId) return;
     setDiscLoading(true);
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: editId, discussion: newDiscussion, nextFollowUpDate: newNextDate }),
+        body: JSON.stringify({ inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate }),
       });
       if (!res.ok) throw new Error('Failed');
+      setDiscN(''); setDiscF(''); setDiscA(''); setDiscB(''); setDiscT(''); setDiscU('');
       setNewDiscussion(''); setNewNextDate(today()); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
     setDiscLoading(false);
@@ -633,6 +699,40 @@ export default function AddInquiryPage() {
               <input list="country-list" value={country} onChange={e => setCountry(e.target.value)} placeholder="Type or select" className={ctrl} />
               <datalist id="country-list">{opts?.countries?.map(c => <option key={c} value={c} />)}</datalist>
             </div>
+            <div className="col-span-2">
+              <label className={lbl}>Notes</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes…" rows={1} className={`${ctrl} resize-none`} />
+            </div>
+            <div className="col-span-2">
+              <label className={lbl}>Lead Temperature</label>
+              <div className="flex gap-2 mt-0.5">
+                {(['hot', 'warm', 'cold'] as const).map(t => {
+                  const cfg = {
+                    hot: {
+                      label: 'Hot', bg: 'bg-red-500', ring: 'ring-red-400', text: 'text-white',
+                      icon: <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>,
+                    },
+                    warm: {
+                      label: 'Warm', bg: 'bg-amber-400', ring: 'ring-amber-300', text: 'text-amber-900',
+                      icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+                    },
+                    cold: {
+                      label: 'Cold', bg: 'bg-blue-400', ring: 'ring-blue-300', text: 'text-white',
+                      icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.636 5.636l12.728 12.728M18.364 5.636L5.636 18.364" /></svg>,
+                    },
+                  }[t];
+                  const active = leadTemp === t;
+                  return (
+                    <button key={t} type="button"
+                      onClick={() => setLeadTemp(active ? '' : t)}
+                      className={`flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold transition-all border ${active ? `${cfg.bg} ${cfg.text} border-transparent ring-2 ${cfg.ring} shadow` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                      {cfg.icon}{cfg.label}
+                    </button>
+                  );
+                })}
+                {leadTemp && <button type="button" onClick={() => setLeadTemp('')} className="text-[10px] text-slate-400 hover:text-slate-600 px-1">✕ Clear</button>}
+              </div>
+            </div>
 
             {/* Inquiry Details */}
             <div className="col-span-6 flex items-center gap-2 mt-1 first:mt-0">
@@ -795,16 +895,32 @@ export default function AddInquiryPage() {
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-slate-100 bg-slate-50/60 align-top">
-                  <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500">{fmtDate(today())}</td>
-                  <td className="py-2 px-3 min-w-[160px]">
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500 align-top">{fmtDate(today())}</td>
+                  <td className="py-2 px-3 min-w-[160px] align-top">
                     <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
                   </td>
-                  <td className="py-2 px-3 min-w-[420px] w-full">
-                    <textarea value={newDiscussion} onChange={e => setNewDiscussion(e.target.value)} placeholder="Follow-up discussion…" rows={8} className={`${ctrl} py-2 min-h-[180px] resize-y leading-relaxed`} />
+                  <td className="py-2 px-3 min-w-[340px]">
+                    <div className="space-y-1">
+                      {([
+                        { key: 'N', label: 'Name / Background', val: discN, set: setDiscN, color: 'text-violet-600', placeholder: 'Prospect name, experience, location…' },
+                        { key: 'F', label: 'Finding / Need', val: discF, set: setDiscF, color: 'text-blue-600', placeholder: 'What they are looking for…' },
+                        { key: 'A', label: 'Authority', val: discA, set: setDiscA, color: 'text-teal-600', placeholder: 'own / manager / parent…' },
+                        { key: 'B', label: 'Budget', val: discB, set: setDiscB, color: 'text-green-700', placeholder: 'ok / concern / pending…' },
+                        { key: 'T', label: 'Training Recommendation', val: discT, set: setDiscT, color: 'text-amber-700', placeholder: 'Course recommended, batch discussed…' },
+                        { key: 'U', label: 'Urgency', val: discU, set: setDiscU, color: 'text-red-600', placeholder: 'Current batch / next batch / no urgency…' },
+                      ] as const).map(({ key, label, val, set, color, placeholder }) => (
+                        <div key={key} className="flex items-start gap-1.5">
+                          <span className={`mt-1.5 w-5 text-[11px] font-black shrink-0 ${color}`}>{key}</span>
+                          <div className="flex-1 min-w-0">
+                            <input value={val} onChange={e => set(e.target.value)} placeholder={placeholder} className={`${ctrl} text-[11px] py-1`} title={label} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button onClick={handleAddDiscussion} disabled={discLoading || !newDiscussion.trim() || !newNextDate}
+                    <button onClick={handleAddDiscussion} disabled={discLoading || (!discN.trim() && !discF.trim() && !discA.trim() && !discB.trim() && !discT.trim() && !discU.trim() && !newDiscussion.trim()) || !newNextDate}
                       className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
                       {discLoading
                         ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -828,7 +944,7 @@ export default function AddInquiryPage() {
                           className="w-full min-h-[180px] text-xs leading-relaxed border border-slate-300 rounded-md p-2 resize-y focus:outline-none focus:ring-2 focus:ring-[#2E3093]"
                         />
                       ) : (
-                        <span className="text-slate-700 whitespace-pre-wrap">{d.discussion}</span>
+                        {renderDiscussion(d.discussion)}
                       )}
                     </td>
                     <td className="py-2 px-3 text-center">

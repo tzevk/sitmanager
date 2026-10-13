@@ -79,6 +79,7 @@ interface InquiryRow {
   IsPuneInquiry?: boolean;
   PuneSourceLocation?: string | null;
   PunePageSource?: string | null;
+  lead_temperature?: 'hot' | 'warm' | 'cold' | null;
 }
 
 interface Pagination { page: number; limit: number; total: number; totalPages: number; }
@@ -202,6 +203,7 @@ export default function InquiryPage() {
   const [training, setTraining] = useState(() => getInitParam('training'));
   const [batchCategory, setBatchCategory] = useState(() => getInitParam('batchCategory'));
   const [puneOnly, setPuneOnly] = useState(() => getInitParam('puneOnly'));
+  const [leadTemp, setLeadTemp] = useState(() => getInitParam('leadTemp'));
   const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams.get('page') || '1')));
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -339,6 +341,7 @@ export default function InquiryPage() {
       if (training) p.set('training', training);
       if (batchCategory) p.set('batchCategory', batchCategory);
       if (puneOnly) p.set('puneOnly', puneOnly);
+      if (leadTemp) p.set('leadTemperature', leadTemp);
       const res = await fetch(`/api/inquiry?${p}`, { signal: controller.signal });
       const ct = res.headers.get('content-type') || '';
       const data = ct.includes('application/json') ? await res.json() : {};
@@ -380,6 +383,7 @@ export default function InquiryPage() {
       training,
       batchCategory,
       puneOnly,
+      leadTemp,
     };
     syncUrl(params);
     setPage(1); setPersonPage(1); setExpandedPersonId(null); setFetchTrigger(t => t + 1);
@@ -388,7 +392,7 @@ export default function InquiryPage() {
     router.replace(pathname, { scroll: false });
     setSearch(''); setInquiryType('');
     setStatus(''); setDateFrom(''); setDateTo(''); setTraining('');
-    setBatchCategory(''); setPuneOnly('');
+    setBatchCategory(''); setPuneOnly(''); setLeadTemp('');
     setPage(1); setPersonPage(1); setExpandedPersonId(null); setFetchTrigger(t => t + 1);
   };
 
@@ -424,6 +428,44 @@ export default function InquiryPage() {
     }
   };
 
+
+  // Calendly bookings — polled every 90 seconds
+  const [calendlyBookings, setCalendlyBookings] = useState<CalendlyBooking[]>([]);
+  const [calendlyExpanded, setCalendlyExpanded] = useState(true);
+  const [calendlyMarkingId, setCalendlyMarkingId] = useState<number | null>(null);
+  const [, setCalendlyTick] = useState(0);
+  const calendlyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchCalendlyBookings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendly/bookings?windowHours=2&uncalledOnly=1');
+      if (!res.ok) return;
+      const data = await res.json();
+      setCalendlyBookings(data.bookings ?? []);
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => {
+    fetchCalendlyBookings();
+    calendlyIntervalRef.current = setInterval(() => {
+      fetchCalendlyBookings();
+      setCalendlyTick(t => t + 1); // force re-render for countdown timers
+    }, 90_000);
+    return () => { if (calendlyIntervalRef.current) clearInterval(calendlyIntervalRef.current); };
+  }, [fetchCalendlyBookings]);
+
+  const markCalendlyCalled = async (id: number) => {
+    setCalendlyMarkingId(id);
+    try {
+      await fetch('/api/calendly/webhook', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, called: true }),
+      });
+      setCalendlyBookings((prev: CalendlyBooking[]) => prev.filter((b: CalendlyBooking) => b.id !== id));
+    } catch { /* ignore */ }
+    finally { setCalendlyMarkingId(null); }
+  };
 
   const exportCsv = () => {
     if (rows.length === 0) return;
@@ -611,6 +653,32 @@ export default function InquiryPage() {
           <option value="">All Sources</option>
           <option value="1">Pune Only</option>
         </select>
+        <div className="flex items-center gap-1">
+          {(['hot', 'warm', 'cold'] as const).map(t => {
+            const cfg = {
+              hot: {
+                icon: <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>,
+                activeClass: 'bg-red-500 text-white border-red-500',
+              },
+              warm: {
+                icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+                activeClass: 'bg-amber-400 text-amber-900 border-amber-400',
+              },
+              cold: {
+                icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.636 5.636l12.728 12.728M18.364 5.636L5.636 18.364" /></svg>,
+                activeClass: 'bg-blue-400 text-white border-blue-400',
+              },
+            }[t];
+            const active = leadTemp === t;
+            return (
+              <button key={t} type="button"
+                onClick={() => { setLeadTemp(active ? '' : t); setPage(1); setFetchTrigger(n => n + 1); }}
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold border transition-all ${active ? cfg.activeClass : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                {cfg.icon}{t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            );
+          })}
+        </div>
         <button onClick={doSearch} className="h-8 flex items-center gap-1 bg-[#2E3093] text-white px-2.5 py-1 rounded-lg text-xs font-bold hover:bg-[#252880] transition-colors">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -973,6 +1041,20 @@ export default function InquiryPage() {
                             {r.StatusLabel}
                           </span>
                         </span>
+                        {r.lead_temperature && (
+                          <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                            r.lead_temperature === 'hot' ? 'bg-red-100 text-red-600' :
+                            r.lead_temperature === 'warm' ? 'bg-amber-100 text-amber-700' :
+                            'bg-blue-100 text-blue-600'
+                          }`}>
+                            {r.lead_temperature === 'hot'
+                              ? <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>
+                              : r.lead_temperature === 'warm'
+                                ? <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                                : <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.636 5.636l12.728 12.728M18.364 5.636L5.636 18.364" /></svg>}
+                            {r.lead_temperature}
+                          </span>
+                        )}
                         {r.StatusChangedBy && (
                           <span
                             className="text-[9px] text-slate-400 truncate max-w-[110px]"

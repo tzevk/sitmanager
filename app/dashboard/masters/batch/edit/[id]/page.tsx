@@ -670,7 +670,7 @@ export default function EditBatchPage() {
   // Once permissions resolve, redirect SLP-only users to the SLP tab
   useEffect(() => {
     if (!permLoading && !slpPermLoading && slpOnlyMode) {
-      setActiveTab('lecture-plan');
+      setActiveTab('standard-lecture-plan');
     }
   }, [permLoading, slpPermLoading, slpOnlyMode]);
   const [loading, setLoading] = useState(true);
@@ -4266,7 +4266,7 @@ export default function EditBatchPage() {
           <div className="flex overflow-x-auto scrollbar-hide gap-1">
             {TABS.filter(tab =>
               slpOnlyMode
-                ? tab.id === 'lecture-plan'
+                ? tab.id === 'standard-lecture-plan' || tab.id === 'lecture-plan'
                 : true
             ).map((tab) => (
               <button
