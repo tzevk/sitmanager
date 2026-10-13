@@ -814,17 +814,25 @@ async function ensureSchemaIndexes(
 }
 
 async function ensureLeadTemperatureColumn(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
-  const [colRows] = await pool.query(
-    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
-       AND COLUMN_NAME = 'lead_temperature'`,
-    [inquiryTable]
-  );
-  if ((colRows as any[]).length === 0) {
-    await pool.query(
-      `ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature ENUM('hot','warm','cold') DEFAULT NULL`
+  await cached(`schema:inquiry_lead_temperature:${inquiryTable}`, 60 * 60 * 1000, async () => {
+    const [colRows] = await pool.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+         AND COLUMN_NAME = 'lead_temperature'`,
+      [inquiryTable]
     );
-  }
+    if ((colRows as any[]).length > 0) return true;
+    try {
+      await pool.query(
+        `ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature ENUM('hot','warm','cold') DEFAULT NULL`
+      );
+    } catch (err) {
+      // Row is near InnoDB's size limit; TEXT is stored off-page (see Preferred_Location).
+      if ((err as { errno?: number }).errno !== 1118) throw err;
+      await pool.query(`ALTER TABLE \`${inquiryTable}\` ADD COLUMN lead_temperature TEXT NULL`);
+    }
+    return true;
+  });
 }
 
 async function ensureInquirySchema(pool: ReturnType<typeof getPool>, inquiryTable: string): Promise<void> {
@@ -1143,6 +1151,7 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureLeadTemperatureColumn(pool, inquiryTable);
   await ensureInquiryPersonColumns(pool, inquiryTable);
 
   const resolved = await resolvePersonForEnquiry({
@@ -1220,6 +1229,7 @@ export async function getInquiryById(id: number): Promise<any | null> {
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureLeadTemperatureColumn(pool, inquiryTable);
   await ensureInquiryReminderColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
@@ -1261,6 +1271,7 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryStatusChangedColumn(pool, inquiryTable);
+  await ensureLeadTemperatureColumn(pool, inquiryTable);
   const disciplineTable = await resolveDisciplineTableName(pool);
   const disciplineJoin = disciplineTable
     ? `LEFT JOIN \`${disciplineTable}\` md ON md.Id = CAST(NULLIF(TRIM(si.Discipline),'') AS UNSIGNED)`
@@ -2092,6 +2103,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
   await ensureInquiryPreferredLocationColumn(pool, inquiryTable);
+  await ensureLeadTemperatureColumn(pool, inquiryTable);
   await ensureInquiryStatusChangedColumn(pool, inquiryTable);
   const previousRows = await pool.query(
     `SELECT Discussion FROM \`${inquiryTable}\` WHERE Inquiry_Id = ? LIMIT 1`,
