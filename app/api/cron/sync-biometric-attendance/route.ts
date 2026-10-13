@@ -18,6 +18,11 @@ export const maxDuration = 300;
  * EmployeeCode on the biometric device is the student's Student_Id directly
  * (no separate mapping table).
  *
+ * Punches only count for a half-day the batch actually held a class: one
+ * with a lecture recorded or attendance already marked by staff. Sundays
+ * and holidays are skipped, so a student visiting the office for an exam
+ * or placement doesn't create a phantom class day for their batch.
+ *
  * Query params (all optional):
  *   date       — YYYY-MM-DD to sync (defaults to today)
  */
@@ -47,6 +52,51 @@ interface PunchBucket {
   session: Session;
   inTime: string; // HH:MM:SS
   outTime: string;
+}
+
+function lectureStartSession(start: unknown): Session | null {
+  const m = String(start ?? '').match(/(\d{1,2}):(\d{2})\s*([AP]M)?/i);
+  if (!m) return null;
+  const meridiem = m[3]?.toUpperCase();
+  let hour = Number(m[1]);
+  if (meridiem === 'PM' && hour < 12) hour += 12;
+  if (meridiem === 'AM' && hour === 12) hour = 0;
+  return hour < SESSION_CUTOVER_HOUR ? 'first_half' : 'second_half';
+}
+
+async function isHoliday(pool: any, date: string): Promise<boolean> {
+  try {
+    const [rows] = await pool.query(
+      `SELECT 1 FROM Holiday_master
+       WHERE Date_of_Holiday = ? AND COALESCE(IsDelete, 0) = 0 AND COALESCE(IsActive, 1) = 1 LIMIT 1`,
+      [date]
+    );
+    return (rows as any[]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** "batchId|session" keys for half-days that had a class on this date. */
+async function classSessions(pool: any, batchIds: number[], date: string): Promise<Set<string>> {
+  const held = new Set<string>();
+  if (!batchIds.length) return held;
+  const [lectures] = await pool.query(
+    `SELECT Batch_Id, Lecture_Start FROM lecture_taken_master
+     WHERE Take_Dt = ? AND Batch_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)`,
+    [date, batchIds]
+  );
+  for (const l of lectures as any[]) {
+    const session = lectureStartSession(l.Lecture_Start);
+    if (session) held.add(`${l.Batch_Id}|${session}`);
+  }
+  const [marked] = await pool.query(
+    `SELECT DISTINCT Batch_Id, Session FROM student_attendance
+     WHERE Attendance_Date = ? AND Batch_Id IN (?) AND (IsDelete = 0 OR IsDelete IS NULL)`,
+    [date, batchIds]
+  );
+  for (const m of marked as any[]) held.add(`${m.Batch_Id}|${m.Session}`);
+  return held;
 }
 
 function bucketPunches(
@@ -100,6 +150,9 @@ export async function GET(req: NextRequest) {
     }
 
     const date = req.nextUrl.searchParams.get('date') || new Date().toISOString().slice(0, 10);
+    if (new Date(`${date}T00:00:00Z`).getUTCDay() === 0) {
+      return NextResponse.json({ date, skipped: true, reason: 'Sunday' });
+    }
 
     const logs = await fetchSmartOfficeDeviceLogs(date, date);
     const buckets = bucketPunches(logs);
@@ -109,6 +162,9 @@ export async function GET(req: NextRequest) {
     }
 
     const pool = getPool();
+    if (await isHoliday(pool, date)) {
+      return NextResponse.json({ date, skipped: true, reason: 'Holiday' });
+    }
     await ensureAttendanceTable(pool);
     const studentIds = [...new Set(buckets.map((b) => b.studentId))];
 
@@ -131,12 +187,16 @@ export async function GET(req: NextRequest) {
       admissionByStudent.set(Number(row.Student_Id), { admissionId: Number(row.Admission_Id), batchId: Number(row.Batch_Id) });
     }
 
+    const held = await classSessions(pool, [...new Set([...admissionByStudent.values()].map((a) => a.batchId))], date);
+
     let matched = 0;
     let inserted = 0;
+    let noClass = 0;
     for (const bucket of buckets) {
       const admission = admissionByStudent.get(bucket.studentId);
       if (!admission) continue; // no active enrollment — nothing to attach this punch to
       matched++;
+      if (!held.has(`${admission.batchId}|${bucket.session}`)) { noClass++; continue; }
 
       // Only fill the gap — never overwrite an existing attendance row
       // (manual entry, or an earlier sync run, always wins).
@@ -165,6 +225,7 @@ export async function GET(req: NextRequest) {
       studentsWithPunches: studentIds.length,
       studentsMatched: matched,
       attendanceInserted: inserted,
+      skippedNoClass: noClass,
     });
   } catch (error: unknown) {
     console.error('Biometric attendance sync error:', error);
