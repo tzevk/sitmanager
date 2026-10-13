@@ -441,16 +441,25 @@ export default function AddInquiryPage() {
               <div className="flex gap-2 mt-0.5">
                 {(['hot', 'warm', 'cold'] as const).map(t => {
                   const cfg = {
-                    hot:  { label: 'Hot',  bg: 'bg-red-500',    ring: 'ring-red-400',    text: 'text-white',       icon: '🔥' },
-                    warm: { label: 'Warm', bg: 'bg-amber-400',  ring: 'ring-amber-300',  text: 'text-amber-900',   icon: '☀️' },
-                    cold: { label: 'Cold', bg: 'bg-blue-400',   ring: 'ring-blue-300',   text: 'text-white',       icon: '❄️' },
+                    hot: {
+                      label: 'Hot', bg: 'bg-red-500', ring: 'ring-red-400', text: 'text-white',
+                      icon: <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M12.395 2.553a1 1 0 00-1.45-.385c-.345.23-.614.558-.822.88-.214.33-.403.713-.57 1.116-.334.804-.614 1.768-.84 2.734a31.365 31.365 0 00-.613 3.58 2.64 2.64 0 01-.945-1.067c-.328-.68-.398-1.534-.398-2.654A1 1 0 005.05 6.05 6.981 6.981 0 003 11a7 7 0 1011.95-4.95c-.592-.591-.98-.985-1.348-1.467-.363-.476-.724-1.063-1.207-2.03zM12.12 15.12A3 3 0 017 13s.879.5 2.5.5c0-1 .5-4 1.25-4.5.5 1 .786 1.293 1.371 1.879A2.99 2.99 0 0113 13a2.99 2.99 0 01-.879 2.121z" clipRule="evenodd" /></svg>,
+                    },
+                    warm: {
+                      label: 'Warm', bg: 'bg-amber-400', ring: 'ring-amber-300', text: 'text-amber-900',
+                      icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+                    },
+                    cold: {
+                      label: 'Cold', bg: 'bg-blue-400', ring: 'ring-blue-300', text: 'text-white',
+                      icon: <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18M3 12h18M5.636 5.636l12.728 12.728M18.364 5.636L5.636 18.364" /></svg>,
+                    },
                   }[t];
                   const active = leadTemp === t;
                   return (
                     <button key={t} type="button"
                       onClick={() => setLeadTemp(active ? '' : t)}
                       className={`flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold transition-all border ${active ? `${cfg.bg} ${cfg.text} border-transparent ring-2 ${cfg.ring} shadow` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
-                      <span>{cfg.icon}</span>{cfg.label}
+                      {cfg.icon}{cfg.label}
                     </button>
                   );
                 })}
