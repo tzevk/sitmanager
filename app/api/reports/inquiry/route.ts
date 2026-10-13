@@ -4,6 +4,7 @@ import { getPool } from '@/lib/db';
 import { requirePermission } from '@/lib/api-auth';
 import { cache, cacheTTL } from '@/lib/cache';
 import { logReportCacheTiming } from '@/lib/report-timing';
+import { ALLOWED_INQUIRY_STATUSES } from '@/lib/services/inquiry.service';
 
 async function resolveInquiryTableName(pool: any): Promise<string> {
   const [rows] = await pool.query(
@@ -196,9 +197,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Step 4: Status labels from status_master, with inquiry-specific overrides.
-    // status_master id=1 is 'Conducted' (student lifecycle) but for inquiries it means 'New'.
-    const inquiryStatusOverrides: Record<number, string> = { 1: 'New' };
+    // Step 4: Status labels — same precedence as the Inquiry list: the inquiry-specific
+    // names in ALLOWED_INQUIRY_STATUSES override status_master's student-lifecycle names.
+    const inquiryStatusOverrides: Record<number, string> = Object.fromEntries(
+      ALLOWED_INQUIRY_STATUSES.map((s) => [s.id, s.label])
+    );
     const fallbackStatusMap: Record<number, string> = {
       1: 'New', 2: 'Contacted', 3: 'Inquiry', 4: 'Follow Up',
       5: 'Interested', 6: 'Not Interested', 7: 'Admitted', 8: 'Closed',
@@ -217,7 +220,11 @@ export async function GET(req: NextRequest) {
         if (s.id != null && s.label) dbMap[Number(s.id)] = String(s.label).trim();
       }
       if (Object.keys(dbMap).length > 0) statusMap = { ...dbMap, ...inquiryStatusOverrides };
-    } catch { /* use fallback */ }
+    } catch {
+      statusMap = { ...fallbackStatusMap, ...inquiryStatusOverrides };
+    }
+    const statusLabel = (id: number | null) =>
+      (id != null && statusMap[id]) || (id != null ? `Status ${id}` : 'Open');
 
     const enriched = dataRows.map((r: any, idx: number) => ({
       srNo: idx + 1,
@@ -230,7 +237,7 @@ export async function GET(req: NextRequest) {
       Inquiry_Dt: r.Inquiry_Dt,
       Inquiry_Type: r.Inquiry_Type || '',
       Inquiry_From: r.Inquiry_From || '',
-      Status: statusMap[r.Status_id] || (r.Status_id != null ? `Status ${r.Status_id}` : 'Open'),
+      Status: statusLabel(r.Status_id),
       Status_id: r.Status_id,
       Qualification: r.Qualification || '',
       Discipline: r.Discipline || '',
@@ -241,19 +248,27 @@ export async function GET(req: NextRequest) {
       followUps: followUpMap.get(r.Student_Id) || [],
     }));
 
+    // Count over every matching inquiry, not just the first 5000 rows returned.
+    const [statusCounts] = await pool.query(
+      `SELECT CAST(NULLIF(TRIM(si.OnlineState), '') AS UNSIGNED) AS Status_id, COUNT(*) AS cnt
+       ${baseSql}
+       GROUP BY Status_id`,
+      params
+    ) as any;
     const statusSummary: Record<string, number> = {};
-    for (const row of enriched) {
-      statusSummary[row.Status] = (statusSummary[row.Status] || 0) + 1;
+    for (const r of statusCounts as any[]) {
+      const label = statusLabel(r.Status_id == null ? null : Number(r.Status_id));
+      statusSummary[label] = (statusSummary[label] || 0) + Number(r.cnt);
     }
 
     const responseData = {
       rows: enriched,
-      total: enriched.length,
+      total: Number(totalCount),
       statusSummary,
       filters: { dateFrom, dateTo, dateField, courseId, batchType, batchId, inquiryType, inquiryFrom },
     };
     await cache.set(cacheKey, responseData, cacheTTL.short);
-    logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: enriched.length });
+    logReportCacheTiming('inquiry.report', startedAt, 'MISS', { dateFrom, dateTo, courseId, batchType, batchId, inquiryType, inquiryFrom, total: Number(totalCount) });
     return NextResponse.json(responseData, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
     });
