@@ -41,6 +41,11 @@ interface Discussion {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+const hasText = (v: unknown) => {
+  const t = String(v ?? '').trim();
+  return t !== '' && t.toUpperCase() !== 'NULL';
+};
+
 const NFABTU_COLORS: Record<string, string> = {
   N: 'text-violet-600', F: 'text-blue-600', A: 'text-teal-600',
   B: 'text-green-700', T: 'text-amber-700', U: 'text-red-600',
@@ -170,6 +175,9 @@ export default function AddInquiryPage() {
   const [nationality, setNationality] = useState('');
   const [country, setCountry] = useState('');
   const [notes, setNotes] = useState('');
+  // The inquiry's own Discussion column as saved (older inquiries and the old
+  // software keep their discussion here, not in the follow-up table).
+  const [savedDiscussion, setSavedDiscussion] = useState('');
   const [leadTemp, setLeadTemp] = useState<'hot' | 'warm' | 'cold' | ''>('');
   const [statusId, setStatusId] = useState<number>(1);
   const [inquiryDate, setInquiryDate] = useState(today());
@@ -266,6 +274,7 @@ export default function AddInquiryPage() {
       setNationality(d.Nationality || '');
       setCountry(d.Present_Country || '');
       setNotes(d.Discussion || '');
+      setSavedDiscussion(hasText(d.Discussion) ? String(d.Discussion).trim() : '');
       const loadedStatusId = Number(d.Status_id);
       const fallbackStatusId = opts?.statuses?.find((status) => status.label.toLowerCase() === 'new')?.id ?? 1;
       setStatusId(Number.isInteger(loadedStatusId) && loadedStatusId > 0 ? loadedStatusId : fallbackStatusId);
@@ -393,7 +402,9 @@ export default function AddInquiryPage() {
     return parts.join('\n');
   };
 
-  const isFirstDiscussion = discussions.length === 0;
+  // NFABTU only for inquiries with no discussion anywhere — not in the
+  // follow-up history and not in the inquiry's own Discussion field.
+  const isFirstDiscussion = discussions.length === 0 && !savedDiscussion;
   const canAddDiscussion = isFirstDiscussion
     ? [discN, discF, discA, discB, discT, discU].some(v => v.trim())
     : Boolean(newDiscussion.trim());
@@ -711,8 +722,8 @@ export default function AddInquiryPage() {
               <datalist id="country-list">{opts?.countries?.map(c => <option key={c} value={c} />)}</datalist>
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Notes</label>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes…" rows={1} className={`${ctrl} resize-none`} />
+              <label className={lbl}>Discussion</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Discussion…" rows={2} className={`${ctrl} resize-y`} />
             </div>
             <div className="col-span-2">
               <label className={lbl}>Lead Temperature</label>
@@ -889,7 +900,7 @@ export default function AddInquiryPage() {
                 {statusSaved && !statusSaving && <span className="text-[10px] font-semibold text-green-600">Saved</span>}
               </div>
             )}
-            <span className="text-[10px] text-slate-400">{editId ? discussions.length : 0}</span>
+            <span className="text-[10px] text-slate-400">{editId ? discussions.length + (savedDiscussion ? 1 : 0) : 0}</span>
           </div>
         </div>
         {!editId ? (
@@ -944,7 +955,7 @@ export default function AddInquiryPage() {
                     </button>
                   </td>
                 </tr>
-                {discussions.length === 0 ? (
+                {discussions.length === 0 && !savedDiscussion ? (
                   <tr><td colSpan={4} className="py-6 text-center text-xs text-slate-400">No discussions yet.</td></tr>
                 ) : discussions.map((d) => (
                   <tr key={d.id} className="border-b border-slate-100 last:border-b-0 align-top">
@@ -982,6 +993,17 @@ export default function AddInquiryPage() {
                     </td>
                   </tr>
                 ))}
+                {savedDiscussion && (
+                  <tr className="border-t border-slate-100 align-top bg-amber-50/40">
+                    <td className="py-2 px-3 whitespace-nowrap text-slate-600">{fmtDate(inquiryDate)}</td>
+                    <td className="py-2 px-3 whitespace-nowrap text-slate-400">—</td>
+                    <td className="py-2 px-3 min-w-[420px] w-full">
+                      <span className="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800">Inquiry discussion</span>
+                      <div>{renderDiscussion(savedDiscussion)}</div>
+                    </td>
+                    <td className="py-2 px-3 text-center text-[10px] text-slate-400">Edit in the Discussion field above</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

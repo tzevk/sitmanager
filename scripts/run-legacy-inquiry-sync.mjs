@@ -10,6 +10,10 @@ function loadEnv(p) {
   }
 }
 
+console.error('run-legacy-inquiry-sync is disabled: it overwrites inquiries that share an Inquiry_Id with the old software.');
+console.error('Use: npx tsx scripts/import-legacy-inquiries.mjs --dry-run   (insert-only importer)');
+process.exit(1);
+
 loadEnv('/Users/tanvikadam/Desktop/SIT/sitmanager/.env.local');
 
 const { syncLegacyInquiries } = await import('../lib/services/legacy-inquiry-sync.service.ts');

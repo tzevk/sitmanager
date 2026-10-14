@@ -29,6 +29,10 @@
     {
       "path": "/api/cron/calendly-sync",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/legacy-inquiry-import",
+      "schedule": "*/10 * * * *"
     }
   ],
   "functions": {

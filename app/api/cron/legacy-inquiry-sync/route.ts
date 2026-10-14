@@ -24,6 +24,14 @@ async function runSync(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Disabled 2026-10-14: this upserts old-software inquiries BY Inquiry_Id and
+  // soft-deletes matching website rows. The two systems' IDs now overlap (the old
+  // software is handing out IDs the new CRM already used), so it would overwrite
+  // unrelated inquiries. Use /api/cron/legacy-inquiry-import (insert-only).
+  return NextResponse.json({
+    error: 'legacy-inquiry-sync is disabled — it overwrites inquiries that share an ID. Use /api/cron/legacy-inquiry-import.',
+  }, { status: 410 });
+
   // sinceHours=0 (or unset) → full backfill of all legacy records
   const sinceHoursRaw = Number(
     req.nextUrl.searchParams.get('sinceHours') ||
