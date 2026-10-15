@@ -1264,6 +1264,14 @@ export async function getInquiryById(id: number): Promise<any | null> {
   return (rows as any[])[0] ?? null;
 }
 
+// Inquiry_Dt is VARCHAR in mixed formats; used when the parsed _inquiry_date column is absent.
+const FALLBACK_INQUIRY_DATE_EXPR =
+  `COALESCE(` +
+  `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
+  `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),` +
+  `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),` +
+  `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y'))`;
+
 export async function listInquiries(params: InquiryListParams): Promise<InquiryListResult> {
   const startedAt = Date.now();
   const perfPhases: Record<string, number> = {
@@ -1418,12 +1426,6 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     conditions.push('si.OnlineState = ?');
     queryParams.push(parseInt(statusId));
   }
-  const FALLBACK_INQUIRY_DATE_EXPR =
-    `COALESCE(` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),19),'%Y-%m-%d %H:%i:%s'),` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%Y-%m-%d'),` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d-%m-%Y'),` +
-    `STR_TO_DATE(LEFT(NULLIF(TRIM(si.Inquiry_Dt),''),10),'%d/%m/%Y'))`;
   const inquiryDateExpr = inquiryDateColumnAvailable ? 'si._inquiry_date' : FALLBACK_INQUIRY_DATE_EXPR;
   if (dateFrom) {
     conditions.push(`${inquiryDateExpr} >= ?`);
@@ -1888,6 +1890,8 @@ export interface InquiryPersonListParams {
   statusId?: string;
   dateFrom?: string;
   dateTo?: string;
+  puneOnly?: boolean;
+  leadTemperature?: string;
 }
 
 export interface InquiryPersonRow {
@@ -1936,6 +1940,7 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   const {
     page, limit, pinnedInquiryId, search = '', discipline = '', inquiryType = '',
     training = '', batchCategory = '', statusId = '', dateFrom = '', dateTo = '',
+    puneOnly = false, leadTemperature = '',
   } = params;
 
   const needsCourseJoin = Boolean(search || training);
@@ -1972,13 +1977,35 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
     conditions.push('si.Batch_Category_id = ?');
     queryParams.push(batchCategory);
   }
-  if (dateFrom) {
-    conditions.push('si.Inquiry_Dt >= ?');
-    queryParams.push(dateFrom);
+  if (dateFrom || dateTo) {
+    const dateExpr = (await hasInquiryDateColumn(pool, inquiryTable)) ? 'si._inquiry_date' : FALLBACK_INQUIRY_DATE_EXPR;
+    if (dateFrom) {
+      conditions.push(`${dateExpr} >= ?`);
+      queryParams.push(dateFrom);
+    }
+    if (dateTo) {
+      conditions.push(`${dateExpr} <= ?`);
+      queryParams.push(dateTo);
+    }
   }
-  if (dateTo) {
-    conditions.push('si.Inquiry_Dt <= ?');
-    queryParams.push(dateTo);
+  if (leadTemperature && ['hot', 'warm', 'cold'].includes(leadTemperature)) {
+    await ensureLeadTemperatureTable(pool);
+    conditions.push('EXISTS (SELECT 1 FROM inquiry_lead_temperature ilt WHERE ilt.Inquiry_Id = si.Inquiry_Id AND ilt.Temperature = ?)');
+    queryParams.push(leadTemperature);
+  }
+  if (puneOnly) {
+    const locationColumn = await resolveLocationColumn(pool, inquiryTable);
+    const puneJson = (path: string) => `LOWER(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(s.payload_json, '${path}')), '')) LIKE '%pune%'`;
+    conditions.push(`(
+      EXISTS (
+        SELECT 1 FROM suvidya_inquiry_sync s
+        WHERE (s.inquiry_id = si.Inquiry_Id OR (si.Student_Id IS NOT NULL AND s.inquiry_id = si.Student_Id))
+          AND (LOWER(COALESCE(s.page_source, '')) LIKE '%pune%' OR ${puneJson('$.page_source')} OR ${puneJson('$.your_location')})
+      )
+      OR LOWER(COALESCE(si.Inquiry_From, '')) LIKE '%pune%'
+      OR LOWER(COALESCE(si.Discussion, '')) LIKE '%pune%'
+      ${locationColumn ? `OR LOWER(TRIM(COALESCE(si.${locationColumn}, ''))) LIKE '%pune%'` : ''}
+    )`);
   }
 
   const whereClause = `WHERE (${conditions.join(') AND (')})`;

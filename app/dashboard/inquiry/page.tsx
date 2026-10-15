@@ -296,6 +296,8 @@ export default function InquiryPage() {
       if (dateTo) p.set('dateTo', dateTo);
       if (training) p.set('training', training);
       if (batchCategory) p.set('batchCategory', batchCategory);
+      if (puneOnly) p.set('puneOnly', puneOnly);
+      if (leadTemp) p.set('leadTemperature', leadTemp);
       const res = await fetch(`/api/inquiry/persons?${p}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.details || data?.error || 'Failed to fetch enquiries');
@@ -818,7 +820,7 @@ export default function InquiryPage() {
             const active = leadTemp === t;
             return (
               <button key={t} type="button"
-                onClick={() => { setLeadTemp(active ? '' : t); setPage(1); setFetchTrigger(n => n + 1); }}
+                onClick={() => { setLeadTemp(active ? '' : t); setPage(1); setPersonPage(1); setExpandedPersonId(null); setFetchTrigger(n => n + 1); }}
                 className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-bold border transition-all ${active ? cfg.activeClass : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
                 {cfg.icon}{t.charAt(0).toUpperCase() + t.slice(1)}
               </button>

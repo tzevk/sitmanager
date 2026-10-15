@@ -25,6 +25,8 @@ export async function GET(req: NextRequest) {
       statusId: url.searchParams.get('status') || '',
       dateFrom: url.searchParams.get('dateFrom') || '',
       dateTo: url.searchParams.get('dateTo') || '',
+      puneOnly: url.searchParams.get('puneOnly') === '1' || url.searchParams.get('puneOnly') === 'true',
+      leadTemperature: url.searchParams.get('leadTemperature') || '',
     }));
 
     return NextResponse.json(result);
