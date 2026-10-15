@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       full: searchParams.get('full') === '1',
     });
     if (!summary.configured) return NextResponse.json({ ok: false, message: 'OLD_DB_HOST is not configured — skipped' });
-    if (summary.imported || summary.errors.length) console.log('[legacy-inquiry-import]', JSON.stringify(summary));
+    if (summary.imported || summary.discussionsBackfilled || summary.errors.length) console.log('[legacy-inquiry-import]', JSON.stringify(summary));
     return NextResponse.json({ ok: summary.errors.length === 0, summary }, { status: summary.errors.length ? 500 : 200 });
   } catch (err: unknown) {
     console.error('[legacy-inquiry-import] failed:', err);

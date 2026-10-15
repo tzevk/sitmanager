@@ -605,6 +605,22 @@ async function resolveInquiryStatusIdByLabel(pool: ReturnType<typeof getPool>, l
  * rarely changes so a brief cache is safe. Does NOT call ensureMainInquiryStatuses (that
  * runs INSERT...WHERE NOT EXISTS checks, too heavy for a hot read path) — if the status
  * hasn't been seeded yet, sorting simply falls back to plain recency until it has. */
+/** OnlineState values for a status filter. Older inquiries hold the legacy ids in
+ * ALLOWED_INQUIRY_STATUSES while new ones hold the status_master id for the same label,
+ * and both display under that label — so filter on every id sharing it. */
+async function statusFilterValues(pool: ReturnType<typeof getPool>, statusId: string): Promise<number[]> {
+  const id = parseInt(statusId, 10);
+  if (!Number.isInteger(id)) return [-1];
+  const options = await getInquiryStatusOptions();
+  const label = options.find((o) => o.id === id)?.label
+    ?? ALLOWED_INQUIRY_STATUSES.find((s) => s.id === id)?.label;
+  const ids = new Set<number>([id]);
+  if (label) {
+    for (const s of [...options, ...ALLOWED_INQUIRY_STATUSES]) if (s.label === label) ids.add(s.id);
+  }
+  return [...ids];
+}
+
 async function getFollowUpPendingStatusId(pool: ReturnType<typeof getPool>): Promise<number | null> {
   return cached('inquiry:status-id:follow-up-pending', 5 * 60_000, async () => {
     const [rows] = await pool.query(
@@ -1423,8 +1439,8 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     queryParams.push(`%${normalizedLocation}%`);
   }
   if (statusId) {
-    conditions.push('si.OnlineState = ?');
-    queryParams.push(parseInt(statusId));
+    conditions.push('si.OnlineState IN (?)');
+    queryParams.push(await statusFilterValues(pool, statusId));
   }
   const inquiryDateExpr = inquiryDateColumnAvailable ? 'si._inquiry_date' : FALLBACK_INQUIRY_DATE_EXPR;
   if (dateFrom) {
@@ -1966,8 +1982,8 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
     queryParams.push(inquiryType);
   }
   if (statusId) {
-    conditions.push('si.OnlineState = ?');
-    queryParams.push(parseInt(statusId));
+    conditions.push('si.OnlineState IN (?)');
+    queryParams.push(await statusFilterValues(pool, statusId));
   }
   if (training) {
     conditions.push('c.Course_Name = ?');
