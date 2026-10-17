@@ -5,6 +5,7 @@ import BatchMarketingWidget from './BatchMarketingWidget';
 import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
 import AppointmentsWidget from './AppointmentsWidget';
+import AlumniRegistrationWidget from './AlumniRegistrationWidget';
 import { toBatchNumber } from '@/lib/batch-display';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -195,7 +196,6 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
   const pendingFollowups = data?.pendingFollowups ?? [];
   const dailyActivity   = data?.dailyActivity ?? [];
   const pendingFees     = data?.pendingFees ?? [];
-  const alumniProgress  = data?.alumniRegistration ?? [];
   const sourceRows      = data?.sourcePerformance ?? [];
 
   // ── Lead funnel filter state ────────────────────────────────────
@@ -780,6 +780,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
       {/* ②  Pending Fees */}
       {pendingFeesCard}
 
+      {/* ②⅛  Alumni Registration — batch-wise, from the last uploaded alumni report */}
+      <AlumniRegistrationWidget />
+
       {/* ②½  Batch Marketing Tracker */}
       <BatchMarketingWidget />
 
@@ -1053,52 +1056,6 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* ⑥  Alumni Registration Progress */}
-      <div className="grid grid-cols-1 gap-3">
-        {/* Alumni Registration Progress */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <CardHeader
-            title="Alumni Registration Progress"
-            accent="#2E3093"
-            icon={Icons.grad}
-            count={loading ? undefined : alumniProgress.length}
-          />
-          <div className="max-h-64 overflow-auto">
-            {loading ? (
-              <div className="p-4 space-y-2">
-                {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-lg bg-gray-100 animate-pulse" />)}
-              </div>
-            ) : alumniProgress.length === 0 ? (
-              <Empty text="No alumni registration data" />
-            ) : (
-              <table className={TABLE_CLS}>
-                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
-                  <tr>
-                    <Th>Batch No.</Th>
-                    <Th>Training Program Name</Th>
-                    <Th>% Registered</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alumniProgress.map((r: any, i: number) => (
-                    <tr key={`${r.batch_no || i}`} className="border-t border-gray-100 hover:bg-gray-50/50">
-                      <td className="px-4 py-2 font-mono text-gray-700">{toBatchNumber(r.batch_no)}</td>
-                      <td className="px-3 py-2 text-gray-700">{r.training_program || '—'}</td>
-                      <td className="px-3 py-2 w-40">
-                        <Bar value={Number(r.registered_pct || 0)} />
-                        {r.total_students != null && (
-                          <div className="text-[10px] font-semibold text-gray-400 tabular-nums text-right mt-0.5">{Number(r.registered_students || 0)}/{Number(r.total_students || 0)} registered</div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
                 </tbody>
               </table>
             )}

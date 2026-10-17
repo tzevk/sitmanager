@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
-import { parseAlumniCsv, matchAlumniRows } from '@/lib/services/alumni-import.service';
+import { parseAlumniCsv, matchAlumniRows, countStaffMembershipRows } from '@/lib/services/alumni-import.service';
 import { getLatestAlumniUpload, recordAlumniUpload } from '@/lib/services/alumni-batch-summary.service';
 
 export const runtime = 'nodejs';
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         uploadedBy: auth.session.userId,
       });
     }
-    return NextResponse.json({ ...result, fileName: file.name, uploadId });
+    return NextResponse.json({ ...result, fileName: file.name, uploadId, staffMembershipSkipped: countStaffMembershipRows(buffer) });
   } catch (error: unknown) {
     const status = (error as { status?: number }).status ?? 500;
     const message = error instanceof Error ? error.message : 'Unknown error';

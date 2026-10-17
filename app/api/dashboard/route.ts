@@ -10,7 +10,6 @@ import {
   getTrainingDashboardMetaRows,
 } from '@/lib/services/training-dashboard.service';
 import { ensurePlacementDashboardTables, getPlacementCampusInterviews, getPlacementCompanyVisits, getPlacementDeputationOpenings } from '@/lib/services/placement-dashboard.service';
-import { ensureAlumniColumn } from '@/lib/student-alumni';
 import { ensureAdmissionFormSentLogTable } from '@/lib/services/admissionFormSentLog';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
@@ -135,7 +134,6 @@ async function fetchDashboardData(dept?: string) {
   const needsCbdFollowups = isCbd;
   const needsDailyActivity = isCbd;
   const needsPendingFees = isCbd;
-  const needsAlumni = isCbd;
   
   const needsTdDashboard = isTd;
   const needsTdConvocations = isTd || isAdmin;
@@ -204,14 +202,6 @@ async function fetchDashboardData(dept?: string) {
     } catch { /* best-effort */ }
   }
 
-  if (needsAlumni) {
-    // Ensure student_master.Alumni_Registered exists so the alumni query isn't
-    // silently swallowed by safeQuery on databases where no student was saved yet.
-    try {
-      await ensureAlumniColumn(pool);
-    } catch { /* best-effort */ }
-  }
-
   if (needsTdDashboard) {
     try {
       await ensureTrainingDashboardMetaTable(pool);
@@ -267,7 +257,6 @@ async function fetchDashboardData(dept?: string) {
     cbdFollowupsRows,
     dailyActivityRows,
     pendingFeesRows,
-    alumniProgressRows,
     tdOngoingBatchesRows,
     tdLowAttendanceRows,
     tdLowPerformanceRows,
@@ -1176,33 +1165,6 @@ async function fetchDashboardData(dept?: string) {
       LIMIT 100
     `, []) : Promise.resolve([]),
 
-    // 10. Alumni registration progress — % of each batch's students flagged as
-    // registered with the Sitians Alumni Association (student_master.Alumni_Registered,
-    // set from the student-master "Alumni Registration" tab).
-    needsAlumni ? safeQuery(pool, `
-      SELECT
-        b.Batch_code AS batch_no,
-        COALESCE(c.Course_Name, b.CourseName, 'N/A') AS training_program,
-        COUNT(sm.Student_Id) AS total_students,
-        SUM(CASE WHEN LOWER(TRIM(IFNULL(sm.Alumni_Registered, ''))) IN ('yes', 'y', '1', 'true') THEN 1 ELSE 0 END) AS registered_students,
-        ROUND(
-          100 * SUM(CASE WHEN LOWER(TRIM(IFNULL(sm.Alumni_Registered, ''))) IN ('yes', 'y', '1', 'true') THEN 1 ELSE 0 END)
-            / NULLIF(COUNT(sm.Student_Id), 0),
-          1
-        ) AS registered_pct
-      FROM batch_mst b
-      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
-      LEFT JOIN student_master sm ON sm.Batch_Code = b.Batch_code
-        AND (sm.IsDelete IS NULL OR sm.IsDelete = 0)
-      WHERE (b.IsDelete IS NULL OR b.IsDelete = 0)
-        AND b.Batch_code IS NOT NULL AND b.Batch_code <> ''
-        AND b.EDate >= DATE_SUB(CURDATE(), INTERVAL 2 YEAR)
-      GROUP BY b.Batch_code, COALESCE(c.Course_Name, b.CourseName, 'N/A')
-      HAVING COUNT(sm.Student_Id) > 0
-      ORDER BY registered_pct ASC, b.Batch_code DESC
-      LIMIT 25
-    `, []) : Promise.resolve([]),
-
     // T&D-1 Ongoing batches metrics
     needsTdDashboard ? safeQuery(pool, `
       SELECT
@@ -1726,7 +1688,6 @@ async function fetchDashboardData(dept?: string) {
     pendingFollowups: isCbd ? cbdFollowupsRows : pendingFollowupsRows,
     dailyActivity: dailyActivityRows,
     pendingFees: pendingFeesRows,
-    alumniRegistration: alumniProgressRows,
     trainingDevelopment,
     adminDashboard,
     enquiryReport: {

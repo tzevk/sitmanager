@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { PageHeader } from '@/components/ui/PageHeader';
-import AlumniBatchWidget from './AlumniBatchWidget';
 
 interface StudentAccountRow {
   studentId: number;
@@ -13,7 +12,7 @@ interface StudentAccountRow {
   mobile: string | null;
   email: string | null;
   hasAccount: boolean;
-  matchType: 'phone' | 'name' | 'manual' | null;
+  matchType: 'phone' | 'email' | 'name' | 'manual' | null;
   currentAlumniStatus: string | null;
   hasReceipt: boolean;
   csvEmail: string | null;
@@ -48,6 +47,7 @@ interface PreviewResult {
   /** Stored upload this preview came from (null for a view-only check). */
   uploadId?: number | null;
   uploadedAt?: string;
+  staffMembershipSkipped?: number;
 }
 
 const BLANK_CSV_ROW: AlumniCsvRow = {
@@ -252,7 +252,6 @@ export default function AlumniAssociationPage() {
   const [batchFilter, setBatchFilter] = useState('');
   const [trainingFilter, setTrainingFilter] = useState('');
   const [linkingCsvRow, setLinkingCsvRow] = useState<AlumniCsvRow | null>(null);
-  const [widgetKey, setWidgetKey] = useState(0);
   const [loadingLast, setLoadingLast] = useState(false);
 
   /** Re-open the student lists from the last uploaded report — no re-upload. */
@@ -313,7 +312,6 @@ export default function AlumniAssociationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to preview import');
       setPreview(data);
-      if (data.uploadId) setWidgetKey((k) => k + 1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to preview import');
       setPreview(null);
@@ -343,7 +341,6 @@ export default function AlumniAssociationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to apply');
       setAppliedCount({ updatedCount: data.updatedCount, markedNoCount: data.markedNoCount });
-      setWidgetKey((k) => k + 1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to apply');
     } finally {
@@ -377,8 +374,6 @@ export default function AlumniAssociationPage() {
         breadcrumbs={[{ label: 'Admission Activity' }, { label: 'Alumni Association' }]}
         meta={preview ? `${preview.totalStudents.toLocaleString()} students` : undefined}
       />
-
-      <AlumniBatchWidget refreshKey={widgetKey} />
 
       <div className="bg-white rounded-xl border border-slate-200 p-4">
         <div className="flex items-center justify-between gap-2 mb-2">
@@ -438,6 +433,14 @@ export default function AlumniAssociationPage() {
           )}
         </div>
         {error && <div className="text-xs text-red-600 font-semibold mt-2">{error}</div>}
+        {preview && (
+          <div className="mt-2 text-[11px] text-slate-500">
+            {preview.totalRows.toLocaleString()} registered users in the report
+            {preview.staffMembershipSkipped ? ` (${preview.staffMembershipSkipped} Staff Membership rows left out)` : ''}
+            {' · '}{preview.unmatchedCsvRows.length.toLocaleString()} couldn&apos;t be matched to a student — link them below.
+            {preview.uploadId ? ' This report is now used by the Alumni Registration widget on the CBD dashboard.' : ''}
+          </div>
+        )}
         {appliedCount != null && (
           <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 font-semibold">
             Saved — {appliedCount.updatedCount} marked Yes, {appliedCount.markedNoCount} marked No.

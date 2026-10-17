@@ -43,7 +43,7 @@ export interface StudentAccountRow {
   mobile: string | null;
   email: string | null;
   hasAccount: boolean;
-  matchType: 'phone' | 'name' | null;
+  matchType: 'phone' | 'email' | 'name' | null;
   currentAlumniStatus: string | null;
   /** True if a receipted "One Time Membership Fees - Sitians Alumni Association" row
    * already exists for this student in s_fees_mst — i.e. the alumni fee receipt has
@@ -104,6 +104,8 @@ export function parseAlumniCsv(buffer: Buffer): AlumniCsvRow[] {
   return raw
     .slice(headerRowIdx + 1)
     .filter((row) => row.some((c) => String(c ?? '').trim()))
+    // Staff memberships aren't alumni — skip them whichever column says so.
+    .filter((row) => !isStaffMembershipRow(row))
     .map((row) => {
       const firstName = cell(row, firstNameIdx);
       const lastName = cell(row, lastNameIdx);
@@ -122,6 +124,18 @@ export function parseAlumniCsv(buffer: Buffer): AlumniCsvRow[] {
     .filter((row) => row.firstName || row.lastName);
 }
 
+const STAFF_MEMBERSHIP_RE = /staff\s*membership/i;
+function isStaffMembershipRow(row: unknown[]): boolean {
+  return row.some((c) => STAFF_MEMBERSHIP_RE.test(String(c ?? '')));
+}
+
+/** Counts the 'Staff Membership' rows parseAlumniCsv leaves out (for the preview message). */
+export function countStaffMembershipRows(buffer: Buffer): number {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const raw: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1, defval: '' });
+  return raw.filter((row) => isStaffMembershipRow(row)).length;
+}
+
 interface StudentLookupRow {
   Student_Id: number;
   Student_Name: string;
@@ -136,6 +150,17 @@ interface StudentLookupRow {
 
 function nameKey(first: string, last: string): string {
   return `${first.trim().toLowerCase()}|${last.trim().toLowerCase()}`;
+}
+
+/** Letters only, lower-case — "Asha  Kale" and "asha kale." compare equal. */
+function compactName(value: string | null | undefined): string | null {
+  const k = String(value ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  return k.length >= 4 ? k : null;
+}
+
+function emailKey(value: string | null | undefined): string | null {
+  const t = String(value ?? '').trim().toLowerCase();
+  return t.includes('@') ? t : null;
 }
 
 /** Matches CSV rows against student_master: phone first (primary/most reliable key in
@@ -176,53 +201,69 @@ export async function matchAlumniRows(rows: AlumniCsvRow[]): Promise<AlumniPrevi
     for (const r of receiptRows as { Student_Id: number }[]) receiptStudentIds.add(r.Student_Id);
   }
 
+  // Indexes: a phone or email can belong to several student records — usually the
+  // same person entered twice (re-admission). Those are resolved by name below.
+  const addTo = (map: Map<string, StudentLookupRow[]>, key: string | null, s: StudentLookupRow) => {
+    if (!key) return;
+    const list = map.get(key) ?? [];
+    if (!list.some((existing) => existing.Student_Id === s.Student_Id)) list.push(s);
+    map.set(key, list);
+  };
   const byMobile = new Map<string, StudentLookupRow[]>();
+  const byEmail = new Map<string, StudentLookupRow[]>();
   const byName = new Map<string, StudentLookupRow[]>();
+  const byFullName = new Map<string, StudentLookupRow[]>();
   for (const s of students) {
-    for (const rawMobile of [s.Present_Mobile, s.Present_Mobile2]) {
-      const normalized = normalizeMobile(rawMobile);
-      if (!normalized) continue;
-      const list = byMobile.get(normalized) ?? [];
-      if (!list.some((existing) => existing.Student_Id === s.Student_Id)) list.push(s);
-      byMobile.set(normalized, list);
-    }
-    if (s.FName && s.LName) {
-      const key = nameKey(s.FName, s.LName);
-      const list = byName.get(key) ?? [];
-      list.push(s);
-      byName.set(key, list);
-    }
+    addTo(byMobile, normalizeMobile(s.Present_Mobile), s);
+    addTo(byMobile, normalizeMobile(s.Present_Mobile2), s);
+    addTo(byEmail, emailKey(s.Email), s);
+    if (s.FName && s.LName) addTo(byName, nameKey(s.FName, s.LName), s);
+    addTo(byFullName, compactName(s.Student_Name), s);
   }
 
+  // Keep only candidates whose name matches the CSV row; a single candidate is
+  // accepted as-is (same rule as before for a unique phone).
+  const narrowByName = (candidates: StudentLookupRow[], row: AlumniCsvRow): StudentLookupRow[] => {
+    const fl = row.firstName && row.lastName ? nameKey(row.firstName, row.lastName) : null;
+    const full = compactName(`${row.firstName} ${row.lastName}`);
+    const named = candidates.filter((s) =>
+      (fl && s.FName && s.LName && nameKey(s.FName, s.LName) === fl) || (full && compactName(s.Student_Name) === full)
+    );
+    if (named.length) return named;
+    return candidates.length === 1 ? candidates : [];
+  };
+
   // studentId -> matched CSV row + how it matched. First match wins if the same
-  // student appears more than once in the CSV (e.g. re-registered).
-  const matchByStudentId = new Map<number, { row: AlumniCsvRow; matchType: 'phone' | 'name' }>();
+  // student appears more than once in the CSV (e.g. re-registered). One CSV row can
+  // mark several records when they are the same person (same phone/email + name).
+  const matchByStudentId = new Map<number, { row: AlumniCsvRow; matchType: 'phone' | 'email' | 'name' }>();
   const unmatchedCsvRows: AlumniCsvRow[] = [];
 
   for (const row of rows) {
-    let matched: StudentLookupRow | null = null;
-    let matchType: 'phone' | 'name' | null = null;
+    let matched: StudentLookupRow[] = [];
+    let matchType: 'phone' | 'email' | 'name' | null = null;
 
-    const normalizedPhone = normalizeMobile(row.csvPhone);
-    if (normalizedPhone) {
-      const found = byMobile.get(normalizedPhone);
-      if (found && found.length === 1) {
-        matched = found[0];
-        matchType = 'phone';
+    const phoneCandidates = byMobile.get(normalizeMobile(row.csvPhone) ?? '');
+    if (phoneCandidates) {
+      matched = narrowByName(phoneCandidates, row);
+      if (matched.length) matchType = 'phone';
+    }
+    if (!matched.length) {
+      for (const e of [emailKey(row.email), emailKey(row.secondaryEmail)]) {
+        const emailCandidates = e ? byEmail.get(e) : undefined;
+        if (!emailCandidates) continue;
+        matched = narrowByName(emailCandidates, row);
+        if (matched.length) { matchType = 'email'; break; }
       }
     }
-
-    if (!matched && row.firstName && row.lastName) {
-      const found = byName.get(nameKey(row.firstName, row.lastName));
-      if (found && found.length === 1) {
-        matched = found[0];
-        matchType = 'name';
-      }
+    if (!matched.length && row.firstName && row.lastName) {
+      const found = byName.get(nameKey(row.firstName, row.lastName)) ?? byFullName.get(compactName(`${row.firstName} ${row.lastName}`) ?? '');
+      if (found && found.length === 1) { matched = found; matchType = 'name'; }
     }
 
-    if (matched && matchType) {
-      if (!matchByStudentId.has(matched.Student_Id)) {
-        matchByStudentId.set(matched.Student_Id, { row, matchType });
+    if (matched.length && matchType) {
+      for (const m of matched) {
+        if (!matchByStudentId.has(m.Student_Id)) matchByStudentId.set(m.Student_Id, { row, matchType });
       }
     } else {
       unmatchedCsvRows.push(row);
