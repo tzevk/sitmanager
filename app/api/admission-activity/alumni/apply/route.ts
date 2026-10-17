@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { applyAlumniMatches } from '@/lib/services/alumni-import.service';
+import { finalizeAlumniUpload } from '@/lib/services/alumni-batch-summary.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -28,6 +29,10 @@ export async function POST(req: NextRequest) {
       importedBy: auth.session.userId,
       markOthersAsNo,
     });
+
+    // Keep the stored report in step with what was saved (manual links included).
+    const uploadId = Number(body?.uploadId);
+    if (Number.isInteger(uploadId) && uploadId > 0) await finalizeAlumniUpload(uploadId, studentIds);
 
     return NextResponse.json({ success: true, ...result });
   } catch (error: unknown) {

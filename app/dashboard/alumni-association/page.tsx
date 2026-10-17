@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { PageHeader } from '@/components/ui/PageHeader';
+import AlumniBatchWidget from './AlumniBatchWidget';
 
 interface StudentAccountRow {
   studentId: number;
@@ -44,6 +45,9 @@ interface PreviewResult {
   students: StudentAccountRow[];
   unmatchedCsvRows: AlumniCsvRow[];
   fileName: string;
+  /** Stored upload this preview came from (null for a view-only check). */
+  uploadId?: number | null;
+  uploadedAt?: string;
 }
 
 const BLANK_CSV_ROW: AlumniCsvRow = {
@@ -248,6 +252,27 @@ export default function AlumniAssociationPage() {
   const [batchFilter, setBatchFilter] = useState('');
   const [trainingFilter, setTrainingFilter] = useState('');
   const [linkingCsvRow, setLinkingCsvRow] = useState<AlumniCsvRow | null>(null);
+  const [widgetKey, setWidgetKey] = useState(0);
+  const [loadingLast, setLoadingLast] = useState(false);
+
+  /** Re-open the student lists from the last uploaded report — no re-upload. */
+  const loadLastUpload = async () => {
+    setError('');
+    setAppliedCount(null);
+    setBatchFilter('');
+    setTrainingFilter('');
+    setLoadingLast(true);
+    try {
+      const res = await fetch('/api/admission-activity/alumni/preview', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to load the last report');
+      setPreview(data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load the last report');
+    } finally {
+      setLoadingLast(false);
+    }
+  };
 
   const handleLink = (student: StudentSearchResult) => {
     if (!linkingCsvRow) return;
@@ -288,6 +313,7 @@ export default function AlumniAssociationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to preview import');
       setPreview(data);
+      if (data.uploadId) setWidgetKey((k) => k + 1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to preview import');
       setPreview(null);
@@ -311,11 +337,13 @@ export default function AlumniAssociationPage() {
           totalRows: preview.totalRows,
           matchedCount: studentIds.length,
           markOthersAsNo: true,
+          uploadId: preview.uploadId ?? null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to apply');
       setAppliedCount({ updatedCount: data.updatedCount, markedNoCount: data.markedNoCount });
+      setWidgetKey((k) => k + 1);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to apply');
     } finally {
@@ -350,8 +378,18 @@ export default function AlumniAssociationPage() {
         meta={preview ? `${preview.totalStudents.toLocaleString()} students` : undefined}
       />
 
+      <AlumniBatchWidget refreshKey={widgetKey} />
+
       <div className="bg-white rounded-xl border border-slate-200 p-4">
-        <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-2">Import Alumni CSV</div>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">Import Alumni CSV</div>
+          {!preview && (
+            <button onClick={loadLastUpload} disabled={loadingLast}
+              className="text-[11px] font-semibold text-[#2E3093] hover:underline disabled:opacity-50">
+              {loadingLast ? 'Loading…' : 'Show students from last upload'}
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input
             type="file"
@@ -366,6 +404,9 @@ export default function AlumniAssociationPage() {
           >
             {previewing ? 'Checking…' : 'Check Accounts'}
           </button>
+          {preview?.uploadedAt && !file && (
+            <span className="text-[11px] text-slate-500">Showing last upload: {preview.fileName}</span>
+          )}
           {preview && (
             <select value={trainingFilter} onChange={(e) => setTrainingFilter(e.target.value)} className={`${ctrl} w-[180px]`}>
               <option value="">All Training Programs</option>
