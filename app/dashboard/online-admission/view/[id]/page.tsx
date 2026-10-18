@@ -281,6 +281,7 @@ export default function EditOnlineAdmissionPage() {
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingBatches, setLoadingBatches]       = useState(false);
   const cascadeRestoredRef = useRef(false);
+  const [isInternational, setIsInternational] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: '', middleName: '', lastName: '', shortName: '',
@@ -449,6 +450,7 @@ export default function EditOnlineAdmissionPage() {
         return Number.isNaN(dt.getTime()) ? '' : dt.toISOString().slice(0, 10);
       };
 
+      setIsInternational(d.isInternational === true);
       setFormData({
         firstName: d.firstName || '', middleName: d.middleName || '',
         lastName: d.lastName || '', shortName: d.shortName || '',
@@ -912,7 +914,12 @@ export default function EditOnlineAdmissionPage() {
                 </select>
               </div>
               <div>
-                <label className={lbl}>Nationality</label>
+                <label className={lbl}>
+                  Nationality
+                  {isInternational && (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 normal-case tracking-normal">International candidate</span>
+                  )}
+                </label>
                 <input type="text" value={formData.nationality} onChange={e => set('nationality', e.target.value)} className={inp} />
               </div>
             </div>

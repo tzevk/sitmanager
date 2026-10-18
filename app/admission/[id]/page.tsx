@@ -68,6 +68,8 @@ const stepEnterStyle = { animation: 'stepEnter 320ms ease-out' };
 
 
 // One Time Membership Fee - Sitians Alumni Association — mandatory for every training course
+const INDIAN_STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry'];
+
 const ALUMNI_MEMBERSHIP_FEE = 899;
 
 type PaymentSubMethod = '' | 'razorpay' | 'qr' | 'neft';
@@ -225,6 +227,7 @@ export default function PublicAdmissionFormPage() {
     shortName: '',
     dob: '',
     gender: '',
+    isInternational: false,
     nationality: 'Indian',
     email: '',
     mobile: '',
@@ -1241,6 +1244,28 @@ export default function PublicAdmissionFormPage() {
   const savedPhotoUrl = (): string | undefined =>
     savedAdmissionAssetsDetail.find((d) => d.isPhoto)?.url;
 
+  // International candidates have no Indian state, a non-numeric postal code and a
+  // non-Indian default nationality/country, so switching type clears those defaults.
+  const setCandidateType = (international: boolean) => {
+    setFormData((prev) => {
+      const keepState = (v: string) => (international ? (INDIAN_STATES.includes(v) ? '' : v) : (INDIAN_STATES.includes(v) ? v : ''));
+      const keepPin = (v: string) => (international ? v : v.replace(/\D/g, '').slice(0, 6));
+      const instalmentPlan = prev.modeOfPayment === '2-Payment Plan' || prev.modeOfPayment === 'Loan (0% Interest)';
+      return {
+        ...prev,
+        isInternational: international,
+        modeOfPayment: international && instalmentPlan && !razorpayPaid ? '' : prev.modeOfPayment,
+        nationality: international ? (prev.nationality.trim().toLowerCase() === 'indian' ? '' : prev.nationality) : 'Indian',
+        presentCountry: international ? (prev.presentCountry.trim().toLowerCase() === 'india' ? '' : prev.presentCountry) : 'India',
+        permanentCountry: international ? (prev.permanentCountry.trim().toLowerCase() === 'india' ? '' : prev.permanentCountry) : 'India',
+        presentState: keepState(prev.presentState),
+        permanentState: keepState(prev.permanentState),
+        presentPin: keepPin(prev.presentPin),
+        permanentPin: keepPin(prev.permanentPin),
+      };
+    });
+  };
+
   const handleSameAddress = (checked: boolean) => {
     handleChange('sameAsPresent', checked);
     if (checked) {
@@ -1269,6 +1294,10 @@ export default function PublicAdmissionFormPage() {
         }
         if (formData.familyContact === formData.mobile) {
           alert('Family Contact Number cannot be the same as Mobile Number');
+          return false;
+        }
+        if (formData.isInternational && (!formData.nationality.trim() || !formData.presentCountry.trim())) {
+          alert('For an international candidate, please enter the Nationality and the Country of the present address.');
           return false;
         }
         if (!hasRequiredPhoto()) {
@@ -1349,6 +1378,10 @@ export default function PublicAdmissionFormPage() {
       case 7:
         if (!formData.modeOfPayment) {
           alert('Please select a fee plan');
+          return false;
+        }
+        if (formData.isInternational && (formData.modeOfPayment === '2-Payment Plan' || formData.modeOfPayment === 'Loan (0% Interest)')) {
+          alert('International candidates pay the full fee. Please select Full Payment.');
           return false;
         }
         if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
@@ -1474,6 +1507,11 @@ export default function PublicAdmissionFormPage() {
       setCurrentStep(7);
       return;
     }
+    if (formData.isInternational && (formData.modeOfPayment === '2-Payment Plan' || formData.modeOfPayment === 'Loan (0% Interest)')) {
+      alert('International candidates pay the full fee. Please select Full Payment in Step 7.');
+      setCurrentStep(7);
+      return;
+    }
     if (formData.modeOfPayment === 'Pay at Office' && !payAtOfficeVerified) {
       alert('Please complete Pay at Office override verification in Step 7.');
       setCurrentStep(7);
@@ -1522,6 +1560,7 @@ export default function PublicAdmissionFormPage() {
         shortName: formData.shortName,
         dob: formData.dob,
         gender: formData.gender,
+        isInternational: formData.isInternational,
         nationality: formData.nationality,
         email: formData.email,
         mobile: formData.mobile,
@@ -2103,6 +2142,29 @@ export default function PublicAdmissionFormPage() {
                               </label>
                             </div>
                           </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Candidate Type <span className="text-red-500">*</span></label>
+                            <div className="inline-flex rounded-lg border border-gray-300 p-0.5 bg-gray-50" role="radiogroup" aria-label="Candidate type">
+                              {[
+                                { value: false, label: 'Indian' },
+                                { value: true, label: 'International' },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.label}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={formData.isInternational === opt.value}
+                                  onClick={() => setCandidateType(opt.value)}
+                                  className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-colors ${formData.isInternational === opt.value ? 'bg-[#2E3093] text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                            {formData.isInternational && (
+                              <p className="text-[11px] text-gray-500 mt-1">Enter your nationality, mobile with country code, and your country&apos;s address format.</p>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -2115,7 +2177,7 @@ export default function PublicAdmissionFormPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Nationality <span className="text-red-500">*</span></label>
-                            <input type="text" value={formData.nationality} onChange={(e) => handleChange('nationality', e.target.value)} placeholder="Indian" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                            <input type="text" value={formData.nationality} onChange={(e) => handleChange('nationality', e.target.value)} placeholder={formData.isInternational ? 'e.g. Nepalese' : 'Indian'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Email Address <span className="text-red-500">*</span></label>
@@ -2123,7 +2185,7 @@ export default function PublicAdmissionFormPage() {
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Mobile Number <span className="text-red-500">*</span></label>
-                            <input type="tel" value={formData.mobile} onChange={(e) => handleChange('mobile', e.target.value)} placeholder="+91-XXXXXXXXXX" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
+                            <input type="tel" value={formData.mobile} onChange={(e) => handleChange('mobile', e.target.value)} placeholder={formData.isInternational ? '+country code and number' : '+91-XXXXXXXXXX'} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" required />
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Telephone Number</label>
@@ -2181,15 +2243,19 @@ export default function PublicAdmissionFormPage() {
                               <input type="text" value={formData.presentDistrict} onChange={(e) => handleChange('presentDistrict', e.target.value)} placeholder="e.g. Mumbai Suburban" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">{formData.isInternational ? 'State / Province / Region' : 'State'}</label>
+                              {formData.isInternational ? (
+                                <input type="text" value={formData.presentState} onChange={(e) => handleChange('presentState', e.target.value)} placeholder="e.g. Bagmati" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                              ) : (
                               <select value={formData.presentState} onChange={(e) => handleChange('presentState', e.target.value)} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all">
                                 <option value="">— Select State —</option>
-                                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry'].map(s => <option key={s} value={s}>{s}</option>)}
+                                {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
+                              )}
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">PIN Code</label>
-                              <input type="text" inputMode="numeric" maxLength={6} value={formData.presentPin} onChange={(e) => handleChange('presentPin', e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all font-mono tracking-widest" />
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">{formData.isInternational ? 'Postal / ZIP Code' : 'PIN Code'}</label>
+                              <input type="text" inputMode={formData.isInternational ? 'text' : 'numeric'} maxLength={formData.isInternational ? 12 : 6} value={formData.presentPin} onChange={(e) => handleChange('presentPin', formData.isInternational ? e.target.value.replace(/[^A-Za-z0-9 -]/g, '').toUpperCase() : e.target.value.replace(/\D/g, ''))} placeholder={formData.isInternational ? 'Postal / ZIP code' : '6-digit PIN'} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all font-mono tracking-widest" />
                             </div>
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Country</label>
@@ -2245,15 +2311,19 @@ export default function PublicAdmissionFormPage() {
                               <input type="text" value={formData.permanentDistrict} onChange={(e) => handleChange('permanentDistrict', e.target.value)} placeholder="e.g. Pune" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">State</label>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">{formData.isInternational ? 'State / Province / Region' : 'State'}</label>
+                              {formData.isInternational ? (
+                                <input type="text" value={formData.permanentState} onChange={(e) => handleChange('permanentState', e.target.value)} disabled={formData.sameAsPresent} placeholder="e.g. Bagmati" className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400" />
+                              ) : (
                               <select value={formData.permanentState} onChange={(e) => handleChange('permanentState', e.target.value)} disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400">
                                 <option value="">— Select State —</option>
-                                {['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman & Nicobar Islands','Chandigarh','Dadra & Nagar Haveli','Daman & Diu','Delhi','Jammu & Kashmir','Ladakh','Lakshadweep','Puducherry'].map(s => <option key={s} value={s}>{s}</option>)}
+                                {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
+                              )}
                             </div>
                             <div>
-                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">PIN Code</label>
-                              <input type="text" inputMode="numeric" maxLength={6} value={formData.permanentPin} onChange={(e) => handleChange('permanentPin', e.target.value.replace(/\D/g, ''))} placeholder="6-digit PIN" disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400 font-mono tracking-widest" />
+                              <label className="block text-xs font-semibold text-gray-700 mb-1.5">{formData.isInternational ? 'Postal / ZIP Code' : 'PIN Code'}</label>
+                              <input type="text" inputMode={formData.isInternational ? 'text' : 'numeric'} maxLength={formData.isInternational ? 12 : 6} value={formData.permanentPin} onChange={(e) => handleChange('permanentPin', formData.isInternational ? e.target.value.replace(/[^A-Za-z0-9 -]/g, '').toUpperCase() : e.target.value.replace(/\D/g, ''))} placeholder={formData.isInternational ? 'Postal / ZIP code' : '6-digit PIN'} disabled={formData.sameAsPresent} className="w-full px-3 py-2 border border-gray-300 bg-white rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all disabled:bg-gray-100 disabled:text-gray-400 font-mono tracking-widest" />
                             </div>
                             <div>
                               <label className="block text-xs font-semibold text-gray-700 mb-1.5">Country</label>
@@ -3496,6 +3566,12 @@ export default function PublicAdmissionFormPage() {
                         </div>
                       )}
 
+                      {formData.isInternational && (
+                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                          <span className="font-semibold">International candidate:</span> the fee is paid in full at admission. Instalment and loan plans are not available.
+                        </div>
+                      )}
+
                       {/* Payment Options */}
                       <div className="space-y-3">
                         {/* Option 1: Full Payment with 5% discount */}
@@ -3557,7 +3633,7 @@ export default function PublicAdmissionFormPage() {
                         })()}
 
                         {/* Process Engineering Weekend only: 2-Payment Plan */}
-                        {isProcessWeekend && (() => {
+                        {isProcessWeekend && !formData.isInternational && (() => {
                           const isSelected = formData.modeOfPayment === '2-Payment Plan';
                           return (
                             <button
@@ -3713,7 +3789,7 @@ export default function PublicAdmissionFormPage() {
                         {/* 0% Interest Loan — selectable like the other plans; student pays the initial
                             admission amount online now, and contacts the admissions team to arrange
                             the remaining balance as a 0% interest loan through a financial institution. */}
-                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && (() => {
+                        {(isPipingFulltime || is75kPlan || isProcessWeekend) && !formData.isInternational && (() => {
                           const isSelected = formData.modeOfPayment === 'Loan (0% Interest)';
                           return (
                             <div className={`w-full rounded-xl border-2 transition-all duration-200 ${
