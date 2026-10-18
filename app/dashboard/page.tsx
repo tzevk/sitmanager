@@ -19,6 +19,8 @@ import PlacementDepartmentDashboard from './components/PlacementDepartmentDashbo
 import FinanceFullDashboard from './components/FinanceFullDashboard';
 import ChangelogWidget from './components/ChangelogWidget';
 import MonitoringWidget from './components/MonitoringWidget';
+import SalesTrackerWidget from './components/SalesTrackerWidget';
+import IndividualSalesTrackerWidget from './components/IndividualSalesTrackerWidget';
 
 interface TodoItem {
   id: string;
@@ -109,7 +111,7 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
 
 
 export default function DashboardPage() {
-  const { session, isSuperAdmin } = usePermissions();
+  const { session, isSuperAdmin, hasPermission } = usePermissions();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -580,6 +582,8 @@ export default function DashboardPage() {
         {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {hasPermission('sales_tracker.view') && <SalesTrackerWidget />}
+        {hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
         <AdministrationDashboard
           data={data}
           loading={loading}

@@ -226,6 +226,20 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   },
 
   // -------------------------------------------------------------------------
+  // SALES PERFORMANCE (dashboard widgets)
+  // -------------------------------------------------------------------------
+  {
+    id: 'sales_performance',
+    name: 'Sales Performance',
+    description: 'Sales scoreboard widgets on the dashboard',
+    icon: 'chart',
+    permissions: [
+      ...createPermissions('sales_tracker', 'Sales Tracker Widget', ['view']),
+      ...createPermissions('individual_sales_tracker', 'Individual Sales Tracker Widget', ['view']),
+    ],
+  },
+
+  // -------------------------------------------------------------------------
   // CORPORATE TRAINING
   // -------------------------------------------------------------------------
   {
