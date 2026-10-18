@@ -356,7 +356,7 @@ export default function DashboardPage() {
 
   const changelogWidget = <ChangelogWidget />;
   const monitoringWidget = <MonitoringWidget />;
-  const salesTrackerWidget = hasPermission('sales_tracker.view') ? <SalesTrackerWidget /> : null;
+  const salesTrackerWidget = <SalesTrackerWidget />;
 
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {

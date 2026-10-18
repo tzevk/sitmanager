@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requirePermission } from '@/lib/api-auth';
+import { requireAuth, requirePermission } from '@/lib/api-auth';
 import { getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
 
 export const runtime = 'nodejs';
@@ -9,7 +9,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /**
  * Sales scoreboard figures for the dashboard widgets, from the latest uploaded
  * SALES_PERFORMANCE_SCOREBOARD sheet. ?view=tracker → weekly Sales Tracker rows
- * (sales_tracker.view); ?view=individual → every salesperson's prospect log
+ * (every signed-in user); ?view=individual → every salesperson's prospect log
  * (individual_sales_tracker.view).
  */
 export async function GET(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (view !== 'tracker' && view !== 'individual') {
     return NextResponse.json({ error: 'view must be "tracker" or "individual"' }, { status: 400 });
   }
-  const auth = await requirePermission(req, view === 'tracker' ? 'sales_tracker.view' : 'individual_sales_tracker.view');
+  const auth = view === 'tracker' ? await requireAuth(req) : await requirePermission(req, 'individual_sales_tracker.view');
   if (auth instanceof NextResponse) return auth;
 
   try {

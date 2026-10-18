@@ -234,7 +234,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     description: 'Sales scoreboard widgets on the dashboard',
     icon: 'chart',
     permissions: [
-      ...createPermissions('sales_tracker', 'Sales Tracker Widget', ['view']),
       ...createPermissions('individual_sales_tracker', 'Individual Sales Tracker Widget', ['view']),
       {
         id: 'sales_scoreboard.create',
