@@ -357,6 +357,7 @@ export default function DashboardPage() {
   const changelogWidget = <ChangelogWidget />;
   const monitoringWidget = <MonitoringWidget />;
   const salesTrackerWidget = <SalesTrackerWidget />;
+  const mySalesTrackerWidget = <IndividualSalesTrackerWidget mode="mine" />;
 
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
@@ -502,6 +503,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -563,6 +565,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <FinanceFullDashboard />
       </div>
     );
@@ -575,6 +578,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -587,6 +591,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
         {hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
         <AdministrationDashboard
           data={data}
@@ -607,6 +612,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -671,6 +677,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
+        {mySalesTrackerWidget}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />

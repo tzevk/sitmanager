@@ -284,3 +284,20 @@ export function parseScoreboardWorkbook(buffer: Buffer, fileName: string): Score
   ].sort();
   return { source: fileName, dataThrough: lastDates[lastDates.length - 1] ?? '', tracker, individuals };
 }
+
+const nameTokens = (v: string) => v.toLowerCase().split(/[^a-z]+/).filter((t) => t.length > 1);
+
+/**
+ * The employee sheet belonging to a signed-in user: the sheet whose name contains both
+ * the user's first and last name (in any order, so "Umar Shaikh" matches the sheet
+ * "Shaikh Mohammed Umar"). Null when no sheet matches, or when more than one does.
+ */
+export function findEmployeeSheet(board: Scoreboard, firstName: string, lastName: string) {
+  const wanted = [...nameTokens(firstName), ...nameTokens(lastName)];
+  if (!nameTokens(firstName).length || !nameTokens(lastName).length) return null;
+  const matches = board.individuals.filter((i) => {
+    const have = new Set(nameTokens(i.employee));
+    return wanted.every((t) => have.has(t));
+  });
+  return matches.length === 1 ? matches[0] : null;
+}

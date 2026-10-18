@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requirePermission } from '@/lib/api-auth';
-import { getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+import { findEmployeeSheet, getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
 
 export const runtime = 'nodejs';
 
@@ -10,12 +10,28 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
  * Sales scoreboard figures for the dashboard widgets, from the latest uploaded
  * SALES_PERFORMANCE_SCOREBOARD sheet. ?view=tracker → weekly Sales Tracker rows
  * (every signed-in user); ?view=individual → every salesperson's prospect log
- * (individual_sales_tracker.view).
+ * (individual_sales_tracker.view); ?view=mine → the signed-in user's own sheet,
+ * matched by name (every signed-in user, own data only).
  */
 export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get('view');
+  if (view === 'mine') {
+    const auth = await requireAuth(req);
+    if (auth instanceof NextResponse) return auth;
+    try {
+      const board = await getScoreboard();
+      const mine = findEmployeeSheet(board, auth.session.firstName ?? '', auth.session.lastName ?? '');
+      return NextResponse.json({
+        source: board.source, dataThrough: board.dataThrough, uploadedAt: board.uploadedAt ?? null, uploadedBy: board.uploadedBy ?? null,
+        individuals: mine ? [mine] : [],
+      });
+    } catch (error) {
+      console.error('Sales scoreboard (mine) GET error:', error);
+      return NextResponse.json({ error: 'Could not load your sales tracker' }, { status: 500 });
+    }
+  }
   if (view !== 'tracker' && view !== 'individual') {
-    return NextResponse.json({ error: 'view must be "tracker" or "individual"' }, { status: 400 });
+    return NextResponse.json({ error: 'view must be "tracker", "individual" or "mine"' }, { status: 400 });
   }
   const auth = view === 'tracker' ? await requireAuth(req) : await requirePermission(req, 'individual_sales_tracker.view');
   if (auth instanceof NextResponse) return auth;

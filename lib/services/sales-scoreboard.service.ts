@@ -2,7 +2,7 @@ import { cached, getPool, invalidateCache } from '@/lib/db';
 import bundledScoreboard from '@/lib/data/sales-scoreboard.json';
 import type { Scoreboard } from '@/lib/sales-scoreboard-parser';
 
-export { parseScoreboardWorkbook } from '@/lib/sales-scoreboard-parser';
+export { findEmployeeSheet, parseScoreboardWorkbook } from '@/lib/sales-scoreboard-parser';
 export type { Scoreboard, TrackerRow, ProspectRow } from '@/lib/sales-scoreboard-parser';
 
 const TABLE = 'sales_scoreboard_uploads';

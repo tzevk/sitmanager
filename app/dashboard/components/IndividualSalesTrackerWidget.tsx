@@ -35,7 +35,8 @@ const TEMPS: { key: Temperature; color: string; text: string }[] = [
 
 const fmtDay = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
-export default function IndividualSalesTrackerWidget() {
+/** mode "all": every salesperson, for admins. mode "mine": only the signed-in person's own sheet; renders nothing if they have none. */
+export default function IndividualSalesTrackerWidget({ mode = 'all' }: { mode?: 'all' | 'mine' }) {
   const [people, setPeople] = useState<Individual[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,7 +44,7 @@ export default function IndividualSalesTrackerWidget() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/dashboard/sales-scoreboard?view=individual', { cache: 'no-store' });
+      const res = await fetch(`/api/dashboard/sales-scoreboard?view=${mode === 'mine' ? 'mine' : 'individual'}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || data.error || 'Could not load the individual tracker');
       setPeople(data.individuals || []);
@@ -53,7 +54,7 @@ export default function IndividualSalesTrackerWidget() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     load();
@@ -61,8 +62,8 @@ export default function IndividualSalesTrackerWidget() {
     return () => window.removeEventListener(SCOREBOARD_UPDATED_EVENT, load);
   }, [load]);
 
-  const showAll = employee === ALL || !people.some((p) => p.employee === employee);
-  const person = showAll ? null : people.find((p) => p.employee === employee) ?? null;
+  const showAll = mode === 'all' && (employee === ALL || !people.some((p) => p.employee === employee));
+  const person = mode === 'mine' ? people[0] ?? null : showAll ? null : people.find((p) => p.employee === employee) ?? null;
   const rows = useMemo<ProspectRow[]>(
     () => (person ? person.rows : people.flatMap((p) => p.rows.map((r) => ({ ...r, employee: p.employee })))),
     [person, people]
@@ -125,7 +126,8 @@ export default function IndividualSalesTrackerWidget() {
 
   const outcomes = useMemo(() => rows.filter((r) => r.outcome !== 'Open').sort((a, b) => b.date.localeCompare(a.date)), [rows]);
 
-  if (loading) return <WidgetSkeleton lines={6} />;
+  if (loading) return mode === 'mine' ? null : <WidgetSkeleton lines={6} />;
+  if (mode === 'mine' && (error || !person)) return null;
 
   const tiles = [
     { label: 'Prospects handled', value: stats.unique, note: `${stats.entries} entries` },
@@ -138,12 +140,12 @@ export default function IndividualSalesTrackerWidget() {
     <section id="individual-sales-tracker-widget" className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
       <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-bold">Individual Sales Tracker · {person ? person.employee : 'All employees'}</h2>
+          <h2 className="font-bold">{mode === 'mine' ? `My Sales Tracker · ${person?.employee ?? ''}` : `Individual Sales Tracker · ${person ? person.employee : 'All employees'}`}</h2>
           <p className="text-[11px] text-white/80 mt-0.5">
             {stats.from && stats.to ? `${fmtDay(stats.from)} – ${fmtDay(stats.to)} 2026 · ` : ''}from the employee&apos;s daily prospect sheet
           </p>
         </div>
-        {people.length > 0 && (
+        {mode === 'all' && people.length > 0 && (
           <label className="flex items-center gap-2 text-xs font-semibold">
             <span className="text-white/80">Employee</span>
             <select
