@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
 import { WidgetSkeleton } from './Skeletons';
+import { SCOREBOARD_UPDATED_EVENT } from './SalesTrackerWidget';
 
 type Temperature = 'Hot' | 'Warm' | 'Cold' | 'Not tagged';
 
@@ -15,7 +16,10 @@ interface ProspectRow {
   follow_up_connected: 'Yes' | 'No' | '';
   outcome: 'Admitted' | 'Not interested' | 'Open' | 'Other';
   outcome_note: string;
+  employee?: string;
 }
+
+const ALL = '__all';
 
 interface Individual {
   employee: string;
@@ -35,28 +39,58 @@ export default function IndividualSalesTrackerWidget() {
   const [people, setPeople] = useState<Individual[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [employee, setEmployee] = useState('');
+  const [employee, setEmployee] = useState(ALL);
 
-  useEffect(() => {
-    fetch('/api/dashboard/sales-scoreboard?view=individual')
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Could not load the individual tracker');
-        setPeople(data.individuals || []);
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the individual tracker'))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/sales-scoreboard?view=individual', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Could not load the individual tracker');
+      setPeople(data.individuals || []);
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the individual tracker');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const person = people.find((p) => p.employee === employee) ?? people[0];
-  const rows = useMemo(() => person?.rows ?? [], [person]);
+  useEffect(() => {
+    load();
+    window.addEventListener(SCOREBOARD_UPDATED_EVENT, load);
+    return () => window.removeEventListener(SCOREBOARD_UPDATED_EVENT, load);
+  }, [load]);
+
+  const showAll = employee === ALL || !people.some((p) => p.employee === employee);
+  const person = showAll ? null : people.find((p) => p.employee === employee) ?? null;
+  const rows = useMemo<ProspectRow[]>(
+    () => (person ? person.rows : people.flatMap((p) => p.rows.map((r) => ({ ...r, employee: p.employee })))),
+    [person, people]
+  );
+
+  const team = useMemo(
+    () => people
+      .map((p) => ({
+        employee: p.employee,
+        prospects: new Set(p.rows.map((r) => r.prospect_ref)).size,
+        entries: p.rows.length,
+        hot: p.rows.filter((r) => r.temperature === 'Hot').length,
+        warm: p.rows.filter((r) => r.temperature === 'Warm').length,
+        cold: p.rows.filter((r) => r.temperature === 'Cold').length,
+        followUps: p.rows.filter((r) => r.follow_up_connected === 'Yes').length,
+        admitted: p.rows.filter((r) => r.outcome === 'Admitted').length,
+        last: p.rows.map((r) => r.date).sort().at(-1) ?? '',
+      }))
+      .sort((a, b) => b.admitted - a.admitted || b.prospects - a.prospects),
+    [people]
+  );
 
   const stats = useMemo(() => {
     const byTemp = Object.fromEntries(TEMPS.map((t) => [t.key, rows.filter((r) => r.temperature === t.key).length])) as Record<Temperature, number>;
     const dates = rows.map((r) => r.date).sort();
     return {
       entries: rows.length,
-      unique: new Set(rows.map((r) => r.prospect_ref)).size,
+      unique: new Set(rows.map((r) => `${r.employee ?? ''}|${r.prospect_ref}`)).size,
       byTemp,
       followUps: rows.filter((r) => r.follow_up_connected === 'Yes').length,
       admitted: rows.filter((r) => r.outcome === 'Admitted').length,
@@ -104,20 +138,21 @@ export default function IndividualSalesTrackerWidget() {
     <section id="individual-sales-tracker-widget" className="bg-white rounded-2xl border border-[#2E3093]/10 overflow-hidden">
       <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="font-bold">Individual Sales Tracker{person ? ` · ${person.employee}` : ''}</h2>
+          <h2 className="font-bold">Individual Sales Tracker · {person ? person.employee : 'All employees'}</h2>
           <p className="text-[11px] text-white/80 mt-0.5">
             {stats.from && stats.to ? `${fmtDay(stats.from)} – ${fmtDay(stats.to)} 2026 · ` : ''}from the employee&apos;s daily prospect sheet
           </p>
         </div>
-        {people.length > 1 && (
+        {people.length > 0 && (
           <label className="flex items-center gap-2 text-xs font-semibold">
             <span className="text-white/80">Employee</span>
             <select
               id="individual-tracker-employee"
-              value={person?.employee ?? ''}
+              value={person?.employee ?? ALL}
               onChange={(e) => setEmployee(e.target.value)}
               className="rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-white/40 [&>option]:text-slate-800"
             >
+              <option value={ALL}>All employees</option>
               {people.map((p) => <option key={p.employee} value={p.employee}>{p.employee}</option>)}
             </select>
           </label>
@@ -126,10 +161,47 @@ export default function IndividualSalesTrackerWidget() {
 
       {error ? (
         <p className="p-5 text-sm text-rose-600">{error}</p>
-      ) : !person || rows.length === 0 ? (
+      ) : rows.length === 0 ? (
         <p className="p-5 text-sm text-slate-500">No prospect entries yet.</p>
       ) : (
         <div className="p-5 space-y-6">
+          {showAll && (
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-800">By employee</h3>
+              <p className="text-[11px] text-slate-500 mb-3">Each salesperson&apos;s sheet. Click a row to see that person&apos;s tracker.</p>
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="text-left font-semibold px-3 py-2">Employee</th>
+                      <th className="text-right font-semibold px-3 py-2">Prospects</th>
+                      <th className="text-right font-semibold px-3 py-2">Hot</th>
+                      <th className="text-right font-semibold px-3 py-2">Warm</th>
+                      <th className="text-right font-semibold px-3 py-2">Cold</th>
+                      <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">Follow-ups</th>
+                      <th className="text-right font-semibold px-3 py-2">Admitted</th>
+                      <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">Last entry</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {team.map((t) => (
+                      <tr key={t.employee} className="cursor-pointer hover:bg-indigo-50/60" onClick={() => setEmployee(t.employee)}>
+                        <td className="px-3 py-2 font-semibold text-[#2E3093]">{t.employee}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{t.prospects}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{t.hot}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{t.warm}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{t.cold}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">{t.followUps}</td>
+                        <td className={`px-3 py-2 text-right tabular-nums ${t.admitted > 0 ? 'font-bold text-emerald-700' : 'text-slate-700'}`}>{t.admitted}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-500 whitespace-nowrap">{t.last ? fmtDay(t.last) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {tiles.map((t) => (
               <div key={t.label} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -229,11 +301,11 @@ export default function IndividualSalesTrackerWidget() {
               <p className="text-[11px] text-slate-500 mb-3">Entries with a result in the Admission Closures column.</p>
               <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 max-h-72 overflow-y-auto">
                 {outcomes.map((r, i) => (
-                  <li key={`${r.prospect_ref}-${r.date}-${i}`} className="flex items-center gap-3 px-3 py-2 text-xs">
+                  <li key={`${r.employee ?? ''}-${r.prospect_ref}-${r.date}-${i}`} className="flex items-center gap-3 px-3 py-2 text-xs">
                     <span className="w-14 shrink-0 tabular-nums text-slate-500">{fmtDay(r.date)}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold text-slate-800">{r.course}</span>
-                      <span className="text-[11px] text-slate-400">{r.prospect_ref} · {r.temperature}</span>
+                      <span className="text-[11px] text-slate-400">{r.employee ? `${r.employee} · ` : ''}{r.prospect_ref} · {r.temperature}</span>
                     </span>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${
                       r.outcome === 'Admitted' ? 'bg-emerald-50 text-emerald-700'

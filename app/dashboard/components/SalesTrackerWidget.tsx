@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { WidgetSkeleton } from './Skeletons';
+import { usePermissions } from '@/lib/permissions-context';
+
+export const SCOREBOARD_UPDATED_EVENT = 'sales-scoreboard-updated';
 
 interface TrackerRow {
   month: string;
@@ -41,18 +44,54 @@ export default function SalesTrackerWidget() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [month, setMonth] = useState('');
+  const [updated, setUpdated] = useState<{ at: string | null; by: string | null; file: string }>({ at: null, by: null, file: '' });
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { hasPermission } = usePermissions();
+  const canUpload = hasPermission('sales_scoreboard.create');
 
-  useEffect(() => {
-    fetch('/api/dashboard/sales-scoreboard?view=tracker')
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || data.error || 'Could not load the sales tracker');
-        setRows(data.rows || []);
-        setDataThrough(data.dataThrough || '');
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load the sales tracker'))
-      .finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/sales-scoreboard?view=tracker', { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Could not load the sales tracker');
+      setRows(data.rows || []);
+      setDataThrough(data.dataThrough || '');
+      setUpdated({ at: data.uploadedAt, by: data.uploadedBy, file: data.source || '' });
+      setError('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the sales tracker');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    setUploadMsg(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const res = await fetch('/api/dashboard/sales-scoreboard', { method: 'POST', body });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      setUploadMsg({
+        ok: true,
+        text: `Updated from ${file.name}: ${data.trackerWeeks} tracker weeks and ${data.employees.length} employee sheets.`,
+      });
+      setMonth('');
+      await load();
+      window.dispatchEvent(new Event(SCOREBOARD_UPDATED_EVENT));
+    } catch (e) {
+      setUploadMsg({ ok: false, text: e instanceof Error ? e.message : 'Upload failed' });
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   const months = useMemo(() => [...new Set(rows.map((r) => r.month))].sort(), [rows]);
   const activeMonth = month || months[months.length - 1] || '';
@@ -103,9 +142,36 @@ export default function SalesTrackerWidget() {
         <div className="min-w-0">
           <h2 className="font-bold">Sales Tracker</h2>
           <p className="text-[11px] text-white/80 mt-0.5">
-            Filled weekly by the Sales Manager{dataThrough ? ` · data up to ${new Date(`${dataThrough}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+            {updated.at
+              ? `Updated ${new Date(updated.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}${updated.by ? ` by ${updated.by}` : ''}`
+              : 'From the sales scoreboard sheet'}
+            {dataThrough ? ` · entries up to ${new Date(`${dataThrough}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {canUpload && (
+          <>
+            <input
+              ref={fileRef}
+              id="sales-scoreboard-file"
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }}
+            />
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-2.5 py-1.5 text-xs font-semibold hover:bg-white/20 disabled:opacity-60"
+            >
+              {uploading
+                ? <span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                : <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" /></svg>}
+              {uploading ? 'Uploading…' : 'Upload sheet'}
+            </button>
+          </>
+        )}
         {months.length > 0 && (
           <label className="flex items-center gap-2 text-xs font-semibold">
             <span className="text-white/80">Month</span>
@@ -119,7 +185,13 @@ export default function SalesTrackerWidget() {
             </select>
           </label>
         )}
+        </div>
       </div>
+      {uploadMsg && (
+        <p className={`px-5 py-2 text-xs border-b ${uploadMsg.ok ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-rose-50 text-rose-700 border-rose-100'}`}>
+          {uploadMsg.text}
+        </p>
+      )}
 
       {error ? (
         <p className="p-5 text-sm text-rose-600">{error}</p>

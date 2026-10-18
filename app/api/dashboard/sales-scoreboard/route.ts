@@ -1,27 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
-import scoreboard from '@/lib/data/sales-scoreboard.json';
+import { getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+
+export const runtime = 'nodejs';
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 /**
- * Sales scoreboard figures for the dashboard widgets, taken from the sales team's
+ * Sales scoreboard figures for the dashboard widgets, from the latest uploaded
  * SALES_PERFORMANCE_SCOREBOARD sheet. ?view=tracker → weekly Sales Tracker rows
- * (sales_tracker.view); ?view=individual → per-employee prospect logs
- * (individual_sales_tracker.view). Prospect names are not stored, only a reference.
+ * (sales_tracker.view); ?view=individual → every salesperson's prospect log
+ * (individual_sales_tracker.view).
  */
 export async function GET(req: NextRequest) {
   const view = req.nextUrl.searchParams.get('view');
-
-  if (view === 'tracker') {
-    const auth = await requirePermission(req, 'sales_tracker.view');
-    if (auth instanceof NextResponse) return auth;
-    return NextResponse.json({ source: scoreboard.source, dataThrough: scoreboard.dataThrough, rows: scoreboard.tracker });
+  if (view !== 'tracker' && view !== 'individual') {
+    return NextResponse.json({ error: 'view must be "tracker" or "individual"' }, { status: 400 });
   }
+  const auth = await requirePermission(req, view === 'tracker' ? 'sales_tracker.view' : 'individual_sales_tracker.view');
+  if (auth instanceof NextResponse) return auth;
 
-  if (view === 'individual') {
-    const auth = await requirePermission(req, 'individual_sales_tracker.view');
-    if (auth instanceof NextResponse) return auth;
-    return NextResponse.json({ source: scoreboard.source, dataThrough: scoreboard.dataThrough, individuals: scoreboard.individuals });
+  try {
+    const board = await getScoreboard();
+    const meta = { source: board.source, dataThrough: board.dataThrough, uploadedAt: board.uploadedAt ?? null, uploadedBy: board.uploadedBy ?? null };
+    return NextResponse.json(view === 'tracker' ? { ...meta, rows: board.tracker } : { ...meta, individuals: board.individuals });
+  } catch (error) {
+    console.error('Sales scoreboard GET error:', error);
+    return NextResponse.json({ error: 'Could not load the sales scoreboard' }, { status: 500 });
   }
+}
 
-  return NextResponse.json({ error: 'view must be "tracker" or "individual"' }, { status: 400 });
+/** Upload a new SALES_PERFORMANCE_SCOREBOARD workbook (sales_scoreboard.create). */
+export async function POST(req: NextRequest) {
+  const auth = await requirePermission(req, 'sales_scoreboard.create');
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const form = await req.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) return NextResponse.json({ error: 'Choose the scoreboard sheet to upload.' }, { status: 400 });
+    if (!/\.xlsx?$/i.test(file.name)) return NextResponse.json({ error: 'Upload the sheet as an Excel file (.xlsx).' }, { status: 400 });
+    if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: 'The file is larger than 10 MB.' }, { status: 400 });
+
+    let board;
+    try {
+      board = parseScoreboardWorkbook(Buffer.from(await file.arrayBuffer()), file.name);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : 'The sheet could not be read.' }, { status: 422 });
+    }
+
+    const { firstName, lastName, email, userId } = auth.session;
+    const uploader = `${firstName ?? ''} ${lastName ?? ''}`.trim() || email || `User ${userId}`;
+    await saveScoreboard(board, uploader);
+
+    return NextResponse.json({
+      success: true,
+      trackerWeeks: new Set(board.tracker.map((t) => t.week_key)).size,
+      employees: board.individuals.map((i) => ({ employee: i.employee, entries: i.rows.length })),
+      dataThrough: board.dataThrough,
+    });
+  } catch (error) {
+    console.error('Sales scoreboard upload error:', error);
+    return NextResponse.json({ error: 'Upload failed. Please try again.' }, { status: 500 });
+  }
 }

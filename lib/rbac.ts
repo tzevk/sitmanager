@@ -236,6 +236,13 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     permissions: [
       ...createPermissions('sales_tracker', 'Sales Tracker Widget', ['view']),
       ...createPermissions('individual_sales_tracker', 'Individual Sales Tracker Widget', ['view']),
+      {
+        id: 'sales_scoreboard.create',
+        name: 'Upload Sales Scoreboard Sheet',
+        description: 'Can upload the sales scoreboard sheet that updates the sales widgets',
+        resource: 'sales_scoreboard',
+        action: 'create',
+      },
     ],
   },
 
