@@ -565,8 +565,8 @@ export default function InquiryPage() {
         </>}
       />
 
-      {/* Reminders, follow-ups and my tasks sit side by side */}
-      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
+      {/* Reminders, follow-ups, my tasks and the weather window share one row */}
+      <div className="grid gap-3 lg:grid-flow-col lg:auto-cols-fr items-start [&>*]:min-w-0">
       {dueReminders.length > 0 && (
         <div className="rounded-xl border border-sky-300 bg-sky-100 overflow-hidden">
           <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-sky-200">

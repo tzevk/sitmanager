@@ -283,7 +283,7 @@ export default function WeatherWindow() {
 
   return (
     <div
-      className="rounded-xl border border-[#E6DFD3] bg-[#F5F1E8] p-3 self-stretch flex items-center gap-3"
+      className="rounded-xl border border-[#E6DFD3] bg-[#F5F1E8] p-2.5 self-stretch flex flex-col items-center gap-2"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -291,9 +291,9 @@ export default function WeatherWindow() {
         ref={canvasRef} width={W} height={H} onClick={onClick} onMouseMove={onMove}
         aria-label={`Pixel window showing ${LABEL[weather.sky].toLowerCase()} weather in ${CITY}. Click the cat or the window.`}
         className="shrink-0 cursor-pointer rounded-lg border-2 border-[#8B5E3C] shadow-sm"
-        style={{ width: 176, height: 132, imageRendering: 'pixelated' }}
+        style={{ width: '100%', maxWidth: 200, aspectRatio: `${W} / ${H}`, imageRendering: 'pixelated' }}
       />
-      <div className="min-w-0 flex-1 space-y-1.5">
+      <div className="min-w-0 w-full space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[#8A7F6E]">{CITY}</span>
           <span className="text-xs font-bold text-[#3D3929]">
@@ -302,8 +302,8 @@ export default function WeatherWindow() {
         </div>
         {/* speech bubble from the cat */}
         <div className="relative rounded-lg bg-white/80 px-2.5 py-1.5 border border-[#E6DFD3]">
-          <span className="absolute -left-1.5 top-3 h-2.5 w-2.5 rotate-45 border-b border-l border-[#E6DFD3] bg-white/80" aria-hidden="true" />
-          <p className="text-[13px] leading-snug text-[#3D3929]" style={{ fontFamily: 'ui-serif, Georgia, Cambria, "Times New Roman", serif' }} aria-live="polite">{QUOTES[quote]}</p>
+          <span className="absolute left-5 -top-1.5 h-2.5 w-2.5 rotate-45 border-l border-t border-[#E6DFD3] bg-white/80" aria-hidden="true" />
+          <p className="text-[12px] leading-snug text-[#3D3929]" style={{ fontFamily: 'ui-serif, Georgia, Cambria, "Times New Roman", serif' }} aria-live="polite">{QUOTES[quote]}</p>
         </div>
         <p className="text-[9px] text-[#A89C87]">Pet the cat for a new note · click the window to open it</p>
       </div>
