@@ -388,6 +388,7 @@ export async function GET(
       dob:            (si.Student_DOB ? String(si.Student_DOB).slice(0, 10) : '') || payload.dob || (si.DOB ? String(si.DOB).slice(0, 10) : ''),
       gender:         si.Student_Sex || payload.gender || si.Sex || '',
       nationality:    si.Student_Nationality || payload.nationality || si.Nationality || 'Indian',
+      isInternational: payload.isInternational === true || payload.isInternational === 'true',
 
       // contact
       email:          si.Student_Email || payload.email || si.Email || '',

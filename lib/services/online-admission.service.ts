@@ -1585,6 +1585,10 @@ export async function submitOnlineAdmission(
   const { inquiryId, firstName, middleName, lastName, email, mobile, batchCode, ...rest } = input;
 
   if (!Number.isFinite(inquiryId) || inquiryId <= 0) throw new Error('Invalid Inquiry ID');
+  const isInternational = input.isInternational === true || input.isInternational === 'true';
+  if (isInternational && /2-payment|loan/i.test(String(input.modeOfPayment || ''))) {
+    throw Object.assign(new Error('International candidates pay the full fee. Please select Full Payment.'), { status: 400 });
+  }
   if (String(input.paymentSubMethod || '').toLowerCase() === 'neft' && !normalizeText(input.neftTransactionNumber)) {
     throw Object.assign(new Error('NEFT transaction number is required'), { status: 400 });
   }

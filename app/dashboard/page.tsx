@@ -19,6 +19,8 @@ import PlacementDepartmentDashboard from './components/PlacementDepartmentDashbo
 import FinanceFullDashboard from './components/FinanceFullDashboard';
 import ChangelogWidget from './components/ChangelogWidget';
 import MonitoringWidget from './components/MonitoringWidget';
+import SalesTrackerWidget from './components/SalesTrackerWidget';
+import IndividualSalesTrackerWidget from './components/IndividualSalesTrackerWidget';
 
 interface TodoItem {
   id: string;
@@ -109,7 +111,7 @@ function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5
 
 
 export default function DashboardPage() {
-  const { session, isSuperAdmin } = usePermissions();
+  const { session, isSuperAdmin, hasPermission } = usePermissions();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -354,6 +356,8 @@ export default function DashboardPage() {
 
   const changelogWidget = <ChangelogWidget />;
   const monitoringWidget = <MonitoringWidget />;
+  const salesTrackerWidget = <SalesTrackerWidget />;
+  const mySalesTrackerWidget = <IndividualSalesTrackerWidget mode="mine" />;
 
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
@@ -498,6 +502,8 @@ export default function DashboardPage() {
         </div>
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -558,6 +564,8 @@ export default function DashboardPage() {
         {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <FinanceFullDashboard />
       </div>
     );
@@ -569,6 +577,8 @@ export default function DashboardPage() {
         {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -580,6 +590,9 @@ export default function DashboardPage() {
         {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
+        {hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
         <AdministrationDashboard
           data={data}
           loading={loading}
@@ -598,6 +611,8 @@ export default function DashboardPage() {
         {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -661,6 +676,8 @@ export default function DashboardPage() {
       {profileHeader}
         {changelogWidget}
         {monitoringWidget}
+        {salesTrackerWidget}
+        {mySalesTrackerWidget}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />
