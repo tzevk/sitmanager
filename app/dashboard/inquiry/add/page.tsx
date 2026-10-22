@@ -484,9 +484,9 @@ export default function AddInquiryPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not save the Level 2 meeting');
+      if (!data.calendlyUrl) throw new Error('Calendly did not return a link — the meeting was not created');
       fetchDiscussions();
-      if (data.calendlyUrl) { setMLink(data.calendlyUrl); window.open(data.calendlyUrl, '_blank', 'noopener'); }
-      else setL2Modal(false);
+      setMLink(data.calendlyUrl); window.open(data.calendlyUrl, '_blank', 'noopener');
     } catch (err: unknown) { setMError(err instanceof Error ? err.message : 'Failed'); }
     setMBusy(false);
   };

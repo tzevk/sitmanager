@@ -6,6 +6,7 @@ import AnnualTargetsWidget from './AnnualTargetsWidget';
 import ContentCalendarWidget from './ContentCalendarWidget';
 import AppointmentsWidget from './AppointmentsWidget';
 import AlumniRegistrationWidget from './AlumniRegistrationWidget';
+import DaywiseSummary from './DaywiseSummary';
 import { toBatchNumber } from '@/lib/batch-display';
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -193,6 +194,9 @@ const Icons = {
 
 /* ── Component ────────────────────────────────────────────────────── */
 export default function CbdDashboard({ data, loading }: { data: any; loading: boolean }) {
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const daywiseTo = iso(new Date());
+  const daywiseFrom = iso(new Date(Date.now() - 13 * 86400000));
   const pendingFollowups = data?.pendingFollowups ?? [];
   const dailyActivity   = data?.dailyActivity ?? [];
   const pendingFees     = data?.pendingFees ?? [];
@@ -945,6 +949,9 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
           </div>
         )}
       </div>
+
+      {/* Day-wise summary — last 14 days, per counsellor */}
+      <DaywiseSummary from={daywiseFrom} to={daywiseTo} title="Day-wise summary (last 14 days)" maxHeight={340} />
 
       {/* ⑤  Pending Followups · Daily Activity Tracker · Source Wise Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">

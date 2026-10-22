@@ -460,17 +460,10 @@ function e164(raw: string): string {
   return digits ? `+${digits}` : '';
 }
 
-function mapQualification(raw: string, options: string[]): string | null {
-  const q = raw.toLowerCase();
-  const pick = (name: string) => options.find((o) => o.trim().toLowerCase() === name.toLowerCase()) ?? null;
-  const direct = options.find((o) => norm(o) === norm(raw));
-  if (direct) return direct;
-  if (/post|master|\bm\.?\s?(e|tech|sc|com)\b|mba/.test(q)) return pick('Post Graduate');
-  if (/diploma/.test(q)) return pick('Diploma');
-  if (/\b12|hsc|higher secondary/.test(q)) return pick('12th');
-  if (/\b10|ssc|secondary/.test(q)) return pick('10th');
-  if (/\bb\.?\s?(e|tech|sc|com|arch)\b|degree|graduate|engineer/.test(q)) return pick('Graduate');
-  return pick('Other');
+/** Only an exact match to one of Calendly's own options is prefilled — nothing is guessed. */
+function matchOption(raw: string, options: string[]): string | null {
+  const t = norm(raw);
+  return t ? options.find((o) => norm(o) === t) ?? null : null;
 }
 
 /**
@@ -491,12 +484,15 @@ export async function buildLevel2Link(inquiryId: number, date?: string): Promise
   const first = String(inq.FName || '').trim();
   const last = String(inq.LName || '').trim();
   const name = (first || last ? `${first} ${last}` : String(inq.Student_Name || '')).trim();
+  const email = String(inq.Email || '').trim();
+  if (!name) throw new Error('This inquiry has no name, so the Calendly link cannot be created');
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('This inquiry has no valid email address, so the Calendly link cannot be created. Add the email and save first.');
 
   const eventType = await level2EventType();
+  if (!eventType.scheduling_url) throw new Error('Calendly returned no scheduling link for the Level 2 event type');
   const url = new URL(eventType.scheduling_url);
-  if (name) url.searchParams.set('name', name);
-  const email = String(inq.Email || '').trim();
-  if (email) url.searchParams.set('email', email);
+  url.searchParams.set('name', name);
+  url.searchParams.set('email', email);
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
     url.searchParams.set('month', date.slice(0, 7));
     url.searchParams.set('date', date);
@@ -507,12 +503,8 @@ export async function buildLevel2Link(inquiryId: number, date?: string): Promise
     const options: string[] = q.answer_choices ?? [];
     let value: string | null = null;
     if (q.type === 'phone_number' || /mobile|phone/.test(l)) value = e164(inq.Present_Mobile) || null;
-    else if (/qualification/.test(l)) value = mapQualification(String(inq.Qualification || ''), options);
-    else if (/training program/.test(l)) {
-      const target = norm(String(inq.Course_Name || ''));
-      value = (target && options.find((o) => { const n = norm(o); return n === target || (n.length > 5 && (target.startsWith(n) || n.startsWith(target))); }))
-        || options.find((o) => /do not know|don.?t know/i.test(o)) || null;
-    }
+    else if (/qualification/.test(l)) value = matchOption(String(inq.Qualification || ''), options);
+    else if (/training program/.test(l)) value = matchOption(String(inq.Course_Name || ''), options);
     if (value) url.searchParams.set(`a${i + 1}`, value);
   });
   return url.toString();

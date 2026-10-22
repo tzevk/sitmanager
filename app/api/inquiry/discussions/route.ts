@@ -290,6 +290,17 @@ export async function POST(req: NextRequest) {
     await ensureLevelColumns(pool);
     const withNextDate = await hasNextDateColumn(pool);
 
+    // Level 2 needs a real Calendly link. If it cannot be created, fail without saving anything.
+    let calendlyUrl: string | null = null;
+    if (level === 2) {
+      try {
+        calendlyUrl = await buildLevel2Link(canonicalInquiryId, l2Date);
+      } catch (err: any) {
+        perfCode = 502;
+        return NextResponse.json({ error: err?.message || 'Calendly link could not be created' }, { status: 502 });
+      }
+    }
+
     const [result] = withNextDate
       ? await pool.query(
           `INSERT INTO awt_inquirydiscussion
@@ -311,8 +322,6 @@ export async function POST(req: NextRequest) {
         [level, level === 2 ? l2Date : null, level === 2 ? l2Account : null, insertId]
       );
     }
-    // Level 2 is booked by opening the prefilled Calendly link; the Calendly sync then creates the appointment.
-    const calendlyUrl = level === 2 ? await buildLevel2Link(canonicalInquiryId, l2Date).catch(() => null) : null;
     invalidateCache('api:inquiry:discussions');
     invalidateCache('api:inquiry');
     return NextResponse.json({ success: true, id: insertId, calendlyUrl });

@@ -278,9 +278,14 @@ export interface ActivityResult {
  * Batch is the lead's batch code (for admissions, the admitted batch).
  */
 export async function getDailyActivity(month: string, owner: string): Promise<ActivityResult> {
+  return getActivityBetween(`${month}-01`, `${month}-01`, 'month', owner);
+}
+
+/** `end` is the last day when unit is 'day', or any day of the end month when unit is 'month'. */
+async function getActivityBetween(start: string, end: string, unit: 'day' | 'month', owner: string): Promise<ActivityResult> {
   await ensureAssignmentsTable();
   const pool = getPool();
-  const start = `${month}-01`;
+  const endExpr = unit === 'month' ? 'DATE_ADD(?, INTERVAL 1 MONTH)' : 'DATE_ADD(?, INTERVAL 1 DAY)';
   const guarded = async (sql: string, params: any[] = []): Promise<any[]> => {
     try {
       const [rows] = await pool.query(`SET STATEMENT max_statement_time=15 FOR ${sql}`, params);
@@ -295,20 +300,20 @@ export async function getDailyActivity(month: string, owner: string): Promise<Ac
   const [contacts, follows, admissions, users] = await Promise.all([
     guarded(
       `SELECT Inquiry_Id AS iid, Created_By AS uid, DATE_FORMAT(Created_At, '%Y-%m-%d') AS day FROM inquiry_contact_log
-        WHERE Created_At >= ? AND Created_At < DATE_ADD(?, INTERVAL 1 MONTH)`, [start, start]
+        WHERE Created_At >= ? AND Created_At < ${endExpr}`, [start, end]
     ),
     guarded(
       `SELECT Inquiry_id AS iid, created_by AS uid, DATE_FORMAT(created_date, '%Y-%m-%d') AS day FROM awt_inquirydiscussion
-        WHERE deleted = 0 AND created_date >= ? AND created_date < DATE_ADD(?, INTERVAL 1 MONTH)`, [start, start]
+        WHERE deleted = 0 AND created_date >= ? AND created_date < ${endExpr}`, [start, end]
     ),
     guarded(
       `SELECT am.Student_Id AS sid, DATE_FORMAT(am.Admission_Date, '%Y-%m-%d') AS day, b.Batch_code AS batch, c.Course_Name AS course
          FROM admission_master am
          JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
          LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
-        WHERE am.Admission_Date >= ? AND am.Admission_Date < DATE_ADD(?, INTERVAL 1 MONTH)
+        WHERE am.Admission_Date >= ? AND am.Admission_Date < ${endExpr}
           AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')`, [start, start]
+          AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')`, [start, end]
     ),
     pool.query(`SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name FROM awt_adminuser WHERE (deleted = 0 OR deleted IS NULL) ORDER BY name`).then(([r]) => r as any[]),
   ]);
@@ -381,5 +386,42 @@ export async function getDailyActivity(month: string, owner: string): Promise<Ac
     rows,
     batches: [...totals.values()].sort((a, b) => b.admitted - a.admitted || b.contacted + b.followedUp - (a.contacted + a.followedUp)),
     staff: users.map((u) => ({ id: Number(u.id), name: String(u.name) })),
+  };
+}
+
+export interface DaywiseRow { day: string; userId: number | null; counsellor: string; contacted: number; followedUp: number; admitted: number }
+export interface DaywiseResult {
+  rows: DaywiseRow[];
+  /** inquiries received per day, across all counsellors */
+  newInquiries: Record<string, number>;
+  counsellors: { id: number | null; name: string }[];
+}
+
+/** Day-wise contacted / followed up / admitted per counsellor (batches merged), plus new inquiries per day. */
+export async function getDaywiseSummary(from: string, to: string, owner = 'all'): Promise<DaywiseResult> {
+  const pool = getPool();
+  const [activity, [fresh]] = await Promise.all([
+    getActivityBetween(from, to, 'day', owner),
+    pool.query(
+      `SELECT DATE_FORMAT(_inquiry_date, '%Y-%m-%d') AS day, COUNT(*) AS n FROM student_inquiry
+        WHERE _inquiry_date >= ? AND _inquiry_date <= ? AND (IsDelete = 0 OR IsDelete IS NULL) GROUP BY _inquiry_date`,
+      [from, to]
+    ) as Promise<[any[], unknown]>,
+  ]);
+  const name = (id: number | null) => (id == null ? 'Unassigned' : activity.staff.find((u) => u.id === id)?.name ?? `User ${id}`);
+  const merged = new Map<string, DaywiseRow>();
+  activity.rows.forEach((r) => {
+    const key = `${r.day}|${r.userId ?? ''}`;
+    const m = merged.get(key) ?? { day: r.day, userId: r.userId, counsellor: name(r.userId), contacted: 0, followedUp: 0, admitted: 0 };
+    m.contacted += r.contacted; m.followedUp += r.followedUp; m.admitted += r.admitted;
+    merged.set(key, m);
+  });
+  const rows = [...merged.values()].sort((a, b) => b.day.localeCompare(a.day) || a.counsellor.localeCompare(b.counsellor));
+  const seen = new Map<string, { id: number | null; name: string }>();
+  rows.forEach((r) => seen.set(String(r.userId), { id: r.userId, name: r.counsellor }));
+  return {
+    rows,
+    newInquiries: Object.fromEntries(fresh.map((r) => [r.day, Number(r.n)])),
+    counsellors: [...seen.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
 }

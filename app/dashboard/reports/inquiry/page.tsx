@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import DaywiseSummary from '@/app/dashboard/components/DaywiseSummary';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -747,6 +748,9 @@ function InquiryReportContent({
           </div>
         )}
       </div>
+
+      {/* ─── Day-wise summary (follows the date range above) ─── */}
+      <DaywiseSummary from={dateFrom} to={dateTo} title="Day-wise summary by counsellor" canDownload={canExport !== false} />
 
       {/* ─── Error Message ─── */}
       {error && (
