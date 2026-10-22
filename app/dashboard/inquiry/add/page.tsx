@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { toBatchNumber } from '@/lib/batch-display';
+import { AppointmentDetailModal } from '@/app/dashboard/appointments/_components/shared';
 
 const STATUS_ONLY_SAVE_LABELS = ['new', 'irrelevant', 'contacted (not interested)'];
 
@@ -34,12 +35,19 @@ interface Discussion {
   id: number;
   date: string;
   nextdate?: string | null;
+  meeting_level?: number | null;
+  level2_date?: string | null;
+  level2_time?: string | null;
+  level2_invitee_uri?: string | null;
+  level2_account_user_id?: number | null;
+  level2_account_name?: string | null;
   discussion: string;
   created_by: number;
   created_date: string;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+const tomorrow = () => new Date(Date.now() + 86400000).toISOString().slice(0, 10);
 
 const hasText = (v: unknown) => {
   const t = String(v ?? '').trim();
@@ -201,7 +209,24 @@ export default function AddInquiryPage() {
   const [discT, setDiscT] = useState('');
   const [discU, setDiscU] = useState('');
   const [newDiscussion, setNewDiscussion] = useState('');
-  const [newNextDate, setNewNextDate] = useState(today());
+  const [newNextDate, setNewNextDate] = useState(tomorrow());
+  const [showSameDateModal, setShowSameDateModal] = useState(false);
+  const [meetingLevel, setMeetingLevel] = useState<'1' | '2' | '3'>('1');
+  const [editLevel, setEditLevel] = useState<'1' | '2' | '3'>('1');
+  const [editL2Date, setEditL2Date] = useState('');
+  const [editL2Account, setEditL2Account] = useState('');
+  const [level2Date, setLevel2Date] = useState('');
+  const [level2Account, setLevel2Account] = useState('');
+  const [l2Modal, setL2Modal] = useState(false);
+  const [apptDetailId, setApptDetailId] = useState<number | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [mDate, setMDate] = useState('');
+  const [mLink, setMLink] = useState('');
+  const [mAccount, setMAccount] = useState('');
+  const [mNote, setMNote] = useState('');
+  const [mBusy, setMBusy] = useState(false);
+  const [mError, setMError] = useState('');
+  const [staff, setStaff] = useState<{ id: number; name: string }[]>([]);
   const [discLoading, setDiscLoading] = useState(false);
   const [editingDiscId, setEditingDiscId] = useState<number | null>(null);
   const [editingDiscText, setEditingDiscText] = useState('');
@@ -318,6 +343,9 @@ export default function AddInquiryPage() {
   }, [editId]);
 
   useEffect(() => { if (editId) fetchDiscussions(); }, [editId, fetchDiscussions]);
+  useEffect(() => {
+    fetch('/api/inquiry/staff').then(r => r.json()).then(d => setStaff(d.staff || [])).catch(() => {});
+  }, []);
 
   const firstDiscussionTime = discussions.length > 0 ? discussions[0]?.created_date : null;
 
@@ -334,6 +362,17 @@ export default function AddInquiryPage() {
       if (!inquiryMode.trim()) { setError('Mode is required'); return; }
       if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
       if (!batchCode.trim()) { setError('Batch Code is required'); return; }
+      // On the edit page every field except Discussion is compulsory.
+      if (editId) {
+        const missing: [string, string][] = [
+          [gender, 'Gender'], [dob, 'Date of Birth'], [mobile, 'Mobile'], [whatsapp, 'WhatsApp'], [email, 'Email'],
+          [nationality, 'Nationality'], [country, 'Country'], [leadTemp, 'Lead Temperature'], [inquiryDate, 'Inquiry Date'],
+          [preferredLocation, 'Preferred Location'], [courseId, 'Course'], [category, 'Category'],
+          [qualification, 'Qualification'], [discipline, 'Discipline'], [percentage, 'Percentage'],
+        ];
+        const empty = missing.filter(([v]) => !String(v ?? '').trim()).map(([, label]) => label);
+        if (empty.length) { setError(`${empty[0]} is required`); setMissingFields(empty); return; }
+      }
     }
     setError('');
 
@@ -405,22 +444,69 @@ export default function AddInquiryPage() {
   // NFABTU only for inquiries with no discussion anywhere — not in the
   // follow-up history and not in the inquiry's own Discussion field.
   const isFirstDiscussion = discussions.length === 0 && !savedDiscussion;
-  const canAddDiscussion = isFirstDiscussion
+  // Level 1 always uses the NFABTU structure, on any entry.
+  const canAddDiscussion = meetingLevel === '1'
     ? [discN, discF, discA, discB, discT, discU].some(v => v.trim())
     : Boolean(newDiscussion.trim());
+  const levelOk = meetingLevel !== '2' || Boolean(level2Date && level2Account);
+  useEffect(() => { setMeetingLevel(isFirstDiscussion ? '1' : '3'); }, [isFirstDiscussion]);
+
+  const openL2Modal = () => { setMDate(''); setMLink(''); setMAccount(''); setMNote(''); setMError(''); setL2Modal(true); };
+
+  const openCalendlyLink = async (date?: string) => {
+    if (!editId) return;
+    try {
+      const res = await fetch(`/api/inquiry/level2-link?inquiryId=${editId}${date ? `&date=${date}` : ''}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not build the Calendly link');
+      if (data.kind === 'appointment') setApptDetailId(data.appointmentId);
+      else window.open(data.url, '_blank', 'noopener');
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
+  };
+
+  const handleCreateL2 = async () => {
+    if (!editId) return;
+    if (!mDate || !mAccount) { setMError('Meeting date and account name are required'); return; }
+    const accountName = staff.find(u => String(u.id) === mAccount)?.name || '';
+    const text = [
+      `Level 2 meeting planned for ${fmtDate(mDate)}`,
+      accountName && `Account: ${accountName}`,
+      mNote.trim() && `Notes: ${mNote.trim()}`,
+    ].filter(Boolean).join('\n');
+    setMBusy(true); setMError('');
+    try {
+      const res = await fetch('/api/inquiry/discussions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: editId, discussion: text, nextFollowUpDate: mDate === today() ? null : mDate,
+          meetingLevel: 2, level2Date: mDate, level2AccountId: Number(mAccount),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save the Level 2 meeting');
+      fetchDiscussions();
+      if (data.calendlyUrl) { setMLink(data.calendlyUrl); window.open(data.calendlyUrl, '_blank', 'noopener'); }
+      else setL2Modal(false);
+    } catch (err: unknown) { setMError(err instanceof Error ? err.message : 'Failed'); }
+    setMBusy(false);
+  };
 
   const handleAddDiscussion = async () => {
-    const finalText = isFirstDiscussion ? buildStructuredDiscussion() : newDiscussion.trim();
-    if (!finalText || !newNextDate || !editId) return;
+    const finalText = meetingLevel === '1' ? buildStructuredDiscussion() : newDiscussion.trim();
+    if (!finalText || !newNextDate || !editId || !levelOk) return;
+    if (newNextDate === today()) { setShowSameDateModal(true); return; }
     setDiscLoading(true);
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate }),
+        body: JSON.stringify({
+          inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate,
+          meetingLevel: Number(meetingLevel), level2Date, level2AccountId: Number(level2Account) || undefined,
+        }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       setDiscN(''); setDiscF(''); setDiscA(''); setDiscB(''); setDiscT(''); setDiscU('');
-      setNewDiscussion(''); setNewNextDate(today()); fetchDiscussions();
+      setNewDiscussion(''); setNewNextDate(tomorrow()); setMeetingLevel('3'); setLevel2Date(''); setLevel2Account(''); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
     setDiscLoading(false);
   };
@@ -473,14 +559,27 @@ export default function AddInquiryPage() {
     }
   };
 
+  const startEditDisc = (d: Discussion) => {
+    setEditingDiscId(d.id); setEditingDiscText(d.discussion);
+    setEditLevel(d.meeting_level === 2 ? '2' : d.meeting_level === 3 ? '3' : d.meeting_level === 1 ? '1' : (discussions[0]?.id === d.id ? '1' : '3'));
+    setEditL2Date(d.level2_date || '');
+    setEditL2Account(d.level2_account_user_id ? String(d.level2_account_user_id) : '');
+  };
+
   const handleSaveEditDisc = async (id: number) => {
     if (!editingDiscText.trim()) return;
+    const current = discussions.find(x => x.id === id);
+    const levelEditable = true;
+    if (levelEditable && editLevel === '2' && (!editL2Date || !editL2Account)) { setError('Level 2 needs a meeting date and an account name'); return; }
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, discussion: editingDiscText }),
+        body: JSON.stringify({
+          id, discussion: editingDiscText,
+          ...(levelEditable ? { meetingLevel: Number(editLevel), level2Date: editL2Date, level2AccountId: Number(editL2Account) || undefined } : {}),
+        }),
       });
-      if (!res.ok) throw new Error('Failed to update');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to update');
       setEditingDiscId(null); setEditingDiscText(''); fetchDiscussions();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed'); }
   };
@@ -624,7 +723,7 @@ export default function AddInquiryPage() {
           <span className="ml-2 text-[10px] text-white/40">Inquiry › {editId ? 'Edit' : 'Add'}</span>
         </div>
         <div className="relative z-10 flex items-center gap-1.5 shrink-0">
-          {error && <span className="text-[10px] text-red-300 font-semibold max-w-[160px] truncate">{error}</span>}
+          {error && <span title={error} className="text-[10px] text-red-300 font-semibold max-w-[260px] truncate">{error}</span>}
           {editId && contactActionButtons.map((action) => {
             const selected = inquiryMode === action.mode;
             return (
@@ -687,37 +786,37 @@ export default function AddInquiryPage() {
               <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className={ctrl} />
             </div>
             <div>
-              <label className={lbl}>Gender</label>
+              <label className={lbl}>Gender{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={gender} onChange={e => setGender(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.genders?.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
             </div>
             <div>
-              <label className={lbl}>Date of Birth</label>
+              <label className={lbl}>Date of Birth{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="date" value={dob} onChange={e => setDob(e.target.value)} className={ctrl} />
             </div>
 
             <div>
-              <label className={lbl}>Mobile</label>
+              <label className={lbl}>Mobile{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="tel" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="Mobile" className={ctrl} />
             </div>
             <div>
-              <label className={lbl}>WhatsApp</label>
+              <label className={lbl}>WhatsApp{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="WhatsApp" className={ctrl} />
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Email</label>
+              <label className={lbl}>Email{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" className={ctrl} />
             </div>
 
             <div className="col-span-2">
-              <label className={lbl}>Nationality</label>
+              <label className={lbl}>Nationality{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input list="nat-list" value={nationality} onChange={e => setNationality(e.target.value)} placeholder="Type or select" className={ctrl} />
               <datalist id="nat-list">{opts?.nationalities?.map(n => <option key={n} value={n} />)}</datalist>
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Country</label>
+              <label className={lbl}>Country{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input list="country-list" value={country} onChange={e => setCountry(e.target.value)} placeholder="Type or select" className={ctrl} />
               <datalist id="country-list">{opts?.countries?.map(c => <option key={c} value={c} />)}</datalist>
             </div>
@@ -726,7 +825,7 @@ export default function AddInquiryPage() {
               <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Discussion…" rows={2} className={`${ctrl} resize-y`} />
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Lead Temperature</label>
+              <label className={lbl}>Lead Temperature{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <div className="flex gap-2 mt-0.5">
                 {(['hot', 'warm', 'cold'] as const).map(t => {
                   const cfg = {
@@ -763,7 +862,7 @@ export default function AddInquiryPage() {
               <div className="flex-1 border-t border-slate-200" />
             </div>
             <div>
-              <label className={lbl}>Inquiry Date</label>
+              <label className={lbl}>Inquiry Date{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="date" value={inquiryDate} onChange={e => setInquiryDate(e.target.value)} className={ctrl} />
             </div>
             {editId && (
@@ -783,7 +882,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Preferred Location</label>
+              <label className={lbl}>Preferred Location{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={preferredLocation} onChange={e => setPreferredLocation(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
                 <option value="Mumbai">Mumbai</option>
@@ -809,14 +908,14 @@ export default function AddInquiryPage() {
               <div className="flex-1 border-t border-slate-200" />
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Course</label>
+              <label className={lbl}>Course{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={courseId} onChange={e => { setCourseId(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select Course —</option>
                 {opts?.courses?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Category</label>
+              <label className={lbl}>Category{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={category} onChange={e => { setCategory(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.categories?.map(c => <option key={c} value={c}>{c}</option>)}
@@ -844,7 +943,7 @@ export default function AddInquiryPage() {
               <div className="flex-1 border-t border-slate-200" />
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Qualification</label>
+              <label className={lbl}>Qualification{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={qualification} onChange={e => setQualification(e.target.value)} className={ctrl}>
                 <option value="">— Select Qualification —</option>
                 {qualification && !opts?.qualifications?.includes(qualification) && <option value={qualification}>{qualification}</option>}
@@ -852,7 +951,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Discipline</label>
+              <label className={lbl}>Discipline{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={discipline} onChange={e => setDiscipline(e.target.value)} className={ctrl}>
                 <option value="">— Select Discipline —</option>
                 {discipline && !opts?.disciplines?.includes(discipline) && <option value={discipline}>{discipline}</option>}
@@ -860,7 +959,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Percentage</label>
+              <label className={lbl}>Percentage{editId && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="number" step="0.01" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="e.g. 85.50" className={ctrl} />
             </div>
             <div>
@@ -912,6 +1011,7 @@ export default function AddInquiryPage() {
                 <tr className="text-[10px] uppercase tracking-wider text-[#2A6BB5]/60 bg-zinc-50 border-b border-zinc-200">
                   <th className="text-left py-2 px-3 font-bold">Current Date</th>
                   <th className="text-left py-2 px-3 font-bold">Next Follow-Up Date</th>
+                  <th className="text-left py-2 px-3 font-bold">Meeting Level</th>
                   <th className="text-left py-2 px-3 font-bold w-full">Follow-Up Discussion</th>
                   <th className="text-center py-2 px-3 font-bold">Actions</th>
                 </tr>
@@ -920,10 +1020,36 @@ export default function AddInquiryPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/60">
                   <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500 align-top">{fmtDate(today())}</td>
                   <td className="py-2 px-3 min-w-[160px] align-top">
-                    <input type="date" value={newNextDate} onChange={e => setNewNextDate(e.target.value)} className={ctrl} />
+                    <input type="date" value={newNextDate} onChange={e => {
+                      if (e.target.value === today()) { setShowSameDateModal(true); return; }
+                      setNewNextDate(e.target.value);
+                    }} className={ctrl} />
+                  </td>
+                  <td className="py-2 px-3 min-w-[170px] align-top">
+                    <div className="space-y-1">
+                        <select value={meetingLevel} onChange={e => setMeetingLevel(e.target.value as '1' | '2' | '3')} className={ctrl}>
+                          <option value="1">Level 1 meeting</option>
+                          <option value="2">Level 2 meeting</option>
+                          <option value="3">Follow up</option>
+                        </select>
+                        {meetingLevel === '1' && (
+                          <button type="button" onClick={openL2Modal} className="w-full rounded-md border border-[#2E3093]/30 bg-white px-2 py-1 text-[10px] font-bold text-[#2E3093] hover:bg-[#2E3093]/5">
+                            + Create Level 2 meeting
+                          </button>
+                        )}
+                        {meetingLevel === '2' && (<>
+                          <label className="block text-[10px] font-semibold text-slate-500">Level 2 meeting scheduled on</label>
+                          <input type="date" min={today()} value={level2Date} onChange={e => setLevel2Date(e.target.value)} className={ctrl} />
+                          <label className="block text-[10px] font-semibold text-slate-500">Account name</label>
+                          <select value={level2Account} onChange={e => setLevel2Account(e.target.value)} className={ctrl}>
+                            <option value="">Select account…</option>
+                            {staff.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          </select>
+                        </>)}
+                    </div>
                   </td>
                   <td className="py-2 px-3 min-w-[340px]">
-                    {isFirstDiscussion ? (
+                    {meetingLevel === '1' ? (
                     <div className="space-y-1">
                       {([
                         { key: 'N', label: 'Name / Background', val: discN, set: setDiscN, color: 'text-violet-600', placeholder: 'Prospect name, experience, location…' },
@@ -946,7 +1072,7 @@ export default function AddInquiryPage() {
                     )}
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button onClick={handleAddDiscussion} disabled={discLoading || !canAddDiscussion || !newNextDate}
+                    <button onClick={handleAddDiscussion} disabled={discLoading || !canAddDiscussion || !newNextDate || !levelOk}
                       className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
                       {discLoading
                         ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -956,11 +1082,44 @@ export default function AddInquiryPage() {
                   </td>
                 </tr>
                 {discussions.length === 0 && !savedDiscussion ? (
-                  <tr><td colSpan={4} className="py-6 text-center text-xs text-slate-400">No discussions yet.</td></tr>
+                  <tr><td colSpan={5} className="py-6 text-center text-xs text-slate-400">No discussions yet.</td></tr>
                 ) : discussions.map((d) => (
                   <tr key={d.id} className="border-b border-slate-100 last:border-b-0 align-top">
                     <td className="py-2 px-3 whitespace-nowrap text-slate-600">{fmtDate(d.date)}</td>
                     <td className="py-2 px-3 whitespace-nowrap text-[#2E3093] font-medium">{fmtDate(d.nextdate)}</td>
+                    <td className="py-2 px-3 text-slate-600 align-top">
+                      {editingDiscId === d.id ? (
+                        <div className="space-y-1 min-w-[160px]">
+                          <select value={editLevel} onChange={e => setEditLevel(e.target.value as '1' | '2' | '3')} className={ctrl}>
+                            <option value="1">Level 1 meeting</option>
+                            <option value="2">Level 2 meeting</option>
+                            <option value="3">Follow up</option>
+                          </select>
+                          {editLevel === '2' && (<>
+                            <label className="block text-[10px] font-semibold text-slate-500">Level 2 meeting scheduled on</label>
+                            <input type="date" min={today()} value={editL2Date} onChange={e => setEditL2Date(e.target.value)} className={ctrl} />
+                            <label className="block text-[10px] font-semibold text-slate-500">Account name</label>
+                            <select value={editL2Account} onChange={e => setEditL2Account(e.target.value)} className={ctrl}>
+                              <option value="">Select account…</option>
+                              {staff.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                            </select>
+                          </>)}
+                        </div>
+                      ) : d.meeting_level === 2 ? (
+                        <div className="text-[11px] leading-snug">
+                          <span className="font-bold text-[#2E3093]">Level 2</span>
+                          <div>Planned for {fmtDate(d.level2_date)}</div>
+                          <button type="button" onClick={() => openCalendlyLink(d.level2_date || undefined)} className="text-[10px] font-bold text-[#2E3093] underline">View meeting details</button>
+                          <div className="text-slate-500">{d.level2_account_name || '—'}</div>
+                        </div>
+                      ) : d.meeting_level === 3 ? <span className="font-bold text-slate-600 text-[11px]">Follow up</span>
+                      : d.meeting_level === 1 ? (
+                        <div className="text-[11px] space-y-1">
+                          <span className="font-bold text-slate-600">Level 1</span>
+                          <button type="button" onClick={openL2Modal} className="block rounded-md border border-[#2E3093]/30 bg-white px-2 py-1 text-[10px] font-bold text-[#2E3093] hover:bg-[#2E3093]/5">+ Create Level 2 meeting</button>
+                        </div>
+                      ) : <span className="text-slate-300">—</span>}
+                    </td>
                     <td className="py-2 px-3 min-w-[420px] w-full">
                       {editingDiscId === d.id ? (
                         <textarea
@@ -981,7 +1140,7 @@ export default function AddInquiryPage() {
                         </div>
                       ) : (
                         <div className="inline-flex items-center gap-0.5">
-                          <button onClick={() => { setEditingDiscId(d.id); setEditingDiscText(d.discussion); }} title="Edit" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors">
+                          <button onClick={() => startEditDisc(d)} title="Edit" className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-[#2E3093] transition-colors">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 012.828 0l.172.172a2 2 0 010 2.828L12 16H9v-3z" /></svg>
                           </button>
                           <button onClick={() => handleDeleteDisc(d.id)} title="Delete discussion" className="inline-flex items-center gap-1 px-2 py-1 rounded border border-red-100 bg-white text-[10px] font-semibold text-red-500 hover:bg-red-50 transition-colors">
@@ -997,6 +1156,7 @@ export default function AddInquiryPage() {
                   <tr className="border-t border-slate-100 align-top bg-amber-50/40">
                     <td className="py-2 px-3 whitespace-nowrap text-slate-600">{fmtDate(inquiryDate)}</td>
                     <td className="py-2 px-3 whitespace-nowrap text-slate-400">—</td>
+                    <td className="py-2 px-3 text-slate-300">—</td>
                     <td className="py-2 px-3 min-w-[420px] w-full">
                       <span className="mb-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800">Inquiry discussion</span>
                       <div>{renderDiscussion(savedDiscussion)}</div>
@@ -1102,6 +1262,100 @@ export default function AddInquiryPage() {
                 className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#252780] text-white rounded-lg transition-colors disabled:opacity-50">
                 {savingReminder ? 'Saving…' : 'Set Reminder'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {apptDetailId && <AppointmentDetailModal id={apptDetailId} onClose={() => setApptDetailId(null)} />}
+
+      {/* Missing compulsory fields */}
+      {missingFields.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setMissingFields([])}>
+          <div className="w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 bg-amber-500"><h3 className="text-sm font-bold text-white">Inquiry not updated</h3></div>
+            <div className="p-4 space-y-3">
+              <p className="text-sm text-slate-700">These compulsory fields are empty:</p>
+              <ul className="list-disc pl-5 text-sm font-medium text-slate-800 columns-2">
+                {missingFields.map(f => <li key={f}>{f}</li>)}
+              </ul>
+              <div className="flex justify-end"><button onClick={() => setMissingFields([])} className="bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold">OK</button></div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Level 2 meeting */}
+      {l2Modal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => !mBusy && setL2Modal(false)}>
+          <div className="w-full max-w-md rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+              <h3 className="text-sm font-bold text-white">Create Level 2 meeting</h3>
+              <p className="text-[10px] text-white/70">Saves the plan and opens a prefilled Calendly booking link</p>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="rounded-lg bg-slate-50 border border-slate-100 p-2.5 text-[11px] text-slate-600 space-y-0.5">
+                <div><span className="font-semibold text-slate-500">Invitee:</span> {name || '—'}</div>
+                <div><span className="font-semibold text-slate-500">Email:</span> {email || <span className="text-red-500">missing — add it and save first</span>}</div>
+                <div><span className="font-semibold text-slate-500">Mobile:</span> {mobile || '—'}</div>
+                <div><span className="font-semibold text-slate-500">Program:</span> {opts?.courses?.find(c => String(c.id) === courseId)?.name || '—'}</div>
+                <div><span className="font-semibold text-slate-500">Event:</span> EPC Career Counselling with SIT</div>
+              </div>
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className={lbl}>Meeting date <span className="text-red-400">*</span></label>
+                  <input type="date" min={today()} value={mDate} onChange={e => setMDate(e.target.value)} className={ctrl} />
+                </div>
+              </div>
+              <div>
+                <label className={lbl}>Account name <span className="text-red-400">*</span></label>
+                <select value={mAccount} onChange={e => setMAccount(e.target.value)} className={ctrl}>
+                  <option value="">Select account…</option>
+                  {staff.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={lbl}>Notes</label>
+                <textarea value={mNote} onChange={e => setMNote(e.target.value)} rows={2} className={`${ctrl} resize-y`} />
+              </div>
+              {mError && <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">{mError}</p>}
+              {mLink ? (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-2.5 text-[11px] text-emerald-800 space-y-1.5">
+                  <p className="font-semibold">Saved. Pick the slot on the Calendly page that just opened — the appointment is created once it is booked.</p>
+                  <p className="break-all text-emerald-700">{mLink}</p>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => window.open(mLink, '_blank', 'noopener')} className="rounded-md bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white">Open link</button>
+                    <button type="button" onClick={() => navigator.clipboard?.writeText(mLink)} className="rounded-md border border-emerald-300 bg-white px-2 py-1 text-[10px] font-bold text-emerald-700">Copy link</button>
+                  </div>
+                </div>
+              ) : <p className="text-[10px] text-slate-400">The person is not emailed until a slot is booked in Calendly.</p>}
+              <div className="flex justify-end gap-2">
+                <button type="button" disabled={mBusy} onClick={() => setL2Modal(false)} className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-600">{mLink ? 'Close' : 'Cancel'}</button>
+                {!mLink && (
+                  <button type="button" disabled={mBusy} onClick={handleCreateL2} className="px-4 py-1.5 rounded-lg bg-[#2E3093] text-white text-xs font-bold disabled:opacity-50">
+                    {mBusy ? 'Saving…' : 'Save & open Calendly link'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Same-date warning */}
+      {showSameDateModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setShowSameDateModal(false)}>
+          <div className="w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-3 bg-amber-500">
+              <h3 className="text-sm font-bold text-white">Invalid follow-up date</h3>
+            </div>
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-slate-700">
+                The next follow-up date cannot be the same as the current date ({fmtDate(today())}). Please choose a later date.
+              </p>
+              <div className="flex justify-end">
+                <button onClick={() => setShowSameDateModal(false)} className="bg-[#2E3093] text-white px-4 py-1.5 rounded-lg text-xs font-bold">OK</button>
+              </div>
             </div>
           </div>
         </div>

@@ -90,8 +90,21 @@ function toLocal(iso: string): { date: string; minutes: number } {
 
 function answer(invitee: any, ...keywords: string[]): string {
   const qa = (invitee?.questions_and_answers ?? []) as { question: string; answer: string }[];
-  const hit = qa.find((q) => keywords.some((k) => String(q.question || '').toLowerCase().includes(k)));
+  // Field lookups target short labels ("Mobile Number"); long survey questions that merely
+  // mention a keyword ("…exploring SIT's training program?") must not match.
+  const hit = qa.find((q) => {
+    const label = String(q.question || '').trim().toLowerCase();
+    return label.length <= 40 && keywords.some((k) => label.includes(k));
+  });
   return String(hit?.answer ?? '').trim();
+}
+
+/** Every Calendly question/answer, in form order — stored verbatim so none are lost. */
+function answersJson(invitee: any): string | null {
+  const qa = ((invitee?.questions_and_answers ?? []) as { question: string; answer: string }[])
+    .map((q) => ({ question: String(q.question || '').trim(), answer: String(q.answer ?? '').trim() }))
+    .filter((q) => q.question);
+  return qa.length ? JSON.stringify(qa) : null;
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, '').replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
@@ -168,11 +181,12 @@ export async function processInvitee(invitee: any, event: any): Promise<ProcessR
 
   // Fast path outside the lock: already synced and nothing changed.
   const [pre] = await pool.query(
-    `SELECT id, status, meeting_link FROM appointments WHERE calendly_invitee_uri = ? LIMIT 1`,
+    `SELECT id, status, meeting_link, calendly_answers FROM appointments WHERE calendly_invitee_uri = ? LIMIT 1`,
     [invitee.uri]
   );
   const existingPre = (pre as any[])[0];
-  if (existingPre && !canceled && !invitee.no_show && (!joinUrl || joinUrl === existingPre.meeting_link)) {
+  if (existingPre && !canceled && !invitee.no_show && (!joinUrl || joinUrl === existingPre.meeting_link)
+    && (existingPre.calendly_answers || !answersJson(invitee))) {
     return { action: 'unchanged' };
   }
   if (!existingPre && canceled && !invitee.old_invitee) return { action: 'skipped' };
@@ -184,6 +198,8 @@ export async function processInvitee(invitee: any, event: any): Promise<ProcessR
     // ── Existing row: apply cancellation / no-show / meeting link.
     if (existingId) {
       const appt = (await fetchAppointment(conn, existingId))!;
+      const answers = answersJson(invitee);
+      if (answers && !canceled) await conn.query(`UPDATE appointments SET calendly_answers = ? WHERE id = ?`, [answers, existingId]);
       if (canceled) {
         if (invitee.rescheduled) return { action: 'unchanged' }; // the new invitee moves this row
         if (appt.status === 'Scheduled' || appt.status === 'No Show') {
@@ -234,10 +250,10 @@ export async function processInvitee(invitee: any, event: any): Promise<ProcessR
         `UPDATE appointments SET appt_date = ?, start_time = ?, end_time = ?, duration_minutes = ?, mode = ?,
            counsellor_user_id = ?, status = 'Scheduled', slot_guard = NULL, meeting_link = ?, location = ?,
            calendly_event_uri = ?, calendly_invitee_uri = ?, calendly_reschedule_url = ?, calendly_cancel_url = ?,
-           reschedule_count = reschedule_count + 1
+           calendly_answers = COALESCE(?, calendly_answers), reschedule_count = reschedule_count + 1
          WHERE id = ?`,
         [start.date, fromMinutes(start.minutes), fromMinutes(endMin), duration, mode, counsellor?.user_id ?? null,
-          meetingLink, location, event.uri, invitee.uri, invitee.reschedule_url || null, invitee.cancel_url || null, oldId]
+          meetingLink, location, event.uri, invitee.uri, invitee.reschedule_url || null, invitee.cancel_url || null, answersJson(invitee), oldId]
       );
       await addHistory(conn, oldId, 'rescheduled', `${appt.appt_date} ${appt.start_time}`, `${start.date} ${fromMinutes(start.minutes)}`, ACTOR, 'Rescheduled in Calendly');
       if ((counsellor?.user_id ?? null) !== appt.counsellor_user_id) {
@@ -260,15 +276,15 @@ export async function processInvitee(invitee: any, event: any): Promise<ProcessR
         (appointment_code, public_token, first_name, last_name, mobile, email, qualification, experience,
          course_id, program_name, needs_guidance, mode, appt_date, start_time, end_time, duration_minutes,
          counsellor_user_id, status, slot_guard, meeting_link, location, notes, source,
-         calendly_event_uri, calendly_invitee_uri, calendly_reschedule_url, calendly_cancel_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Scheduled', NULL, ?, ?, ?, 'calendly', ?, ?, ?, ?)`,
+         calendly_event_uri, calendly_invitee_uri, calendly_reschedule_url, calendly_cancel_url, calendly_answers)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Scheduled', NULL, ?, ?, ?, 'calendly', ?, ?, ?, ?, ?)`,
       [
         code, randomBytes(16).toString('hex'), first.slice(0, 80), last.slice(0, 80), mobile || '-', String(invitee.email || '').slice(0, 150),
         answer(invitee, 'qualification').slice(0, 120) || null, answer(invitee, 'experience').slice(0, 80) || null,
         course.id, course.name, course.guidance ? 1 : 0, mode, start.date, fromMinutes(start.minutes), fromMinutes(endMin), duration,
         counsellor?.user_id ?? null, meetingLink, location,
         answer(invitee, 'anything', 'note', 'share').slice(0, 1000) || null,
-        event.uri, invitee.uri, invitee.reschedule_url || null, invitee.cancel_url || null,
+        event.uri, invitee.uri, invitee.reschedule_url || null, invitee.cancel_url || null, answersJson(invitee),
       ]
     );
     const id = Number((res as any).insertId);
@@ -419,4 +435,85 @@ export async function verifyCalendlySignature(header: string | null, rawBody: st
   const a = Buffer.from(expected, 'hex');
   const b = Buffer.from(parts.v1, 'hex');
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// ── Level 2 meeting booking (from the inquiry form) ────────────────────
+
+/** The event type used for Level 2 meetings: CALENDLY_LEVEL2_EVENT_TYPE, else the active "EPC Career Counselling" one. */
+async function level2EventType(): Promise<any> {
+  const me = (await calendly('/users/me')).resource;
+  const list = await calendly(`/event_types?organization=${encodeURIComponent(me.current_organization)}&active=true&count=100`);
+  const types = (list.collection ?? []) as any[];
+  const pinned = process.env.CALENDLY_LEVEL2_EVENT_TYPE?.trim();
+  const hit = pinned
+    ? types.find((t) => t.uri === pinned || t.uri.endsWith(`/${pinned}`))
+    : types.find((t) => /epc career counselling/i.test(String(t.name)));
+  if (!hit) throw new Error('Calendly event type for Level 2 meetings was not found');
+  return hit;
+}
+
+function e164(raw: string): string {
+  const digits = String(raw || '').replace(/[^\d]/g, '');
+  if (String(raw || '').trim().startsWith('+')) return `+${digits}`;
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.length === 12 && digits.startsWith('91')) return `+${digits}`;
+  return digits ? `+${digits}` : '';
+}
+
+function mapQualification(raw: string, options: string[]): string | null {
+  const q = raw.toLowerCase();
+  const pick = (name: string) => options.find((o) => o.trim().toLowerCase() === name.toLowerCase()) ?? null;
+  const direct = options.find((o) => norm(o) === norm(raw));
+  if (direct) return direct;
+  if (/post|master|\bm\.?\s?(e|tech|sc|com)\b|mba/.test(q)) return pick('Post Graduate');
+  if (/diploma/.test(q)) return pick('Diploma');
+  if (/\b12|hsc|higher secondary/.test(q)) return pick('12th');
+  if (/\b10|ssc|secondary/.test(q)) return pick('10th');
+  if (/\bb\.?\s?(e|tech|sc|com|arch)\b|degree|graduate|engineer/.test(q)) return pick('Graduate');
+  return pick('Other');
+}
+
+/**
+ * Prefilled Calendly booking link for a Level 2 meeting. Nothing is booked here —
+ * whoever opens the link picks the slot, and the normal Calendly sync then creates the appointment.
+ */
+export async function buildLevel2Link(inquiryId: number, date?: string): Promise<string> {
+  if (!calendlyConfigured()) throw new Error('Calendly is not configured');
+  const [rows] = await getPool().query(
+    `SELECT i.FName, i.LName, i.Student_Name, i.Email, i.Present_Mobile, i.Qualification, c.Course_Name
+       FROM student_inquiry i
+       LEFT JOIN course_mst c ON c.Course_Id = i.Course_Id
+      WHERE i.Inquiry_Id = ? AND (i.IsDelete = 0 OR i.IsDelete IS NULL) LIMIT 1`,
+    [inquiryId]
+  );
+  const inq = (rows as any[])[0];
+  if (!inq) throw new Error('Inquiry not found');
+  const first = String(inq.FName || '').trim();
+  const last = String(inq.LName || '').trim();
+  const name = (first || last ? `${first} ${last}` : String(inq.Student_Name || '')).trim();
+
+  const eventType = await level2EventType();
+  const url = new URL(eventType.scheduling_url);
+  if (name) url.searchParams.set('name', name);
+  const email = String(inq.Email || '').trim();
+  if (email) url.searchParams.set('email', email);
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    url.searchParams.set('month', date.slice(0, 7));
+    url.searchParams.set('date', date);
+  }
+  // a1..aN prefill the event's custom questions, in form order.
+  ((eventType.custom_questions ?? []) as any[]).forEach((q, i) => {
+    const l = String(q.name || '').toLowerCase();
+    const options: string[] = q.answer_choices ?? [];
+    let value: string | null = null;
+    if (q.type === 'phone_number' || /mobile|phone/.test(l)) value = e164(inq.Present_Mobile) || null;
+    else if (/qualification/.test(l)) value = mapQualification(String(inq.Qualification || ''), options);
+    else if (/training program/.test(l)) {
+      const target = norm(String(inq.Course_Name || ''));
+      value = (target && options.find((o) => { const n = norm(o); return n === target || (n.length > 5 && (target.startsWith(n) || n.startsWith(target))); }))
+        || options.find((o) => /do not know|don.?t know/i.test(o)) || null;
+    }
+    if (value) url.searchParams.set(`a${i + 1}`, value);
+  });
+  return url.toString();
 }

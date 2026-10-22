@@ -149,6 +149,7 @@ async function createTables() {
       calendly_invitee_uri VARCHAR(255) NULL,
       calendly_reschedule_url VARCHAR(500) NULL,
       calendly_cancel_url VARCHAR(500) NULL,
+      calendly_answers LONGTEXT NULL,
       created_by INT NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -174,7 +175,16 @@ async function createTables() {
         ADD COLUMN calendly_reschedule_url VARCHAR(500) NULL,
         ADD COLUMN calendly_cancel_url VARCHAR(500) NULL,
         ADD UNIQUE KEY uq_appt_calendly_invitee (calendly_invitee_uri)
-    `);
+    `).catch((err) => {
+      if (err?.code !== 'ER_DUP_FIELDNAME' && err?.code !== 'ER_DUP_KEYNAME') throw err;
+    });
+  }
+
+  if (!have.has('calendly_answers')) {
+    // Concurrent cold starts may both try this; a duplicate-column error is harmless.
+    await pool.query(`ALTER TABLE appointments ADD COLUMN calendly_answers LONGTEXT NULL`).catch((err) => {
+      if (err?.code !== 'ER_DUP_FIELDNAME') throw err;
+    });
   }
 
   await pool.query(`

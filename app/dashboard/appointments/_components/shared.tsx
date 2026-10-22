@@ -31,10 +31,21 @@ export interface Appointment {
   meeting_link: string | null;
   location: string | null;
   notes: string | null;
+  calendly_answers?: string | null;
   reschedule_count: number;
   source: string;
   email_error: string | null;
   created_at: string;
+}
+
+export function parseAnswers(raw?: string | null): { question: string; answer: string }[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
 }
 
 export const STATUSES: ApptStatus[] = ['Scheduled', 'Completed', 'No Show', 'Cancelled'];
@@ -118,6 +129,7 @@ export function AppointmentDetailModal({
   const [panel, setPanel] = useState<Panel>(null);
   const [pendingStatus, setPendingStatus] = useState<ApptStatus | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [tab, setTab] = useState<'view' | 'edit'>('view');
 
   useEffect(() => {
     let active = true;
@@ -163,6 +175,20 @@ export function AppointmentDetailModal({
 
         {appt && (
           <div className="max-h-[75vh] overflow-y-auto px-5 py-4 space-y-4">
+            <div className="flex gap-1 border-b border-gray-100">
+              {(['view', 'edit'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => { setTab(t); setPanel(t === 'edit' && appt.status !== 'Cancelled' ? 'edit' : null); setPendingStatus(null); }}
+                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold ${tab === t ? 'border-[#2E3093] text-[#2E3093]' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  {t === 'view' ? 'View' : 'Edit'}
+                </button>
+              ))}
+            </div>
+
+            {tab === 'view' && <>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <Info label="Date" value={fmtDate(appt.appt_date, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })} />
               <Info label="Time" value={`${fmt12(appt.start_time)} – ${fmt12(appt.end_time)} (${appt.duration_minutes} min)`} />
@@ -175,11 +201,27 @@ export function AppointmentDetailModal({
               {appt.mode === 'online'
                 ? <Info label="Meeting link" value={appt.meeting_link ? <a className="text-[#2E3093] break-all" href={appt.meeting_link} target="_blank" rel="noreferrer">{appt.meeting_link}</a> : <span className="text-amber-600">Not set</span>} />
                 : <Info label="Location" value={appt.location || '—'} />}
-              <Info label="Booked" value={`${fmtDate(appt.created_at)} · ${appt.source === 'public' ? 'Website' : 'Staff'}`} />
+              <Info label="Booked" value={`${fmtDate(appt.created_at)} · ${appt.source === 'public' ? 'Website' : appt.source === 'calendly' ? 'Calendly' : 'Staff'}`} />
               {appt.notes && <div className="sm:col-span-2"><Info label="Notes" value={<span className="whitespace-pre-wrap">{appt.notes}</span>} /></div>}
+              {parseAnswers(appt.calendly_answers).length > 0 && (
+                <div className="sm:col-span-2">
+                  <Info label="Booking form answers" value={
+                    <ul className="mt-1 space-y-2">
+                      {parseAnswers(appt.calendly_answers).map((qa, i) => (
+                        <li key={i}>
+                          <div className="text-xs text-gray-500">{qa.question}</div>
+                          <div className="whitespace-pre-wrap">{qa.answer || '—'}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  } />
+                </div>
+              )}
               {appt.email_error && <div className="sm:col-span-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">Email issue: {appt.email_error}</div>}
             </dl>
+            </>}
 
+            {tab === 'edit' && <>
             {/* Actions */}
             <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-3">
               <button className={btnGhost} onClick={() => setPanel(panel === 'edit' ? null : 'edit')} disabled={appt.status === 'Cancelled'}>Edit</button>
@@ -204,9 +246,10 @@ export function AppointmentDetailModal({
             {panel === 'reschedule' && <ReschedulePanel appt={appt} onDone={done} />}
             {panel === 'reassign' && <ReassignPanel appt={appt} onDone={done} />}
             {panel === 'status' && pendingStatus && <StatusPanel appt={appt} status={pendingStatus} onDone={done} onCancel={() => setPanel(null)} />}
+            </>}
 
             {/* History */}
-            <div className="border-t border-gray-100 pt-3">
+            {tab === 'view' && <div className="border-t border-gray-100 pt-3">
               <p className="mb-2 text-xs font-bold uppercase tracking-wide text-gray-400">History</p>
               <ol className="space-y-1.5">
                 {history.map((h) => (
@@ -219,7 +262,7 @@ export function AppointmentDetailModal({
                   </li>
                 ))}
               </ol>
-            </div>
+            </div>}
           </div>
         )}
       </div>

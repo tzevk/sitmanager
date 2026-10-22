@@ -250,12 +250,14 @@ export async function saveSessionEdits(pool: any, batchId: number, date: string,
         continue;
       }
 
-      // Rewrite every copy of this key so duplicates agree.
+      // Rewrite every copy of this key so duplicates agree. Soft-deleted rows are
+      // revived rather than skipped: with uq_attendance in place an INSERT next
+      // to a cleared row would hit a duplicate-key error.
       const [res] = await conn.query(
         `UPDATE student_attendance
          SET Status = ?, In_Time = ?, Out_Time = ?, Remarks = ?, IsDelete = 0,
              Admission_Id = COALESCE(?, Admission_Id), Updated_At = CURRENT_TIMESTAMP
-         WHERE Batch_Id = ? AND Student_Id = ? AND Attendance_Date = ? AND Session = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+         WHERE Batch_Id = ? AND Student_Id = ? AND Attendance_Date = ? AND Session = ?`,
         [r.status, r.inTime ?? null, r.outTime ?? null, r.remarks ?? null, r.admissionId, batchId, r.studentId, date, session]
       );
       if (res.affectedRows) updated++;

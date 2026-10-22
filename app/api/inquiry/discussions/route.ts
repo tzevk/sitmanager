@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { cached, getPool, invalidateCache } from '@/lib/db';
 import { logEndpointTiming } from '@/lib/perf-log';
 import { requireAuth } from '@/lib/api-auth';
+import { buildLevel2Link } from '@/lib/appointments/calendly';
 
 let supportsStatementTimeout: boolean | null = null;
 
@@ -59,6 +60,28 @@ async function hasNextDateColumn(pool: any): Promise<boolean> {
        AND COLUMN_NAME = 'nextdate'`
   );
   return Number((rows as any[])[0]?.cnt || 0) > 0;
+}
+
+// Level 1 / Level 2 meeting columns on the first (NFABTU) discussion — added in place.
+let levelColumnsReady: Promise<void> | null = null;
+function ensureLevelColumns(pool: any): Promise<void> {
+  if (!levelColumnsReady) {
+    levelColumnsReady = (async () => {
+      const rows = await runGuardedQuery(pool,
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'awt_inquirydiscussion'
+           AND COLUMN_NAME IN ('meeting_level', 'level2_date', 'level2_account_user_id', 'level2_time', 'level2_invitee_uri')`);
+      const have = new Set(rows.map((r: any) => r.COLUMN_NAME));
+      const add = [
+        ['meeting_level', 'TINYINT NULL'], ['level2_date', 'DATE NULL'], ['level2_account_user_id', 'INT NULL'],
+        ['level2_time', 'VARCHAR(5) NULL'], ['level2_invitee_uri', 'VARCHAR(255) NULL'],
+      ].filter(([c]) => !have.has(c));
+      if (!add.length) return;
+      await pool.query(`ALTER TABLE awt_inquirydiscussion ${add.map(([c, t]) => `ADD COLUMN ${c} ${t}`).join(', ')}`)
+        .catch((err: any) => { if (err?.code !== 'ER_DUP_FIELDNAME') throw err; });
+    })().catch((err) => { levelColumnsReady = null; throw err; });
+  }
+  return levelColumnsReady;
 }
 
 async function resolveInquiryLink(pool: any, inquiryTable: string, inquiryIdNum: number) {
@@ -149,6 +172,7 @@ export async function GET(req: NextRequest) {
     // canonical Inquiry_Id to avoid pulling discussions for other linked inquiries.
     const { canonicalInquiryId, canonicalStudentId, linkedInquiryIds } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
+    await ensureLevelColumns(pool);
     const withNextDate = await hasNextDateColumn(pool);
     const nextDateSelect = withNextDate ? 'd.nextdate' : 'NULL as nextdate';
 
@@ -182,9 +206,12 @@ export async function GET(req: NextRequest) {
     const rows = await cached(cacheKey, 10_000, async () => runGuardedQuery(
       pool,
       `SELECT d.id, d.date, ${nextDateSelect}, d.discussion, d.created_by, d.created_date,
+              d.meeting_level, DATE_FORMAT(d.level2_date, '%Y-%m-%d') AS level2_date, d.level2_account_user_id,
+              COALESCE(NULLIF(TRIM(CONCAT(COALESCE(a.firstname, ''), ' ', COALESCE(a.lastname, ''))), ''), a.username) AS level2_account_name,
               COALESCE(NULLIF(TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, ''))), ''), u.username) AS created_by_name
        FROM awt_inquirydiscussion d
        LEFT JOIN awt_adminuser u ON u.id = d.created_by
+       LEFT JOIN awt_adminuser a ON a.id = d.level2_account_user_id
        WHERE (${conditions.join(' OR ')}) AND (d.deleted = 0 OR d.deleted IS NULL)
        ORDER BY d.id ASC`,
       params,
@@ -225,7 +252,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const inquiryTable = await resolveInquiryTableName(pool);
 
-    const { inquiryId, discussion, nextFollowUpDate } = body;
+    const { inquiryId, discussion, nextFollowUpDate, meetingLevel, level2Date, level2AccountId } = body;
     if (!inquiryId || !discussion?.trim()) {
       return NextResponse.json(
         { error: 'inquiryId and discussion are required' },
@@ -239,11 +266,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid inquiryId' }, { status: 400 });
     }
 
+    if (nextFollowUpDate) {
+      const [same] = await pool.query(`SELECT 1 AS same FROM DUAL WHERE CURDATE() = DATE(?)`, [nextFollowUpDate]);
+      if ((same as any[]).length) {
+        perfCode = 400;
+        return NextResponse.json({ error: 'Next follow-up date cannot be the same as the current date' }, { status: 400 });
+      }
+    }
+
+    const level = meetingLevel === 1 || meetingLevel === 2 || meetingLevel === 3 ? meetingLevel : null;
+    const l2Date = level === 2 ? String(level2Date || '') : '';
+    const l2Account = level === 2 ? Number(level2AccountId) : 0;
+    if (level === 2 && (!/^\d{4}-\d{2}-\d{2}$/.test(l2Date) || !Number.isInteger(l2Account) || l2Account <= 0)) {
+      perfCode = 400;
+      return NextResponse.json({ error: 'Level 2 needs a meeting date and an account name' }, { status: 400 });
+    }
+
     const createdBy = auth.session.userId;
 
     // Canonicalize to Inquiry_Id when caller sends Student_Id.
     const { canonicalInquiryId, canonicalStudentId } = await resolveInquiryLink(pool, inquiryTable, inquiryIdNum);
 
+    await ensureLevelColumns(pool);
     const withNextDate = await hasNextDateColumn(pool);
 
     const [result] = withNextDate
@@ -261,9 +305,17 @@ export async function POST(req: NextRequest) {
         );
 
     const insertId = (result as any).insertId;
+    if (level) {
+      await pool.query(
+        `UPDATE awt_inquirydiscussion SET meeting_level = ?, level2_date = ?, level2_account_user_id = ? WHERE id = ?`,
+        [level, level === 2 ? l2Date : null, level === 2 ? l2Account : null, insertId]
+      );
+    }
+    // Level 2 is booked by opening the prefilled Calendly link; the Calendly sync then creates the appointment.
+    const calendlyUrl = level === 2 ? await buildLevel2Link(canonicalInquiryId, l2Date).catch(() => null) : null;
     invalidateCache('api:inquiry:discussions');
     invalidateCache('api:inquiry');
-    return NextResponse.json({ success: true, id: insertId });
+    return NextResponse.json({ success: true, id: insertId, calendlyUrl });
   } catch (error: any) {
     perfStatus = 'error';
     perfCode = 500;
@@ -291,9 +343,10 @@ export async function PUT(req: NextRequest) {
   try {
     const pool = getPool();
     const body = await req.json();
-    const { id, discussion } = body;
+    const { id, discussion, meetingLevel, level2Date, level2AccountId } = body;
+    const editingLevel = meetingLevel === 1 || meetingLevel === 2 || meetingLevel === 3;
 
-    if (!id || !discussion?.trim()) {
+    if (!id || (!discussion?.trim() && !editingLevel)) {
       perfCode = 400;
       return NextResponse.json({ error: 'id and discussion are required' }, { status: 400 });
     }
@@ -304,10 +357,36 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
-    await pool.query(
-      `UPDATE awt_inquirydiscussion SET discussion = ? WHERE id = ? AND (deleted = 0 OR deleted IS NULL)`,
-      [discussion.trim(), idNum]
-    );
+    if (discussion?.trim()) {
+      await pool.query(
+        `UPDATE awt_inquirydiscussion SET discussion = ? WHERE id = ? AND (deleted = 0 OR deleted IS NULL)`,
+        [discussion.trim(), idNum]
+      );
+    }
+
+    if (editingLevel) {
+      await ensureLevelColumns(pool);
+      const [found] = await pool.query(
+        `SELECT Inquiry_id FROM awt_inquirydiscussion WHERE id = ? AND (deleted = 0 OR deleted IS NULL)`,
+        [idNum]
+      );
+      const row = (found as any[])[0];
+      if (!row) {
+        perfCode = 404;
+        return NextResponse.json({ error: 'Discussion not found' }, { status: 404 });
+      }
+      const isL2 = meetingLevel === 2;
+      const l2Date = isL2 ? String(level2Date || '') : '';
+      const l2Account = isL2 ? Number(level2AccountId) : 0;
+      if (isL2 && (!/^\d{4}-\d{2}-\d{2}$/.test(l2Date) || !Number.isInteger(l2Account) || l2Account <= 0)) {
+        perfCode = 400;
+        return NextResponse.json({ error: 'Level 2 needs a meeting date and an account name' }, { status: 400 });
+      }
+      await pool.query(
+        `UPDATE awt_inquirydiscussion SET meeting_level = ?, level2_date = ?, level2_account_user_id = ? WHERE id = ?`,
+        [meetingLevel, isL2 ? l2Date : null, isL2 ? l2Account : null, idNum]
+      );
+    }
 
     invalidateCache('api:inquiry:discussions');
     invalidateCache('api:inquiry');

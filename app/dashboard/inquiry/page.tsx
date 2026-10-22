@@ -1,5 +1,7 @@
 'use client';
 
+import MyTasksWidget from './components/MyTasksWidget';
+import WeatherWindow from './components/WeatherWindow';
 import { Fragment, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
@@ -563,6 +565,8 @@ export default function InquiryPage() {
         </>}
       />
 
+      {/* Reminders, follow-ups and my tasks sit side by side */}
+      <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 items-start">
       {dueReminders.length > 0 && (
         <div className="rounded-xl border border-sky-300 bg-sky-100 overflow-hidden">
           <div className="px-3 py-1.5 flex items-center gap-1.5 border-b border-sky-200">
@@ -638,6 +642,9 @@ export default function InquiryPage() {
           </div>
         </div>
       )}
+      <MyTasksWidget returnTo={pathname} />
+      <WeatherWindow />
+      </div>
 
       {/* Calendly Bookings — 30-Minute Call Alert */}
       {calendlyBookings.length > 0 && (
