@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { getPool } from '@/lib/db';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
@@ -13,6 +14,10 @@ import { ensurePlacementDashboardTables, getPlacementCampusInterviews, getPlacem
 import { ensureAdmissionFormSentLogTable } from '@/lib/services/admissionFormSentLog';
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
+// How long the last fully loaded dashboard is kept to fall back on when a later load is incomplete.
+const LAST_GOOD_TTL = 60 * 60 * 1000;
+// An incomplete load is kept only briefly, so the next refresh tries again without hammering a slow database.
+const PARTIAL_CACHE_TTL = 5_000;
 
 // ── concurrency limiter ──
 // The dashboard fans out ~50 sub-queries in one Promise.all. Without a cap, a
@@ -54,6 +59,10 @@ function releaseQuerySlot(): void {
 // backstop set slightly above the server cap.
 const QUERY_TIMEOUT_SECONDS = Number(process.env.DASHBOARD_QUERY_TIMEOUT_SECONDS) || 8;
 
+// Queries that failed during the current dashboard load. A failed query yields its empty
+// fallback, so a load with failures must not replace (or be cached over) good figures.
+const loadFailures = new AsyncLocalStorage<string[]>();
+
 // ── helper: safe query that never throws (and never hangs the DB) ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
   await acquireQuerySlot();
@@ -63,7 +72,11 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
       timeout: (QUERY_TIMEOUT_SECONDS + 2) * 1000,
     });
     return rows as T;
-  } catch {
+  } catch (err) {
+    const what = sql.replace(/\s+/g, ' ').trim().slice(0, 90);
+    const why = err instanceof Error ? err.message.slice(0, 120) : String(err);
+    loadFailures.getStore()?.push(what);
+    console.error(`[dashboard] query failed (${why}): ${what}`);
     return fallback;
   } finally {
     releaseQuerySlot();
@@ -91,14 +104,30 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const result = await fetchDashboardData(dept);
-    await cache.set(cacheKey, result, DASHBOARD_CACHE_TTL);
+    const failed: string[] = [];
+    const result = await loadFailures.run(failed, () => fetchDashboardData(dept));
+    const lastGoodKey = `${cacheKey}:last-good`;
 
+    if (failed.length === 0) {
+      await cache.set(cacheKey, result, DASHBOARD_CACHE_TTL);
+      await cache.set(lastGoodKey, result, LAST_GOOD_TTL);
+      return NextResponse.json(result, {
+        headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60', 'X-Cache': 'MISS' },
+      });
+    }
+
+    // Some queries timed out or errored, so their figures would read as zero. Keep showing the
+    // last complete figures when there are any; otherwise show what loaded, cached only briefly.
+    const lastGood = await cache.get<any>(lastGoodKey);
+    if (lastGood) {
+      await cache.set(cacheKey, lastGood, DASHBOARD_CACHE_TTL);
+      return NextResponse.json(lastGood, {
+        headers: { 'Cache-Control': 'private, no-cache', 'X-Cache': 'STALE' },
+      });
+    }
+    await cache.set(cacheKey, result, PARTIAL_CACHE_TTL);
     return NextResponse.json(result, {
-      headers: {
-        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
-        'X-Cache': 'MISS',
-      },
+      headers: { 'Cache-Control': 'private, no-cache', 'X-Cache': 'PARTIAL' },
     });
   } catch (error: unknown) {
     console.error('Dashboard data error:', error);
