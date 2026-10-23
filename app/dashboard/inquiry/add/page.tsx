@@ -9,6 +9,10 @@ import { AppointmentDetailModal } from '@/app/dashboard/appointments/_components
 
 const STATUS_ONLY_SAVE_LABELS = ['new', 'irrelevant', 'contacted (not interested)', 'contacted (not recieved call)'];
 
+// First contact has been made but the conversation is early: DOB, WhatsApp, percentage and the
+// training details (course, category, batch, preferred location) can be filled in later.
+const FIRST_CONTACT_LABELS = ['contacted (interested)', 'contacted (next batch)', 'contacted - eligible'];
+
 interface FormOptions {
   courses: { id: number; name: string }[];
   categories: string[];
@@ -355,20 +359,29 @@ export default function AddInquiryPage() {
     opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
   );
 
+  const isFirstContact = FIRST_CONTACT_LABELS.includes(
+    opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
+  );
+  // True when a field is compulsory on the edit page; false for first-contact statuses.
+  const laterDetail = editId != null && !isFirstContact;
+
   const handleSave = async (skipDuplicateCheck = false) => {
     if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
     if (!isStatusOnlySave) {
       if (!name.trim()) { setError('Name is required'); return; }
       if (!inquiryMode.trim()) { setError('Mode is required'); return; }
       if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
-      if (!batchCode.trim()) { setError('Batch Code is required'); return; }
+      if (!batchCode.trim() && !isFirstContact) { setError('Batch Code is required'); return; }
       // On the edit page every field except Discussion is compulsory.
       if (editId) {
         const missing: [string, string][] = [
-          [gender, 'Gender'], [dob, 'Date of Birth'], [mobile, 'Mobile'], [whatsapp, 'WhatsApp'], [email, 'Email'],
+          [gender, 'Gender'], [mobile, 'Mobile'], [email, 'Email'],
           [nationality, 'Nationality'], [country, 'Country'], [leadTemp, 'Lead Temperature'], [inquiryDate, 'Inquiry Date'],
-          [preferredLocation, 'Preferred Location'], [courseId, 'Course'], [category, 'Category'],
-          [qualification, 'Qualification'], [discipline, 'Discipline'], [percentage, 'Percentage'],
+          [qualification, 'Qualification'], [discipline, 'Discipline'],
+          ...(isFirstContact ? [] : [
+            [dob, 'Date of Birth'], [whatsapp, 'WhatsApp'], [preferredLocation, 'Preferred Location'],
+            [courseId, 'Course'], [category, 'Category'], [percentage, 'Percentage'],
+          ] as [string, string][]),
         ];
         const empty = missing.filter(([v]) => !String(v ?? '').trim()).map(([, label]) => label);
         if (empty.length) { setError(`${empty[0]} is required`); setMissingFields(empty); return; }
@@ -793,7 +806,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Date of Birth{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Date of Birth{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="date" value={dob} onChange={e => setDob(e.target.value)} className={ctrl} />
             </div>
 
@@ -802,7 +815,7 @@ export default function AddInquiryPage() {
               <input type="tel" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="Mobile" className={ctrl} />
             </div>
             <div>
-              <label className={lbl}>WhatsApp{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>WhatsApp{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="WhatsApp" className={ctrl} />
             </div>
             <div className="col-span-2">
@@ -882,7 +895,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Preferred Location{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Preferred Location{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={preferredLocation} onChange={e => setPreferredLocation(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
                 <option value="Mumbai">Mumbai</option>
@@ -908,14 +921,14 @@ export default function AddInquiryPage() {
               <div className="flex-1 border-t border-slate-200" />
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Course{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Course{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={courseId} onChange={e => { setCourseId(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select Course —</option>
                 {opts?.courses?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div className="col-span-2">
-              <label className={lbl}>Category{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Category{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <select value={category} onChange={e => { setCategory(e.target.value); setBatchCode(''); }} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.categories?.map(c => <option key={c} value={c}>{c}</option>)}
@@ -924,7 +937,7 @@ export default function AddInquiryPage() {
             <div className="col-span-2">
               <label className={lbl}>
                 Batch
-                {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
+                {!isStatusOnlySave && !isFirstContact && <span className="text-red-400 normal-case"> *</span>}
               </label>
               <select value={batchCode} onChange={e => setBatchCode(e.target.value)} className={ctrl}>
                 <option value="">— Select Batch —</option>
@@ -959,7 +972,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Percentage{editId && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Percentage{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
               <input type="number" step="0.01" min="0" max="100" value={percentage} onChange={e => setPercentage(e.target.value)} placeholder="e.g. 85.50" className={ctrl} />
             </div>
             <div>
