@@ -7,7 +7,7 @@ import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate'
 import { toBatchNumber } from '@/lib/batch-display';
 import { AppointmentDetailModal } from '@/app/dashboard/appointments/_components/shared';
 
-const STATUS_ONLY_SAVE_LABELS = ['new', 'irrelevant', 'contacted (not interested)'];
+const STATUS_ONLY_SAVE_LABELS = ['new', 'irrelevant', 'contacted (not interested)', 'contacted (not recieved call)'];
 
 interface FormOptions {
   courses: { id: number; name: string }[];
