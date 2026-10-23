@@ -14,12 +14,13 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams;
     const date = sp.get('date') || '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+    const scope = sp.get('scope') === 'initiated' ? 'initiated' : 'allocated';
     const rawOwner = sp.get('owner') || 'me';
     const owner = rawOwner === 'me' ? String(auth.session.userId) : rawOwner;
     if (owner !== 'all' && owner !== 'unowned' && !/^\d+$/.test(owner)) return NextResponse.json({ error: 'Invalid owner' }, { status: 400 });
 
     if (sp.get('view') === 'month') {
-      const days = await getMyTasksMonth(date.slice(0, 7), owner);
+      const days = await getMyTasksMonth(date.slice(0, 7), owner, scope);
       return NextResponse.json({ days, me: auth.session.userId, owner });
     }
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const [leads, appointments, [staffRows]] = await Promise.all([
       getMyTaskLeads({
-        date, owner, all: sp.get('view') === 'all',
+        date, owner, scope, all: sp.get('view') === 'all',
         statuses: list(sp.get('status')),
         courseIds: list(sp.get('course'))?.map(Number).filter(Number.isFinite),
         modes: list(sp.get('mode')),
@@ -37,13 +38,13 @@ export async function GET(req: NextRequest) {
         batches: list(sp.get('batch')),
         q: sp.get('q') || undefined,
       }),
-      getMyTaskAppointments(date, owner),
+      getMyTaskAppointments(date, owner, scope),
       getPool().query(
         `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name
            FROM awt_adminuser WHERE (deleted = 0 OR deleted IS NULL) ORDER BY name`
       ) as Promise<[{ id: number; name: string }[], unknown]>,
     ]);
-    return NextResponse.json({ leads, appointments, staff: staffRows, me: auth.session.userId, owner });
+    return NextResponse.json({ leads, appointments, staff: staffRows, me: auth.session.userId, owner, scope });
   } catch (error) {
     console.error('My tasks GET error:', error);
     return NextResponse.json({ error: 'Failed to load tasks', details: error instanceof Error ? error.message : String(error) }, { status: 500 });

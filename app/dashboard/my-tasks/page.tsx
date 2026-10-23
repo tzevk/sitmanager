@@ -22,6 +22,7 @@ interface Lead {
   InquiryDate: string | null;
   OwnerId: number | null;
   OwnerName: string | null;
+  InitiatedByName?: string | null;
   Reason: 'Follow-up due' | 'Overdue' | 'Upcoming' | 'New lead' | 'Lead';
 }
 interface Appt {
@@ -92,6 +93,7 @@ export default function MyTasksPage() {
   const { canUpdate, canView, loading: permLoading } = useResourcePermissions('inquiry');
   const [date, setDate] = useState(localToday());
   const [owner, setOwner] = useState('me');
+  const [taskScope, setTaskScope] = useState<'allocated' | 'initiated'>('allocated');
   const [view, setView] = useState<'day' | 'all' | 'month'>('day');
   const [monthData, setMonthData] = useState<Record<string, { followUps: number; newLeads: number; appointments: number }>>({});
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -119,21 +121,21 @@ export default function MyTasksPage() {
     setLoading(true); setError('');
     try {
       if (view === 'month') {
-        const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&view=month`, { cache: 'no-store' });
+        const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&scope=${taskScope}&view=month`, { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load');
         setMonthData(data.days || {}); setMe(data.me ?? null);
         setLoading(false);
         return;
       }
-      const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&view=${view}`, { cache: 'no-store' });
+      const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&scope=${taskScope}&view=${view}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
       setLeads(data.leads || []); setAppts(data.appointments || []); setStaff(data.staff || []); setMe(data.me ?? null);
       setSelected(new Set());
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     setLoading(false);
-  }, [date.slice(0, 7), view === 'month' ? 'm' : date, owner, view]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [date.slice(0, 7), view === 'month' ? 'm' : date, owner, view, taskScope]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
 
   // Filter options come from the day's own leads.
@@ -252,7 +254,11 @@ export default function MyTasksPage() {
   if (permLoading) return <PermissionLoading />;
   if (!canView) return <AccessDenied message="You do not have permission to view tasks." />;
 
-  const ownerLabel = owner === 'me' ? 'My' : owner === 'all' ? 'All' : owner === 'unowned' ? 'Unassigned' : `${staff.find(s => String(s.id) === owner)?.name ?? ''}'s`;
+  const initiatedScope = taskScope === 'initiated';
+  const ownerLabel = owner === 'me' ? 'My'
+    : owner === 'all' ? 'All'
+    : owner === 'unowned' ? (initiatedScope ? 'Not yet started' : 'Unassigned')
+    : `${staff.find(s => String(s.id) === owner)?.name ?? ''}'s`;
   const monthStart = new Date(`${date.slice(0, 7)}-01T00:00:00`);
   const monthDays = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
   const shiftMonth = (by: number) => { const d = new Date(monthStart.getFullYear(), monthStart.getMonth() + by, 1); setDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`); };
@@ -270,6 +276,11 @@ export default function MyTasksPage() {
           <button type="button" onClick={() => setDate(shiftDay(date, 1))} className={`${ctrl} px-2`} aria-label="Next day">›</button>
           <button type="button" onClick={() => setDate(localToday())} className={`${ctrl} font-semibold text-[#2E3093]`}>Today</button>
         </div>
+        <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold" role="group" aria-label="Which tasks">
+          {([['allocated', 'My allocated tasks'], ['initiated', 'My initiated leads']] as const).map(([v, label]) => (
+            <button key={v} type="button" aria-pressed={taskScope === v} onClick={() => setTaskScope(v)} className={`h-8 px-3 ${taskScope === v ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+          ))}
+        </div>
         <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold" role="group" aria-label="Lead view">
           {([['day', 'Day'], ['month', 'Month'], ['all', 'All leads']] as const).map(([v, label]) => (
             <button key={v} type="button" onClick={() => { setView(v); if (v === 'all') setOwner('all'); }} className={`h-8 px-3 ${view === v ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{label}</button>
@@ -277,8 +288,8 @@ export default function MyTasksPage() {
         </div>
         <select value={owner} onChange={e => setOwner(e.target.value)} className={ctrl} aria-label="Counsellor">
           <option value="me">Me{me ? ` (${staff.find(s => s.id === me)?.name ?? ''})` : ''}</option>
-          <option value="all">All counsellors</option>
-          <option value="unowned">Unassigned leads</option>
+          <option value="all">{initiatedScope ? 'All counsellors (started leads)' : 'All counsellors'}</option>
+          <option value="unowned">{initiatedScope ? 'Not yet started (no discussion)' : 'Unassigned leads'}</option>
           {staff.filter(s => s.id !== me).map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
         </select>
         <button type="button" onClick={load} className={`${ctrl} font-semibold`}>Refresh</button>
@@ -362,7 +373,7 @@ export default function MyTasksPage() {
                     <th className="px-2 py-2 text-left">Course</th>
                     <th className="px-2 py-2 text-left">Batch</th>
                     <th className="px-2 py-2 text-left">Status</th>
-                    <th className="px-2 py-2 text-left">Assigned to</th>
+                    <th className="px-2 py-2 text-left">{initiatedScope ? 'Initiated by' : 'Assigned to'}</th>
                     <th className="px-2 py-2" />
                   </tr>
                 </thead>
@@ -389,7 +400,14 @@ export default function MyTasksPage() {
                         <td className="max-w-[160px] truncate px-2 py-1.5 text-slate-600">{l.CourseName || '—'}</td>
                         <td className="px-2 py-1.5 text-slate-600">{l.Batch_Code || '—'}</td>
                         <td className="px-2 py-1.5 text-slate-600">{l.StatusLabel || '—'}</td>
-                        <td className="px-2 py-1.5 text-slate-500">{l.OwnerName || <span className="text-slate-300">Unassigned</span>}</td>
+                        <td className="px-2 py-1.5 text-slate-500">
+                          {initiatedScope ? (
+                            <>
+                              <div>{l.InitiatedByName || <span className="text-slate-300">—</span>}</div>
+                              <div className="text-[10px] text-slate-400">{l.OwnerName ? `Allocated: ${l.OwnerName}` : 'Not allocated'}</div>
+                            </>
+                          ) : (l.OwnerName || <span className="text-slate-300">Unassigned</span>)}
+                        </td>
                         <td className="px-2 py-1.5 text-right">
                           <Link href={`/dashboard/inquiry/add?editId=${l.Inquiry_Id}&returnTo=${encodeURIComponent('/dashboard/my-tasks')}`} className="text-[10px] font-bold text-[#2E3093] hover:underline">Open</Link>
                         </td>
@@ -447,7 +465,7 @@ export default function MyTasksPage() {
         <aside className="xl:sticky xl:top-3 h-fit space-y-3 rounded-xl border border-slate-200 bg-white p-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Overview</p>
-            <p className="text-sm font-bold text-slate-800">{ownerLabel} tasks</p>
+            <p className="text-sm font-bold text-slate-800">{ownerLabel} {initiatedScope ? 'initiated leads' : 'allocated tasks'}</p>
             <p className="text-[11px] text-slate-500">{selected.size ? `${selected.size} selected` : activeFilters ? 'Filtered leads' : view === 'all' ? `All leads (last 90 days + follow-ups)` : 'All leads for the day'}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">

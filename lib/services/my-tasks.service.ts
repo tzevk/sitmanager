@@ -26,8 +26,36 @@ export async function ensureAssignmentsTable() {
   });
 }
 
+/**
+ * allocated: leads the sales manager assigned to the owner (inquiry_assignments).
+ * initiated: leads whose first discussion was written by the owner (the first counsellor).
+ */
+export type TaskScope = 'allocated' | 'initiated';
+
+/** Who wrote each lead's first discussion (earliest by date, then id). Leads with none are absent. */
+async function firstDiscussionAuthors(ids: number[]): Promise<Map<number, number>> {
+  const pool = getPool();
+  const first = new Map<number, number>();
+  for (let i = 0; i < ids.length; i += 1000) {
+    const part = ids.slice(i, i + 1000);
+    const [rows] = await pool.query(
+      `SELECT Inquiry_id AS iid, created_by AS uid FROM awt_inquirydiscussion
+        WHERE deleted = 0 AND Inquiry_id IN (${part.map(() => '?').join(',')})
+        ORDER BY Inquiry_id, (created_date IS NULL), created_date, id`,
+      part
+    );
+    for (const r of rows as any[]) {
+      const iid = Number(r.iid);
+      if (!first.has(iid) && r.uid != null) first.set(iid, Number(r.uid));
+    }
+  }
+  return first;
+}
+
 export interface MyTasksFilters {
   date: string;
+  /** Which tasks: leads allocated to the owner, or leads the owner initiated. Default allocated. */
+  scope?: TaskScope;
   /** user id, 'all' or 'unowned' */
   owner: string;
   /** All leads view: the last 90 days of leads and every follow-up, not just this day's list. */
@@ -55,6 +83,8 @@ export interface TaskLead {
   InquiryDate: string | null;
   OwnerId: number | null;
   OwnerName: string | null;
+  /** The counsellor who wrote the first discussion; set only for the initiated scope. */
+  InitiatedByName?: string | null;
   Reason: 'Follow-up due' | 'Overdue' | 'Upcoming' | 'New lead' | 'Lead';
 }
 
@@ -99,7 +129,13 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
   const assignedTo = new Map<number, number>(assigned.map((r) => [Number(r.Inquiry_Id), Number(r.Assigned_User_Id)]));
   const ownerOf = (id: number): number | null => assignedTo.get(id) ?? null;
 
+  const initiated = f.scope === 'initiated';
+  const firstBy = initiated ? await firstDiscussionAuthors(ids) : new Map<number, number>();
   const mine = ids.filter((id) => {
+    if (initiated) {
+      const by = firstBy.get(id) ?? null;
+      return f.owner === 'all' ? by != null : f.owner === 'unowned' ? by == null : by === Number(f.owner);
+    }
     const o = ownerOf(id);
     return f.owner === 'all' ? true : f.owner === 'unowned' ? o == null : o === Number(f.owner);
   });
@@ -145,6 +181,7 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
       StatusLabel: r.StatusLabel, Temperature: r.Temperature,
       NextFollowUpDate: d?.next ?? null, InquiryDate: r.InquiryDate,
       OwnerId: ownerId, OwnerName: ownerId != null ? userName.get(ownerId) ?? null : null,
+      ...(initiated ? { InitiatedByName: firstBy.has(id) ? userName.get(firstBy.get(id)!) ?? null : null } : {}),
       Reason: isDue
         ? (d!.next < f.date ? 'Overdue' : d!.next === f.date ? 'Follow-up due' : 'Upcoming')
         : isNew ? 'New lead' : 'Lead',
@@ -169,7 +206,9 @@ export interface TaskAppointment {
   counsellor_name: string | null;
 }
 
-export async function getMyTaskAppointments(date: string, owner: string): Promise<TaskAppointment[]> {
+export async function getMyTaskAppointments(date: string, owner: string, scope: TaskScope = 'allocated'): Promise<TaskAppointment[]> {
+  // Appointments are booked with a counsellor; there is no "initiated" notion for them.
+  if (scope === 'initiated') return [];
   const params: any[] = [date];
   let ownerClause = '';
   if (owner === 'unowned') ownerClause = 'AND a.counsellor_user_id IS NULL';
@@ -203,7 +242,7 @@ export async function assignLeads(inquiryIds: number[], userId: number, by: numb
 export interface MonthDay { followUps: number; newLeads: number; appointments: number }
 
 /** Per-day counts for a calendar month, scoped to an owner (explicit assignment). */
-export async function getMyTasksMonth(month: string, owner: string): Promise<Record<string, MonthDay>> {
+export async function getMyTasksMonth(month: string, owner: string, scope: TaskScope = 'allocated'): Promise<Record<string, MonthDay>> {
   await ensureAssignmentsTable();
   const pool = getPool();
   const start = `${month}-01`;
@@ -241,14 +280,19 @@ export async function getMyTasksMonth(month: string, owner: string): Promise<Rec
 
   const ids = [...new Set([...due, ...fresh].map((r) => Number(r.iid)))].filter((n) => n > 0);
   const assignedTo = new Map<number, number>();
-  if (ids.length && owner !== 'all') {
+  const initiated = scope === 'initiated';
+  const firstBy = initiated && ids.length ? await firstDiscussionAuthors(ids) : new Map<number, number>();
+  if (!initiated && ids.length && owner !== 'all') {
     const rows = await guarded(`SELECT Inquiry_Id, Assigned_User_Id FROM inquiry_assignments WHERE Inquiry_Id IN (${ids.map(() => '?').join(',')})`, ids);
     rows.forEach((r) => assignedTo.set(Number(r.Inquiry_Id), Number(r.Assigned_User_Id)));
   }
-  const keep = (id: number) => owner === 'all' || (owner === 'unowned' ? !assignedTo.has(id) : assignedTo.get(id) === Number(owner));
+  const keep = (id: number) => initiated
+    ? (owner === 'all' ? firstBy.has(id) : owner === 'unowned' ? !firstBy.has(id) : firstBy.get(id) === Number(owner))
+    : owner === 'all' || (owner === 'unowned' ? !assignedTo.has(id) : assignedTo.get(id) === Number(owner));
   due.forEach((r) => { if (keep(Number(r.iid))) day(r.day).followUps++; });
   fresh.forEach((r) => { if (keep(Number(r.iid))) day(r.day).newLeads++; });
   appts.forEach((r) => {
+    if (initiated) return;
     const ok = owner === 'all' || (owner === 'unowned' ? r.uid == null : Number(r.uid) === Number(owner));
     if (ok) day(r.day).appointments++;
   });
