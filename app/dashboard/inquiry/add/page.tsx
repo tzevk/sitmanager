@@ -275,7 +275,7 @@ export default function AddInquiryPage() {
     if (editId) return;
     if (prefillName) setName(prefillName);
     if (prefillEmail) setEmail(prefillEmail);
-    if (prefillMobile) setMobile(prefillMobile);
+    if (prefillMobile) { setMobile(prefillMobile); setWhatsapp(prefillMobile); }
     if (prefillNotes) setNotes(prefillNotes);
     if (calendlyBookingId) setInquiryMode('Calendly');
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,8 +365,15 @@ export default function AddInquiryPage() {
   // True when a field is compulsory on the edit page; false for first-contact statuses.
   const laterDetail = editId != null && !isFirstContact;
 
+  // WhatsApp starts out the same as Mobile and follows it until it is changed to a different number.
+  const changeMobile = (value: string) => {
+    if (!whatsapp.trim() || whatsapp === mobile) setWhatsapp(value);
+    setMobile(value);
+  };
+
   const handleSave = async (skipDuplicateCheck = false) => {
     if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
+    if (!mobile.trim()) { setError('Mobile is required'); setMissingFields(['Mobile']); return; }
     if (!isStatusOnlySave) {
       if (!name.trim()) { setError('Name is required'); return; }
       if (!inquiryMode.trim()) { setError('Mode is required'); return; }
@@ -375,11 +382,11 @@ export default function AddInquiryPage() {
       // On the edit page every field except Discussion is compulsory.
       if (editId) {
         const missing: [string, string][] = [
-          [gender, 'Gender'], [mobile, 'Mobile'], [email, 'Email'],
+          [gender, 'Gender'], [email, 'Email'],
           [nationality, 'Nationality'], [country, 'Country'], [leadTemp, 'Lead Temperature'], [inquiryDate, 'Inquiry Date'],
           [qualification, 'Qualification'], [discipline, 'Discipline'],
           ...(isFirstContact ? [] : [
-            [dob, 'Date of Birth'], [whatsapp, 'WhatsApp'], [preferredLocation, 'Preferred Location'],
+            [dob, 'Date of Birth'], [preferredLocation, 'Preferred Location'],
             [courseId, 'Course'], [category, 'Category'], [percentage, 'Percentage'],
           ] as [string, string][]),
         ];
@@ -811,11 +818,11 @@ export default function AddInquiryPage() {
             </div>
 
             <div>
-              <label className={lbl}>Mobile{editId && <span className="text-red-400 normal-case"> *</span>}</label>
-              <input type="tel" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="Mobile" className={ctrl} />
+              <label className={lbl}>Mobile <span className="text-red-400 normal-case">*</span></label>
+              <input type="tel" value={mobile} onChange={e => changeMobile(e.target.value)} placeholder="Mobile" className={ctrl} required />
             </div>
             <div>
-              <label className={lbl}>WhatsApp{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>WhatsApp</label>
               <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="WhatsApp" className={ctrl} />
             </div>
             <div className="col-span-2">
