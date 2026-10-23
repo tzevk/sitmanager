@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool, cached } from '@/lib/db';
 import { FOLLOW_UP_DUE_WINDOW_DAYS } from '@/lib/services/inquiry.service';
+import { nowLocal } from '@/lib/appointments/time';
+import { isSuperAdminRole } from '@/lib/super-admin';
 
 /**
  * My Tasks — the day's leads (follow-ups due, overdue, new) and counselling appointments.
@@ -10,6 +12,17 @@ import { FOLLOW_UP_DUE_WINDOW_DAYS } from '@/lib/services/inquiry.service';
  */
 
 const CLOSED_STATUS_REGEXP = 'admission (taken|confirmed)|not interested|irrelevant|junk|lost lead|clos|duplicate|not eligible';
+
+/**
+ * Who may look beyond their own leads on My Tasks (other counsellors, unassigned leads, all leads)
+ * and allocate leads: Super Admin, and the Mayur Jagtap account. Everyone else only ever sees the
+ * leads allocated to them, or that they initiated.
+ */
+export async function canSeeAllTasks(session: { role: number; firstName?: string | null; lastName?: string | null }): Promise<boolean> {
+  if (await isSuperAdminRole(Number(session.role), getPool())) return true;
+  const words = `${session.firstName ?? ''} ${session.lastName ?? ''}`.toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  return words.includes('mayur') && words.includes('jagtap');
+}
 
 export async function ensureAssignmentsTable() {
   await cached('schema:inquiry_assignments', 60 * 60 * 1000, async () => {
@@ -91,7 +104,8 @@ export interface TaskLead {
 export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
   await ensureAssignmentsTable();
   const pool = getPool();
-  const isToday = f.date === new Date().toISOString().slice(0, 10);
+  // "Today" in India time: the UTC date is a day behind from midnight to 5:30am, which dropped overdue leads.
+  const isToday = f.date === nowLocal().date;
   const guarded = async (sql: string, params: any[]): Promise<any[]> => {
     try {
       const [rows] = await pool.query(`SET STATEMENT max_statement_time=15 FOR ${sql}`, params);

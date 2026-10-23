@@ -94,6 +94,8 @@ export default function MyTasksPage() {
   const [date, setDate] = useState(localToday());
   const [owner, setOwner] = useState('me');
   const [taskScope, setTaskScope] = useState<'allocated' | 'initiated'>('allocated');
+  // Super Admin and the sales manager can look at anyone's leads and allocate them; everyone else sees only their own.
+  const [canSeeAll, setCanSeeAll] = useState(false);
   const [view, setView] = useState<'day' | 'all' | 'month'>('day');
   const [monthData, setMonthData] = useState<Record<string, { followUps: number; newLeads: number; appointments: number }>>({});
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -117,6 +119,10 @@ export default function MyTasksPage() {
   const [notice, setNotice] = useState('');
   const [openAppt, setOpenAppt] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('scope') === 'initiated') setTaskScope('initiated');
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true); setError('');
     try {
@@ -124,14 +130,14 @@ export default function MyTasksPage() {
         const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&scope=${taskScope}&view=month`, { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed to load');
-        setMonthData(data.days || {}); setMe(data.me ?? null);
+        setMonthData(data.days || {}); setMe(data.me ?? null); setCanSeeAll(Boolean(data.canSeeAll));
         setLoading(false);
         return;
       }
       const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&scope=${taskScope}&view=${view}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
-      setLeads(data.leads || []); setAppts(data.appointments || []); setStaff(data.staff || []); setMe(data.me ?? null);
+      setLeads(data.leads || []); setAppts(data.appointments || []); setStaff(data.staff || []); setMe(data.me ?? null); setCanSeeAll(Boolean(data.canSeeAll));
       setSelected(new Set());
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     setLoading(false);
@@ -283,15 +289,15 @@ export default function MyTasksPage() {
         </div>
         <div className="flex overflow-hidden rounded-lg border border-slate-200 text-xs font-semibold" role="group" aria-label="Lead view">
           {([['day', 'Day'], ['month', 'Month'], ['all', 'All leads']] as const).map(([v, label]) => (
-            <button key={v} type="button" onClick={() => { setView(v); if (v === 'all') setOwner('all'); }} className={`h-8 px-3 ${view === v ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+            <button key={v} type="button" onClick={() => { setView(v); if (v === 'all' && canSeeAll) setOwner('all'); }} className={`h-8 px-3 ${view === v ? 'bg-[#2E3093] text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>{label}</button>
           ))}
         </div>
-        <select value={owner} onChange={e => setOwner(e.target.value)} className={ctrl} aria-label="Counsellor">
+        {canSeeAll && <select value={owner} onChange={e => setOwner(e.target.value)} className={ctrl} aria-label="Counsellor">
           <option value="me">Me{me ? ` (${staff.find(s => s.id === me)?.name ?? ''})` : ''}</option>
           <option value="all">{initiatedScope ? 'All counsellors (started leads)' : 'All counsellors'}</option>
           <option value="unowned">{initiatedScope ? 'Not yet started (no discussion)' : 'Unassigned leads'}</option>
           {staff.filter(s => s.id !== me).map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-        </select>
+        </select>}
         <button type="button" onClick={load} className={`${ctrl} font-semibold`}>Refresh</button>
       </div>
 
@@ -488,7 +494,7 @@ export default function MyTasksPage() {
               )}
             </div>
           ))}
-          <div className="space-y-2 border-t border-slate-100 pt-3">
+          {canSeeAll && <div className="space-y-2 border-t border-slate-100 pt-3">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign selected leads</p>
             <select value={assignTo} onChange={e => setAssignTo(e.target.value)} disabled={!canUpdate} className={`${ctrl} w-full`}>
               <option value="">Select counsellor…</option>
@@ -503,7 +509,7 @@ export default function MyTasksPage() {
             </div>
             {!canUpdate && <p className="text-[10px] text-slate-400">You do not have permission to assign leads.</p>}
             {notice && <p className="text-[11px] font-semibold text-emerald-700">{notice}</p>}
-          </div>
+          </div>}
         </aside>
       </div>
 

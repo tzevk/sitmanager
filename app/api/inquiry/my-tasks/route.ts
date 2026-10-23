@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
-import { assignLeads, getMyTaskAppointments, getMyTaskLeads, getMyTasksMonth, getDailyActivity, unassignLeads } from '@/lib/services/my-tasks.service';
+import { assignLeads, canSeeAllTasks, getMyTaskAppointments, getMyTaskLeads, getMyTasksMonth, getDailyActivity, unassignLeads } from '@/lib/services/my-tasks.service';
 
 export const runtime = 'nodejs';
 
@@ -15,17 +15,19 @@ export async function GET(req: NextRequest) {
     const date = sp.get('date') || '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     const scope = sp.get('scope') === 'initiated' ? 'initiated' : 'allocated';
+    const canSeeAll = await canSeeAllTasks(auth.session);
     const rawOwner = sp.get('owner') || 'me';
-    const owner = rawOwner === 'me' ? String(auth.session.userId) : rawOwner;
+    // Only Super Admin and the Mayur account may look at anyone else's leads.
+    const owner = !canSeeAll || rawOwner === 'me' ? String(auth.session.userId) : rawOwner;
     if (owner !== 'all' && owner !== 'unowned' && !/^\d+$/.test(owner)) return NextResponse.json({ error: 'Invalid owner' }, { status: 400 });
 
     if (sp.get('view') === 'month') {
       const days = await getMyTasksMonth(date.slice(0, 7), owner, scope);
-      return NextResponse.json({ days, me: auth.session.userId, owner });
+      return NextResponse.json({ days, me: auth.session.userId, owner, canSeeAll });
     }
 
     if (sp.get('view') === 'activity') {
-      return NextResponse.json({ ...(await getDailyActivity(date.slice(0, 7), owner)), me: auth.session.userId, owner });
+      return NextResponse.json({ ...(await getDailyActivity(date.slice(0, 7), owner)), me: auth.session.userId, owner, canSeeAll });
     }
 
     const [leads, appointments, [staffRows]] = await Promise.all([
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
            FROM awt_adminuser WHERE (deleted = 0 OR deleted IS NULL) ORDER BY name`
       ) as Promise<[{ id: number; name: string }[], unknown]>,
     ]);
-    return NextResponse.json({ leads, appointments, staff: staffRows, me: auth.session.userId, owner, scope });
+    return NextResponse.json({ leads, appointments, staff: canSeeAll ? staffRows : staffRows.filter((u) => u.id === auth.session.userId), me: auth.session.userId, owner, scope, canSeeAll });
   } catch (error) {
     console.error('My tasks GET error:', error);
     return NextResponse.json({ error: 'Failed to load tasks', details: error instanceof Error ? error.message : String(error) }, { status: 500 });
@@ -55,6 +57,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requirePermission(req, 'inquiry.update');
   if (auth instanceof NextResponse) return auth;
+  if (!(await canSeeAllTasks(auth.session))) {
+    return NextResponse.json({ error: 'Only the sales manager can allocate leads' }, { status: 403 });
+  }
   try {
     const body = await req.json();
     const ids = Array.isArray(body.inquiryIds) ? body.inquiryIds.map(Number) : [];
