@@ -386,7 +386,7 @@ export default function AddInquiryPage() {
           [nationality, 'Nationality'], [country, 'Country'], [leadTemp, 'Lead Temperature'], [inquiryDate, 'Inquiry Date'],
           [qualification, 'Qualification'], [discipline, 'Discipline'],
           ...(isFirstContact ? [] : [
-            [dob, 'Date of Birth'], [preferredLocation, 'Preferred Location'],
+            [preferredLocation, 'Preferred Location'],
             [courseId, 'Course'], [category, 'Category'], [percentage, 'Percentage'],
           ] as [string, string][]),
         ];
@@ -813,7 +813,7 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div>
-              <label className={lbl}>Date of Birth{laterDetail && <span className="text-red-400 normal-case"> *</span>}</label>
+              <label className={lbl}>Date of Birth</label>
               <input type="date" value={dob} onChange={e => setDob(e.target.value)} className={ctrl} />
             </div>
 
