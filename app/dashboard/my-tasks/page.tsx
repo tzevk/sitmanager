@@ -89,7 +89,7 @@ function MultiSelect({ label, options, value, onChange }: { label: string; optio
 }
 
 export default function MyTasksPage() {
-  const { canUpdate, canView, loading: permLoading } = useResourcePermissions('inquiry');
+  const { canView, loading: permLoading } = useResourcePermissions('inquiry');
   const [date, setDate] = useState(localToday());
   const [owner, setOwner] = useState('me');
   const [view, setView] = useState<'day' | 'all' | 'month'>('day');
@@ -98,6 +98,7 @@ export default function MyTasksPage() {
   const [appts, setAppts] = useState<Appt[]>([]);
   const [staff, setStaff] = useState<Staff[]>([]);
   const [me, setMe] = useState<number | null>(null);
+  const [canAssign, setCanAssign] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -129,7 +130,7 @@ export default function MyTasksPage() {
       const res = await fetch(`/api/inquiry/my-tasks?date=${date}&owner=${encodeURIComponent(owner)}&view=${view}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to load');
-      setLeads(data.leads || []); setAppts(data.appointments || []); setStaff(data.staff || []); setMe(data.me ?? null);
+      setLeads(data.leads || []); setAppts(data.appointments || []); setStaff(data.staff || []); setMe(data.me ?? null); setCanAssign(Boolean(data.canAssign));
       setSelected(new Set());
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to load'); }
     setLoading(false);
@@ -472,18 +473,18 @@ export default function MyTasksPage() {
           ))}
           <div className="space-y-2 border-t border-slate-100 pt-3">
             <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Assign selected leads</p>
-            <select value={assignTo} onChange={e => setAssignTo(e.target.value)} disabled={!canUpdate} className={`${ctrl} w-full`}>
+            <select value={assignTo} onChange={e => setAssignTo(e.target.value)} disabled={!canAssign} className={`${ctrl} w-full`}>
               <option value="">Select counsellor…</option>
               {staff.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
             </select>
             <div className="flex gap-2">
-              <button type="button" onClick={assign} disabled={!canUpdate || !assignTo || !selected.size || assigning} className="flex-1 rounded-lg bg-[#2E3093] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
+              <button type="button" onClick={assign} disabled={!canAssign || !assignTo || !selected.size || assigning} className="flex-1 rounded-lg bg-[#2E3093] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">
                 {assigning ? 'Assigning…' : `Assign${selected.size ? ` (${selected.size})` : ''}`}
               </button>
-              <button type="button" onClick={unassign} disabled={!canUpdate || !selected.size || assigning} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-40">Unassign</button>
+              <button type="button" onClick={unassign} disabled={!canAssign || !selected.size || assigning} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 disabled:opacity-40">Unassign</button>
               <button type="button" onClick={() => setSelected(new Set())} disabled={!selected.size} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 disabled:opacity-40">Clear</button>
             </div>
-            {!canUpdate && <p className="text-[10px] text-slate-400">You do not have permission to assign leads.</p>}
+            {!canAssign && <p className="text-[10px] text-slate-400">Only the Mayur account can assign leads to counsellors.</p>}
             {notice && <p className="text-[11px] font-semibold text-emerald-700">{notice}</p>}
           </div>
         </aside>

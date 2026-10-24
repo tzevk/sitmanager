@@ -354,6 +354,7 @@ export default function DashboardPage() {
     </div>
   );
 
+  const isMayur = String(session?.firstName ?? '').trim().toLowerCase() === 'mayur';
   const changelogWidget = <ChangelogWidget />;
   const monitoringWidget = <MonitoringWidget />;
   const salesTrackerWidget = <SalesTrackerWidget />;
@@ -504,6 +505,8 @@ export default function DashboardPage() {
         {monitoringWidget}
         {salesTrackerWidget}
         {mySalesTrackerWidget}
+        {/* Individual Sales Tracker · All employees — on the CBD dashboard for the Mayur account only */}
+        {isMayur && hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
         <CbdDashboard data={data} loading={loading} />
         {showFollowupPopup && (
           <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
