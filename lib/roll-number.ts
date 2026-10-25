@@ -44,7 +44,6 @@ export async function assignRollNumberOnGrant(
     `SELECT TRIM(CAST(Roll_No AS CHAR)) AS Roll_No FROM admission_master WHERE Admission_Id = ? LIMIT 1`,
     [admissionId]
   ) as [any[], any];
-  if (existingRows[0]?.Roll_No) return existingRows[0].Roll_No; // already assigned — never overwrite
 
   const [batchRows] = await db.query(
     `SELECT Batch_code, SDate FROM batch_mst WHERE Batch_Id = ? LIMIT 1`,
@@ -54,6 +53,12 @@ export async function assignRollNumberOnGrant(
   if (!batch) return null;
 
   const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
+
+  // Already assigned under this batch's own prefix — never overwrite. A number
+  // carrying a different batch's prefix is stale (the student was moved batch)
+  // and would collide with that batch's own series, so it gets replaced below.
+  const current = String(existingRows[0]?.Roll_No || '');
+  if (current && current.startsWith(prefix)) return current;
 
   // Next serial = one past the highest already used under this batch's own
   // prefix — appends at the end of the sequence regardless of the new
@@ -76,7 +81,7 @@ export async function assignRollNumberOnGrant(
 
   const rollNo = buildRollNumber(prefix, maxSerial + 1);
   await db.query(
-    `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND (Roll_No IS NULL OR TRIM(CAST(Roll_No AS CHAR)) = '')`,
+    `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ?`,
     [rollNo, admissionId]
   );
   return rollNo;

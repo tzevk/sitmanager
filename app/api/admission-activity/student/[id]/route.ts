@@ -696,7 +696,7 @@ export async function PUT(
       // un-cancel it, or edit an unrelated field), and would instead fall into
       // the "no active admission" branch and create a stray duplicate row.
       const [admRows] = await pool.query(
-        `SELECT Admission_Id, Cancel FROM admission_master
+        `SELECT Admission_Id, Cancel, Batch_Id FROM admission_master
          WHERE Student_Id = ?
            AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY Admission_Id DESC
@@ -707,6 +707,7 @@ export async function PUT(
       if (admRows.length) {
         const admissionId = admRows[0].Admission_Id;
         const wasCancelled = Number(admRows[0].Cancel ?? 0) === 1;
+        const prevBatchId = admRows[0].Batch_Id != null ? Number(admRows[0].Batch_Id) : null;
         const setClauses: string[] = [];
         const setVals: (string | number | null)[] = [];
 
@@ -720,6 +721,16 @@ export async function PUT(
             `UPDATE admission_master SET ${setClauses.join(', ')} WHERE Admission_Id = ?`,
             [...setVals, admissionId]
           );
+        }
+
+        // Moved to another batch: the old Roll_No carries the previous batch's
+        // prefix, so issue a fresh one from the new batch's series.
+        if (batchId !== null && batchId !== prevBatchId) {
+          try {
+            await assignRollNumberOnGrant(pool, Number(admissionId), batchId);
+          } catch (e) {
+            console.warn('Student PUT: roll number reassign failed (non-fatal):', (e as Error)?.message);
+          }
         }
 
         // Newly cancelled (not already) — drop a pending refund draft for whatever
