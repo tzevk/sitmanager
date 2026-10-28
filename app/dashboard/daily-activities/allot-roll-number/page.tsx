@@ -121,10 +121,8 @@ export default function AllotRollNumberPage() {
     [batches, batchId]
   );
   const blankRollCount = rows.filter((row) => !String(row.Roll_No || '').trim()).length;
-  // Admissions that will get a new number: every copy of a duplicated roll
-  // number except the earliest. Taken from the server's Roll_No_Duplicate_Count
-  // (one group per roll number) so copies held by admissions not listed here
-  // are counted too — same scope the API fixes.
+  // Students that will get a new number: every copy of a duplicated roll
+  // number except the earliest (one group per roll number).
   const duplicateRollCount = useMemo(() => {
     const groups = new Map<string, number>();
     for (const row of rows) {

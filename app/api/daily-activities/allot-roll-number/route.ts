@@ -32,24 +32,24 @@ async function getBatchInfo(pool: any, batchId: number) {
   return (rows as any[])[0] || null;
 }
 
-type BatchRollRow = { Admission_Id: number; Roll_No: string; Student_Name: string; Listed: boolean };
+type BatchRollRow = { Admission_Id: number; Roll_No: string; Student_Name: string };
 
-// Every active (not deleted, not cancelled) admission in the batch, locked, in
-// admission order. Listed = the student also appears on the page (student
-// record not deleted). Duplicate checks must cover all of them, because the
-// "Same roll number" tag counts all of them.
+// The students listed on the page — active (not deleted, not cancelled)
+// admissions whose student record isn't deleted — locked, in admission order.
+// Admissions of deleted students don't hold a roll number: counting them left
+// gaps in the sequence (e.g. batch 03090 skipping 0004 and 0007).
 async function lockBatchRollRows(conn: any, batchId: number): Promise<BatchRollRow[]> {
   const [rows] = await conn.query(
     `SELECT
        am.Admission_Id,
        COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
-       COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', am.Student_Id)) AS Student_Name,
-       CASE WHEN s.Student_Id IS NOT NULL AND (s.IsDelete = 0 OR s.IsDelete IS NULL) THEN 1 ELSE 0 END AS Listed
+       COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', am.Student_Id)) AS Student_Name
      FROM admission_master am
-     LEFT JOIN student_master s ON s.Student_Id = am.Student_Id
+     JOIN student_master s ON s.Student_Id = am.Student_Id
      WHERE am.Batch_Id = ?
        AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
        AND (am.Cancel = 0 OR am.Cancel IS NULL)
+       AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
      ORDER BY am.Admission_Id ASC
      FOR UPDATE`,
     [batchId]
@@ -58,7 +58,6 @@ async function lockBatchRollRows(conn: any, batchId: number): Promise<BatchRollR
     Admission_Id: Number(r.Admission_Id),
     Roll_No: String(r.Roll_No || '').trim(),
     Student_Name: String(r.Student_Name || ''),
-    Listed: Number(r.Listed) === 1,
   }));
 }
 
@@ -106,11 +105,13 @@ async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: numbe
      LEFT JOIN (
        SELECT Roll_No_Key, COUNT(*) AS Duplicate_Count
        FROM (
-         SELECT NULLIF(TRIM(CAST(Roll_No AS CHAR)), '') AS Roll_No_Key
-         FROM admission_master
-         WHERE Batch_Id = ?
-           AND (IsDelete = 0 OR IsDelete IS NULL)
-           AND (Cancel = 0 OR Cancel IS NULL)
+         SELECT NULLIF(TRIM(CAST(am1.Roll_No AS CHAR)), '') AS Roll_No_Key
+         FROM admission_master am1
+         JOIN student_master s1 ON s1.Student_Id = am1.Student_Id
+         WHERE am1.Batch_Id = ?
+           AND (am1.IsDelete = 0 OR am1.IsDelete IS NULL)
+           AND (am1.Cancel = 0 OR am1.Cancel IS NULL)
+           AND (s1.IsDelete = 0 OR s1.IsDelete IS NULL)
        ) rolls
        WHERE Roll_No_Key IS NOT NULL AND Roll_No_Key <> ''
        GROUP BY Roll_No_Key
@@ -280,8 +281,7 @@ export async function PATCH(req: NextRequest) {
       try {
         await conn.beginTransaction();
 
-        const admissions = await lockBatchRollRows(conn, bid);
-        const listed = admissions.filter((a) => a.Listed);
+        const listed = await lockBatchRollRows(conn, bid);
         if (listed.length === 0) {
           await conn.rollback();
           return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
@@ -303,8 +303,7 @@ export async function PATCH(req: NextRequest) {
           || Number(a.Admission_Id) - Number(b.Admission_Id)
         );
 
-        const reserved = reservedSerials(admissions.filter((a) => !a.Listed), prefix);
-        await allotSerials(conn, bid, prefix, listed, reserved, 1);
+        await allotSerials(conn, bid, prefix, listed, new Set(), 1);
 
         await conn.commit();
         const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
@@ -337,21 +336,17 @@ export async function PATCH(req: NextRequest) {
 
         if (regenerateAll) {
           // User-confirmed fresh allotment of every listed student in
-          // admission order (0001..N), overwriting existing roll numbers —
-          // skipping any number still held by an unlisted active admission.
-          needsNumber.push(...admissions.filter((a) => a.Listed));
-          reserved = reservedSerials(admissions.filter((a) => !a.Listed), prefix);
+          // admission order (0001..N), overwriting existing roll numbers.
+          needsNumber.push(...admissions);
+          reserved = new Set();
         } else {
-          // Duplicates are judged across every active admission in the batch —
-          // the same set the "Same roll number xN" tag counts, including
-          // admissions whose student record was deleted (not listed on the
-          // page). In each group the earliest admission (lowest Admission_Id;
-          // rows are in that order) keeps the number and every later one is
-          // re-allotted. Blank roll numbers are filled for listed students.
+          // In each group sharing a roll number the earliest admission (lowest
+          // Admission_Id; rows are in that order) keeps it and every later one
+          // is re-allotted; blank roll numbers are filled too.
           const seenRolls = new Set<string>();
           for (const admission of admissions) {
             const currentRoll = admission.Roll_No;
-            if (!currentRoll) { if (admission.Listed) needsNumber.push(admission); continue; }
+            if (!currentRoll) { needsNumber.push(admission); continue; }
             if (seenRolls.has(currentRoll)) { needsNumber.push(admission); duplicatesFixed += 1; continue; }
             seenRolls.add(currentRoll);
           }
