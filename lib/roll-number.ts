@@ -79,10 +79,24 @@ export async function assignRollNumberOnGrant(
     }
   }
 
-  const rollNo = buildRollNumber(prefix, maxSerial + 1);
-  await db.query(
-    `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ?`,
-    [rollNo, admissionId]
-  );
-  return rollNo;
+  // Two admissions granted at the same moment can both read the same max
+  // serial, so only write a number nobody else in the batch holds; if it was
+  // taken in the meantime, move on to the next serial. (The derived table lets
+  // MySQL read admission_master inside an UPDATE of the same table.)
+  for (let serial = maxSerial + 1; serial <= maxSerial + 50; serial++) {
+    const rollNo = buildRollNumber(prefix, serial);
+    const [result] = await db.query(
+      `UPDATE admission_master SET Roll_No = ?
+       WHERE Admission_Id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM (
+             SELECT Admission_Id FROM admission_master
+             WHERE Batch_Id = ? AND TRIM(CAST(Roll_No AS CHAR)) = ?
+           ) taken WHERE taken.Admission_Id <> ?
+         )`,
+      [rollNo, admissionId, batchId, rollNo, admissionId]
+    ) as [any, any];
+    if (Number(result?.affectedRows) > 0) return rollNo;
+  }
+  return null;
 }

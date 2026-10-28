@@ -121,6 +121,19 @@ export default function AllotRollNumberPage() {
     [batches, batchId]
   );
   const blankRollCount = rows.filter((row) => !String(row.Roll_No || '').trim()).length;
+  // Rows that will get a new number: every copy of a duplicated roll number
+  // except the earliest admission's (same rule the API applies).
+  const duplicateRollCount = useMemo(() => {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const row of [...rows].sort((a, b) => a.Admission_Id - b.Admission_Id)) {
+      const roll = String(row.Roll_No || '').trim();
+      if (!roll || Number(row.Is_Hidden) === 1) continue;
+      if (seen.has(roll)) count += 1; else seen.add(roll);
+    }
+    return count;
+  }, [rows]);
+  const autoGenerateCount = blankRollCount + duplicateRollCount;
   const duplicateRowsToDelete = useMemo(() => findDuplicateRowsToDelete(rows), [rows]);
 
   useEffect(() => {
@@ -307,9 +320,18 @@ export default function AllotRollNumberPage() {
   };
 
   const handleAutoGenerateRollNumbers = async () => {
-    if (!canUpdate || !batchId || autoGeneratingRolls || !blankRollCount) return;
+    if (!canUpdate || !batchId || autoGeneratingRolls || !autoGenerateCount) return;
 
-    const ok = window.confirm(`Auto-generate roll numbers for ${blankRollCount} student${blankRollCount === 1 ? '' : 's'} without roll numbers? Existing roll numbers will not be changed.`);
+    const parts = [
+      blankRollCount ? `${blankRollCount} student${blankRollCount === 1 ? '' : 's'} without a roll number` : '',
+      duplicateRollCount ? `${duplicateRollCount} student${duplicateRollCount === 1 ? '' : 's'} with a duplicate roll number` : '',
+    ].filter(Boolean);
+    const ok = window.confirm(
+      `Auto-generate roll numbers for ${parts.join(' and ')}?` +
+      (duplicateRollCount
+        ? '\n\nFor each duplicate, the earliest admission keeps the roll number and the others get a new one — those students will need their new roll number to sign in to the student portal.'
+        : '\n\nExisting roll numbers will not be changed.')
+    );
     if (!ok) return;
 
     setError('');
@@ -329,7 +351,8 @@ export default function AllotRollNumberPage() {
       const nextRows = Array.isArray(data.rows) ? data.rows : [];
       setRows(nextRows);
       setRollInputs(Object.fromEntries(nextRows.map((student: StudentRow) => [student.Admission_Id, student.Roll_No || ''])));
-      setMessage(`Auto-generated ${Number(data.updated || 0)} roll number${Number(data.updated || 0) === 1 ? '' : 's'}.`);
+      const fixed = Number(data.duplicatesFixed || 0);
+      setMessage(`Auto-generated ${Number(data.updated || 0)} roll number${Number(data.updated || 0) === 1 ? '' : 's'}${fixed ? ` (${fixed} duplicate${fixed === 1 ? '' : 's'} re-numbered)` : ''}.`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to auto-generate roll numbers');
     } finally {
@@ -628,10 +651,11 @@ export default function AllotRollNumberPage() {
               <button
                 type="button"
                 onClick={handleAutoGenerateRollNumbers}
-                disabled={!batchId || !blankRollCount || autoGeneratingRolls}
+                disabled={!batchId || !autoGenerateCount || autoGeneratingRolls}
+                title="Allots roll numbers to students without one, and gives a new roll number to every duplicate except the earliest admission"
                 className="inline-flex items-center px-3 py-1.5 rounded-md bg-[#2E3093] text-white text-[11px] font-bold hover:bg-[#252778] disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {autoGeneratingRolls ? 'Generating...' : `Auto Generate${blankRollCount ? ` (${blankRollCount})` : ''}`}
+                {autoGeneratingRolls ? 'Generating...' : `Auto Generate${autoGenerateCount ? ` (${autoGenerateCount})` : ''}`}
               </button>
             ) : (
               <span className="text-[11px] font-semibold text-amber-600">Update permission required</span>

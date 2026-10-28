@@ -319,11 +319,22 @@ export async function PATCH(req: NextRequest) {
           }
         }
 
+        // Duplicates: within each group sharing a roll number, the earliest
+        // admission (lowest Admission_Id — rows are already in that order)
+        // keeps it; every later one is re-allotted a fresh number below.
+        const seenRolls = new Set<string>();
+        const needsNumber: any[] = [];
+        let duplicatesFixed = 0;
+        for (const admission of admissions) {
+          const currentRoll = String(admission.Roll_No || '').trim();
+          if (!currentRoll) { needsNumber.push(admission); continue; }
+          if (seenRolls.has(currentRoll)) { needsNumber.push(admission); duplicatesFixed += 1; continue; }
+          seenRolls.add(currentRoll);
+        }
+
         let nextSerial = maxSerial + 1;
         let updated = 0;
-        for (const admission of admissions) {
-          if (String(admission.Roll_No || '').trim()) continue;
-
+        for (const admission of needsNumber) {
           while (usedSerials.has(nextSerial)) nextSerial += 1;
           const nextRollNo = buildRollNumber(prefix, nextSerial);
 
@@ -331,8 +342,7 @@ export async function PATCH(req: NextRequest) {
             `UPDATE admission_master
              SET Roll_No = ?
              WHERE Admission_Id = ?
-               AND Batch_Id = ?
-               AND (Roll_No IS NULL OR TRIM(CAST(Roll_No AS CHAR)) = '')`,
+               AND Batch_Id = ?`,
             [nextRollNo, admission.Admission_Id, bid]
           );
           usedSerials.add(nextSerial);
@@ -342,7 +352,7 @@ export async function PATCH(req: NextRequest) {
 
         await conn.commit();
         const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
-        return NextResponse.json({ success: true, rows, updated });
+        return NextResponse.json({ success: true, rows, updated, duplicatesFixed });
       } catch (err) {
         await conn.rollback();
         throw err;
