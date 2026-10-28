@@ -69,7 +69,7 @@ export function renderPerformanceReportHtml(data: any): string {
             <table class="crit">${criteria.map((c) => `<tr><td>${esc(c.grade)}</td><td>${esc(range(c))}</td></tr>`).join('')}</table>
           </td>
         </tr>
-        ${header.Course_Description ? `<tr><td colspan="4" class="desc"><b>Brief Description of Training Programme :</b><br/>${esc(header.Course_Description)}</td></tr>` : ''}
+        <tr><td colspan="4" class="desc"><b>Brief Description of Training Programme :</b><br/>${esc(header.Course_Description)}</td></tr>
       </table>
 
       <table class="rep sec">
