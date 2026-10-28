@@ -41,17 +41,23 @@ export async function getAttendanceSummary(
     return { totalLectures: 0, students: {} };
   }
 
-  // 2. Attendance rows for those Take_Ids
+  // 2. Attendance rows for those Take_Ids. lecture_taken_child has no unique
+  //    key, so a lecture can hold the same student more than once (re-saved
+  //    attendance) — counting every row pushed some students past 100%.
+  //    Keep only the latest row (highest ID) per (Take_Id, Student_Id).
   const [attRows] = await pool.query(
-    `SELECT ltc.Student_Id, ltc.Student_Atten, ltc.Late
+    `SELECT ltc.Take_Id, ltc.Student_Id, ltc.Student_Atten, ltc.Late
      FROM lecture_taken_child ltc
      WHERE ltc.Take_Id IN (${takeIds.map(() => '?').join(',')})
-       AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)`,
+       AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)
+     ORDER BY ltc.ID`,
     takeIds
   );
+  const latest = new Map<string, any>();
+  for (const a of attRows as any[]) latest.set(`${a.Take_Id}:${a.Student_Id}`, a);
 
   const acc: Record<number, { presentCount: number; lateCount: number }> = {};
-  for (const a of attRows as any[]) {
+  for (const a of latest.values()) {
     const sid = Number(a.Student_Id);
     if (!acc[sid]) acc[sid] = { presentCount: 0, lateCount: 0 };
     if ((a.Student_Atten || '').trim() === 'Present') acc[sid].presentCount++;

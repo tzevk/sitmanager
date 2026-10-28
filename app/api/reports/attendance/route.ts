@@ -166,7 +166,8 @@ export async function GET(req: NextRequest) {
       `SELECT ltc.Take_Id, ltc.Student_Id, ltc.Student_Atten, ltc.Late
        FROM lecture_taken_child ltc
        WHERE ltc.Take_Id IN (${takeIds.map(() => '?').join(',')})
-         AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)`,
+         AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)
+       ORDER BY ltc.ID`, // duplicate rows: the latest wins, as in getAttendanceSummary
       takeIds
     );
     const attendanceRows = attendanceData as any[];
