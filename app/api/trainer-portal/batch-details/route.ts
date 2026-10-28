@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
+import { ensureBatchTrainerTable, TRAINER_BATCH_CONDITION, trainerBatchParams } from '@/lib/batch-trainers';
 
 /* GET — Batch details (students, timings, programme name, duration) plus planned
    assignments from the Standard Lecture Plan, for a batch assigned to this trainer. */
@@ -17,22 +18,15 @@ export async function GET(req: NextRequest) {
 
     if (!batchId) return NextResponse.json({ error: 'batchId required' }, { status: 400 });
 
-    // Confirm this batch is actually assigned to the trainer before returning anything.
+    // Confirm this batch is actually linked to the trainer before returning anything.
+    await ensureBatchTrainerTable(pool);
     const [assignedRows] = await pool.query<any[]>(
       `SELECT b.Batch_Id, b.Batch_code, b.Duration, b.Timings, c.Course_Name
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-       LEFT JOIN batch_slecture_master bsl
-         ON bsl.batch_id = b.Batch_Id
-        AND (bsl.deleted IS NULL OR bsl.deleted = '0')
-        AND bsl.faculty_id = ?
-       LEFT JOIN lecture_taken_master ltm
-         ON ltm.Batch_Id = b.Batch_Id
-        AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-        AND ltm.Faculty_Id = ?
-       WHERE b.Batch_Id = ? AND (bsl.id IS NOT NULL OR ltm.Take_Id IS NOT NULL)
+       WHERE b.Batch_Id = ? AND ${TRAINER_BATCH_CONDITION}
        LIMIT 1`,
-      [facultyId, facultyId, batchId]
+      [batchId, ...trainerBatchParams(facultyId)]
     );
 
     const batch = assignedRows?.[0];

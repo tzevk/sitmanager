@@ -2,8 +2,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
+import { ensureTrainerPlanColumns } from '@/lib/trainer-plan-columns';
+import { ensureBatchTrainerTable, TRAINER_BATCH_CONDITION, trainerBatchParams, trainerCanAccessBatch } from '@/lib/batch-trainers';
 
-/* GET — Monthly lecture plan from Standard Lecture Plan (batch_slecture_master), fallback to batch_lecture_master */
+/* GET — The trainer's batches, or one batch's lecture plan (whole plan, or one month with ?month=YYYY-MM)
+   from the Standard Lecture Plan (batch_slecture_master), fallback to batch_lecture_master */
 export async function GET(req: NextRequest) {
   try {
     const session = await getTrainerSession(req);
@@ -15,11 +18,13 @@ export async function GET(req: NextRequest) {
     const month = searchParams.get('month'); // YYYY-MM format
     const facultyId = session.facultyId;
 
-    // Get batches this trainer is assigned to (from both standard plan and taken lectures),
-    // and auto-classify them as current vs closed by end date.
+    await ensureBatchTrainerTable(pool);
+
+    // Batches linked to this trainer (Batch Master "Trainers", see
+    // lib/batch-trainers.ts), auto-classified as current vs closed by end date.
     if (!batchId) {
       const [batches] = await pool.query<any[]>(
-        `SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name, b.SDate, b.EDate, b.Timings,
+        `SELECT b.Batch_Id, b.Batch_code, c.Course_Name, b.SDate, b.EDate, b.Timings,
                 CASE
                   WHEN b.EDate IS NOT NULL AND DATE(b.EDate) < CURDATE() THEN 1
                   ELSE 0
@@ -31,19 +36,11 @@ export async function GET(req: NextRequest) {
                 END AS Is_Current
          FROM batch_mst b
          LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-         LEFT JOIN batch_slecture_master bsl
-           ON bsl.batch_id = b.Batch_Id
-          AND (bsl.deleted IS NULL OR bsl.deleted = '0' OR bsl.deleted = 0)
-          AND bsl.faculty_id = ?
-         LEFT JOIN lecture_taken_master ltm
-           ON ltm.Batch_Id = b.Batch_Id
-          AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-          AND ltm.Faculty_Id = ?
-         WHERE (bsl.id IS NOT NULL OR ltm.Take_Id IS NOT NULL)
+         WHERE ${TRAINER_BATCH_CONDITION}
            AND (b.Cancel = 0 OR b.Cancel IS NULL)
          ORDER BY Is_Closed ASC, Is_Current DESC, b.EDate DESC, b.Batch_Id DESC
          LIMIT 20`,
-        [facultyId, facultyId]
+        trainerBatchParams(facultyId)
       );
 
       const currentBatches = (batches || []).filter((b) => Number(b.Is_Closed || 0) === 0);
@@ -56,23 +53,36 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (!(await trainerCanAccessBatch(pool, facultyId, Number(batchId)))) {
+      return NextResponse.json({ error: 'This batch is not linked to you.' }, { status: 403 });
+    }
+    await ensureTrainerPlanColumns(pool);
+
     // Get planned lectures for month from Standard Lecture Plan first
     let dateFilter = '';
     const params: any[] = [batchId];
 
     if (month) {
-      dateFilter = ` AND date LIKE ?`;
+      dateFilter = ` AND s.date LIKE ?`;
       params.push(`${month}%`);
     }
 
+    // Same fields the Student Portal lecture plan shows (session, timings,
+    // topics, unit test date), plus what the trainer needs to record the day.
     const [stdLecturesRaw] = await pool.query<any[]>(
-      `SELECT id, lecture_no, subject_topic, subject, faculty_name, date,
-              starttime, endtime, duration, class_room, assignment, unit_test,
-              module, planned, status, marks,
-              lecturecontent
-       FROM batch_slecture_master
-       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL OR deleted = 0)${dateFilter}
-       ORDER BY date ASC, lecture_no ASC`,
+      `SELECT s.id, s.lecture_no, s.subject_topic, s.subject, s.faculty_id, s.faculty_name, s.date,
+              s.starttime, s.endtime, s.duration, s.class_room, s.assignment, s.unit_test,
+              u.utdate AS unit_test_date, s.session, s.lecture_status, s.covered_subtopics,
+              s.trainer_in_time, s.trainer_out_time,
+              s.module, s.planned, s.status, s.marks,
+              s.lecturecontent,
+              EXISTS (SELECT 1 FROM lecture_taken_master lt
+                      WHERE lt.Lecture_Id = s.id AND lt.Batch_Id = s.batch_id
+                        AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)) AS taken
+       FROM batch_slecture_master s
+       LEFT JOIN awt_unittesttaken u ON u.id = CAST(s.unit_test AS UNSIGNED)
+       WHERE s.batch_id = ? AND (s.deleted = '0' OR s.deleted IS NULL OR s.deleted = 0)${dateFilter}
+       ORDER BY s.date ASC, s.lecture_no ASC`,
       params
     );
 
@@ -96,7 +106,7 @@ export async function GET(req: NextRequest) {
               module, planned, status, marks,
               lecturecontent
        FROM batch_lecture_master
-       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL OR deleted = 0)${dateFilter}
+       WHERE batch_id = ? AND (deleted = '0' OR deleted IS NULL OR deleted = 0)${dateFilter.replace('s.date', 'date')}
        ORDER BY date ASC, lecture_no ASC`,
       params
     );

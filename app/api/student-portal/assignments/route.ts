@@ -12,8 +12,8 @@ import { getStudentAcademicRecords, toStudentView } from '@/lib/student-portal/a
  * empty), read marks from a column that doesn't exist (agc.Marks — the real
  * column is Marks_Given), and found the batch from student_master.Batch_Code.
  *
- * Marks are only shown once published (not built yet), so `marks` is empty and
- * `records` carries RESULT_PENDING for anything evaluated.
+ * Marks are only shown once staff publish the sheet (lib/marks-publish.ts);
+ * until then `records` carries RESULT_PENDING for anything evaluated.
  */
 export async function GET(req: NextRequest) {
   try {

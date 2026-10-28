@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
+import BatchTrainersCard from './BatchTrainersCard';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 import { WEEKDAYS, getDayRange } from '@/lib/weekdays';
 
@@ -1733,6 +1734,8 @@ export default function EditBatchPage() {
           </div>
         </div>
       </div>
+
+      <BatchTrainersCard batchId={batchId} canUpdate={canUpdate} />
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-3">
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">

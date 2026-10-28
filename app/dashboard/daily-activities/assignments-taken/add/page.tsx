@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
+import PublishToStudentsToggle from '@/components/ui/PublishToStudentsToggle';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
 
 /* ------------------------------------------------------------------ */
@@ -259,6 +260,10 @@ export default function AddAssignmentTakenPage() {
           </p>
         </div>
       </div>
+
+      {isEdit && Number(editId) > 0 && (
+        <PublishToStudentsToggle module="ASSIGNMENT" sheetId={Number(editId)} canUpdate={canUpdate} />
+      )}
 
       {loadingEdit ? (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-12 flex items-center justify-center">

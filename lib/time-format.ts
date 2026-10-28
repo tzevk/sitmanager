@@ -58,3 +58,8 @@ export function splitFirstSecondHalf<T extends { starttime?: string | null }>(
   }) || rows[1] || null;
   return { firstHalf, secondHalf };
 }
+
+/** Local YYYY-MM-DD (not UTC — early-morning IST would otherwise read as yesterday). */
+export function localIsoDate(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}

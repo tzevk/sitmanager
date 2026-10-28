@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toBatchNumber } from '@/lib/batch-display';
-import { parseTimeToMinutes, formatTimeAmPm } from '@/lib/time-format';
+import { parseTimeToMinutes, formatTimeAmPm, localIsoDate } from '@/lib/time-format';
 
 interface DashboardData {
   faculty: {
@@ -40,14 +40,22 @@ interface DashboardData {
 }
 
 interface PlannedLecture {
-  subject_topic: string;
-  subject?: string;
+  lecture_status?: string | null;
+  id: number;
+  lecture_no?: number | null;
+  subject_topic: string | null;
+  subject?: string | null;
   lecturecontent?: string | null;
-  date: string;
-  starttime?: string;
-  endtime?: string;
-  assignment?: number;
-  unit_test?: number;
+  date: string | null;
+  starttime?: string | null;
+  endtime?: string | null;
+  session?: string | null;
+  class_room?: string | null;
+  assignment?: string | number | null;
+  unit_test?: string | number | null;
+  trainer_in_time?: string | null;
+  trainer_out_time?: string | null;
+  taken?: number | boolean;
 }
 
 interface BatchDetails {
@@ -70,6 +78,21 @@ function defaultActivityFor(l: PlannedLecture | null): ActivityType {
   if (Number(l.assignment || 0) > 0) return 'assignment';
   return 'lecture';
 }
+
+function lectureTitle(l: PlannedLecture) {
+  return String(l.lecturecontent || l.subject || '').trim()
+    || subtopicOptions(l)[0]
+    || `Lecture ${l.lecture_no ?? ''}`.trim();
+}
+
+/** "Session 1 · 10:00 am – 1:00 pm" */
+function lectureWhen(l: PlannedLecture) {
+  const time = l.starttime ? `${formatTimeAmPm(l.starttime)}${l.endtime ? ` – ${formatTimeAmPm(l.endtime)}` : ''}` : '';
+  return [l.session ? `Session ${l.session}` : '', time].filter(Boolean).join(' · ') || 'Time not set';
+}
+
+const byStartTime = (a: PlannedLecture, b: PlannedLecture) =>
+  (parseTimeToMinutes(a.starttime || null) ?? 9999) - (parseTimeToMinutes(b.starttime || null) ?? 9999);
 
 function formatHmFromMinutes(totalMinutes: number) {
   const m = Math.max(0, Math.round(totalMinutes));
@@ -94,12 +117,6 @@ function formatDate(raw: string) {
   return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function monthKey(d: Date) {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  return `${yyyy}-${mm}`;
-}
-
 /** subject_topic is stored as a newline-separated list of individual sub-topic lines. */
 function subtopicOptions(l: PlannedLecture | null): string[] {
   if (!l?.subject_topic) return [];
@@ -117,17 +134,16 @@ export default function TrainerDashboardPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
-  const [firstHalfTopic, setFirstHalfTopic] = useState('');
-  const [firstHalfActivity, setFirstHalfActivity] = useState<ActivityType>('lecture');
-  const [secondHalfTopic, setSecondHalfTopic] = useState('');
-  const [secondHalfActivity, setSecondHalfActivity] = useState<ActivityType>('lecture');
   const [breakMinutes, setBreakMinutes] = useState<number | ''>('');
 
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(null);
 
+  // Start My Day: the Lecture Plan rows the trainer picks, each with the
+  // sub-topic positions (in subject_topic) they will cover.
   const [startModalOpen, setStartModalOpen] = useState(false);
-  const [firstHalfSubtopics, setFirstHalfSubtopics] = useState<string[]>([]);
-  const [secondHalfSubtopics, setSecondHalfSubtopics] = useState<string[]>([]);
+  const [picked, setPicked] = useState<Record<number, number[]>>({});
+  // End My Day: what each started session turned out to be.
+  const [endActivities, setEndActivities] = useState<Record<number, ActivityType>>({});
 
   const [batchDetailsOpen, setBatchDetailsOpen] = useState(false);
   const [batchDetailsLoading, setBatchDetailsLoading] = useState(false);
@@ -154,26 +170,30 @@ export default function TrainerDashboardPage() {
 
   const currentBatch = batches.find(b => b.Batch_Id === selectedBatchId) ?? batches[0] ?? null;
 
-  // Pull the standard lecture plan so we can default each half's topic to what's scheduled for today.
-  useEffect(() => {
-    if (!currentBatch?.Batch_Id) { setPlannedLectures([]); return; }
-    const m = monthKey(new Date());
-    fetch(`/api/trainer-portal/lectures?batchId=${currentBatch.Batch_Id}&month=${m}`)
-      .then(r => r.json())
-      .then(d => setPlannedLectures(Array.isArray(d?.lectures) ? d.lectures : []))
-      .catch(() => setPlannedLectures([]));
-  }, [currentBatch?.Batch_Id]);
+  // The batch's whole lecture plan — the same rows the Student Portal shows.
+  const loadPlan = useCallback(async (batchId: number | undefined) => {
+    if (!batchId) { setPlannedLectures([]); return; }
+    try {
+      const r = await fetch(`/api/trainer-portal/lectures?batchId=${batchId}`);
+      const d = await r.json();
+      setPlannedLectures(Array.isArray(d?.lectures) ? d.lectures : []);
+    } catch {
+      setPlannedLectures([]);
+    }
+  }, []);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const todayLectures = plannedLectures.filter(l => String(l.date || '').slice(0, 10) === todayIso);
-  const firstHalfPlan = todayLectures.find(l => {
-    const mins = parseTimeToMinutes(l.starttime || null);
-    return mins != null ? mins < 13 * 60 : true;
-  }) || todayLectures[0] || null;
-  const secondHalfPlan = todayLectures.find(l => {
-    const mins = parseTimeToMinutes(l.starttime || null);
-    return mins != null ? mins >= 13 * 60 : false;
-  }) || todayLectures[1] || null;
+  useEffect(() => { loadPlan(currentBatch?.Batch_Id); }, [currentBatch?.Batch_Id, loadPlan]);
+
+  const todayIso = localIsoDate();
+  const todayLectures = plannedLectures
+    .filter(l => String(l.date || '').slice(0, 10) === todayIso && String(l.lecture_status || '') !== 'cancelled')
+    .sort(byStartTime);
+  // Lectures a trainer may pick instead of today's: not yet taken, nearest first.
+  const otherLectures = plannedLectures
+    .filter(l => !todayLectures.includes(l) && !Number(l.taken))
+    .sort((a, b) => String(a.date || '9999').localeCompare(String(b.date || '9999')));
+  // Sessions started today and not yet ended.
+  const startedLectures = plannedLectures.filter(l => l.trainer_in_time && !l.trainer_out_time).sort(byStartTime);
 
   if (loading) {
     return (
@@ -206,9 +226,25 @@ export default function TrainerDashboardPage() {
 
   function openStartDayModal() {
     setSaveMsg('');
-    setFirstHalfSubtopics(subtopicOptions(firstHalfPlan));
-    setSecondHalfSubtopics(subtopicOptions(secondHalfPlan));
+    // Today's sessions are pre-selected with all their sub-topics ticked.
+    setPicked(Object.fromEntries(todayLectures.map(l => [l.id, subtopicOptions(l).map((_, i) => i)])));
     setStartModalOpen(true);
+  }
+
+  function togglePicked(l: PlannedLecture) {
+    setPicked(prev => {
+      const next = { ...prev };
+      if (next[l.id]) delete next[l.id];
+      else next[l.id] = subtopicOptions(l).map((_, i) => i);
+      return next;
+    });
+  }
+
+  function toggleSubtopic(lectureId: number, idx: number) {
+    setPicked(prev => {
+      const cur = prev[lectureId] ?? [];
+      return { ...prev, [lectureId]: cur.includes(idx) ? cur.filter(i => i !== idx) : [...cur, idx] };
+    });
   }
 
   async function confirmStartDay() {
@@ -221,23 +257,12 @@ export default function TrainerDashboardPage() {
         body: JSON.stringify({
           action: 'check_in',
           batchId: currentBatch?.Batch_Id ?? null,
-          sessions: {
-            first_half: {
-              subject: String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '').trim() || null,
-              subtopics: firstHalfSubtopics.join('\n') || null,
-              activityType: defaultActivityFor(firstHalfPlan),
-            },
-            second_half: {
-              subject: String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '').trim() || null,
-              subtopics: secondHalfSubtopics.join('\n') || null,
-              activityType: defaultActivityFor(secondHalfPlan),
-            },
-          },
+          lectures: Object.entries(picked).map(([id, subtopics]) => ({ id: Number(id), subtopics })),
         }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setSaveMsg(d?.error || 'Something went wrong. Please try again.'); return; }
-      await refreshData();
+      await Promise.all([refreshData(), loadPlan(currentBatch?.Batch_Id)]);
       setStartModalOpen(false);
     } catch {
       setSaveMsg('Network error. Please try again.');
@@ -263,12 +288,12 @@ export default function TrainerDashboardPage() {
     }
   }
 
+  // The sessions picked at Start My Day (or, failing that, today's plan).
+  const endLectures = startedLectures.length ? startedLectures : todayLectures;
+
   function openEndDayModal() {
     setSaveMsg('');
-    setFirstHalfTopic(String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '').trim());
-    setFirstHalfActivity(defaultActivityFor(firstHalfPlan));
-    setSecondHalfTopic(String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '').trim());
-    setSecondHalfActivity(defaultActivityFor(secondHalfPlan));
+    setEndActivities(Object.fromEntries(endLectures.map(l => [l.id, defaultActivityFor(l)])));
     const defaultBreak = data?.faculty?.breakTimeMinutes;
     setBreakMinutes(Number.isFinite(Number(defaultBreak)) && defaultBreak != null ? Number(defaultBreak) : '');
     setModalOpen(true);
@@ -285,15 +310,12 @@ export default function TrainerDashboardPage() {
           action: 'check_out',
           batchId: currentBatch?.Batch_Id ?? null,
           breakMinutes: breakMinutes === '' ? null : Number(breakMinutes),
-          sessions: {
-            first_half: { topic: firstHalfTopic.trim() || null, activityType: firstHalfActivity },
-            second_half: { topic: secondHalfTopic.trim() || null, activityType: secondHalfActivity },
-          },
+          lectures: endLectures.map(l => ({ id: l.id, activityType: endActivities[l.id] ?? defaultActivityFor(l) })),
         }),
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setSaveMsg(d?.error || 'Something went wrong. Please try again.'); return; }
-      await refreshData();
+      await Promise.all([refreshData(), loadPlan(currentBatch?.Batch_Id)]);
       setModalOpen(false);
     } catch {
       setSaveMsg('Network error. Please try again.');
@@ -342,24 +364,31 @@ export default function TrainerDashboardPage() {
         )}
       </div>
 
-      {/* Today's scheduled lecture, read-only, straight from the standard lecture plan */}
-      {(firstHalfPlan || secondHalfPlan) && (
+      {/* Today's sessions, straight from the batch's lecture plan */}
+      {currentBatch && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
-          <h2 className="text-base font-semibold text-gray-500 mb-3">Today&rsquo;s Lecture</h2>
-          <div className="space-y-2">
-            <div>
-              <p className="text-sm text-gray-500">First Half</p>
-              <p className="text-lg font-semibold text-gray-800">
-                {String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || '—')}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">Second Half</p>
-              <p className="text-lg font-semibold text-gray-800">
-                {String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || '—')}
-              </p>
-            </div>
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 className="text-lg font-bold text-gray-800">Today&rsquo;s Sessions</h2>
+            <p className="text-sm text-gray-500 truncate">{toBatchNumber(currentBatch.Batch_code)}</p>
           </div>
+          {todayLectures.length === 0 ? (
+            <p className="text-base text-gray-400">No session planned for today in this batch.</p>
+          ) : (
+            <div className="space-y-3">
+              {todayLectures.map(l => (
+                <div key={l.id} className="rounded-lg border border-gray-200 px-4 py-3">
+                  <p className="text-sm font-semibold text-[#2E3093]">{lectureWhen(l)}</p>
+                  <p className="text-base font-semibold text-gray-800 mt-0.5">{lectureTitle(l)}</p>
+                  {subtopicOptions(l).length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {subtopicOptions(l).map((t, i) => <li key={i} className="text-sm text-gray-600">• {t}</li>)}
+                    </ul>
+                  )}
+                  {l.class_room && <p className="text-sm text-gray-400 mt-1">Room {l.class_room}</p>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -442,8 +471,8 @@ export default function TrainerDashboardPage() {
         )}
       </div>
 
-      {/* Start-my-day modal: pick the batch, subject is auto-filled from the Standard Lecture Plan,
-          sub-topics are a checklist for each half. */}
+      {/* Start-my-day modal: pick the batch, then the session(s) from its lecture plan
+          and the sub-topics to cover. */}
       {startModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => !saving && setStartModalOpen(false)}>
           <div className="bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
@@ -476,69 +505,64 @@ export default function TrainerDashboardPage() {
                 </div>
               )}
 
-              {(firstHalfPlan || secondHalfPlan) && (
-                <p className="text-sm text-gray-500">
-                  Scheduled: {formatTimeAmPm(firstHalfPlan?.starttime)} – {formatTimeAmPm(secondHalfPlan?.endtime ?? secondHalfPlan?.starttime)}
-                </p>
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-base font-semibold text-gray-700">Which session(s) are you taking today?</p>
+                <p className="text-sm text-gray-400 mt-0.5">Tick the session, then the topics you will cover.</p>
+              </div>
+
+              {[...todayLectures, ...otherLectures.filter(l => picked[l.id] && !todayLectures.includes(l))].map(l => {
+                const isPicked = Boolean(picked[l.id]);
+                const isToday = todayLectures.includes(l);
+                return (
+                  <div key={l.id} className={`rounded-lg border-2 ${isPicked ? 'border-[#2E3093] bg-[#2E3093]/[0.03]' : 'border-gray-200'}`}>
+                    <label className="flex items-start gap-3 px-4 py-3 cursor-pointer">
+                      <input type="checkbox" checked={isPicked} onChange={() => togglePicked(l)} className="mt-1 w-5 h-5 accent-[#2E3093]" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#2E3093]">
+                          {lectureWhen(l)}{!isToday && l.date ? ` · planned ${formatDate(l.date)}` : ''}
+                        </p>
+                        <p className="text-base font-semibold text-gray-800">{lectureTitle(l)}</p>
+                      </div>
+                    </label>
+                    {isPicked && subtopicOptions(l).length > 0 && (
+                      <div className="px-4 pb-3 pl-12 space-y-2">
+                        {subtopicOptions(l).map((topic, idx) => (
+                          <label key={idx} className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={(picked[l.id] ?? []).includes(idx)}
+                              onChange={() => toggleSubtopic(l.id, idx)}
+                              className="mt-0.5 w-4 h-4 accent-[#2E3093]"
+                            />
+                            <span className="text-sm text-gray-700">{topic}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {todayLectures.length === 0 && (
+                <p className="text-sm text-gray-500">No session is planned for today. Pick the lecture you are taking:</p>
               )}
-
-              {/* First Half */}
-              <div className="border-t border-gray-100 pt-4">
-                <label className="block text-base font-semibold text-gray-700 mb-2">First Half</label>
-                <p className="text-sm text-gray-400 mb-1">Subject</p>
-                <p className="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-base text-gray-800 font-medium">
-                  {String(firstHalfPlan?.lecturecontent || firstHalfPlan?.subject || 'Not scheduled')}
-                </p>
-                {subtopicOptions(firstHalfPlan).length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-400 mb-1.5">Sub-Topics</p>
-                    <div className="space-y-2">
-                      {subtopicOptions(firstHalfPlan).map((topic, idx) => (
-                        <label key={idx} className="flex items-start gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={firstHalfSubtopics.includes(topic)}
-                            onChange={e => setFirstHalfSubtopics(prev =>
-                              e.target.checked ? [...prev, topic] : prev.filter(t => t !== topic)
-                            )}
-                            className="mt-1 w-4 h-4 accent-[#2E3093]"
-                          />
-                          <span className="text-sm text-gray-700">{topic}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Second Half */}
-              <div className="border-t border-gray-100 pt-4">
-                <label className="block text-base font-semibold text-gray-700 mb-2">Second Half</label>
-                <p className="text-sm text-gray-400 mb-1">Subject</p>
-                <p className="px-4 py-3 rounded-lg bg-gray-50 border border-gray-200 text-base text-gray-800 font-medium">
-                  {String(secondHalfPlan?.lecturecontent || secondHalfPlan?.subject || 'Not scheduled')}
-                </p>
-                {subtopicOptions(secondHalfPlan).length > 0 && (
-                  <div className="mt-3">
-                    <p className="text-sm text-gray-400 mb-1.5">Sub-Topics</p>
-                    <div className="space-y-2">
-                      {subtopicOptions(secondHalfPlan).map((topic, idx) => (
-                        <label key={idx} className="flex items-start gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={secondHalfSubtopics.includes(topic)}
-                            onChange={e => setSecondHalfSubtopics(prev =>
-                              e.target.checked ? [...prev, topic] : prev.filter(t => t !== topic)
-                            )}
-                            className="mt-1 w-4 h-4 accent-[#2E3093]"
-                          />
-                          <span className="text-sm text-gray-700">{topic}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              {otherLectures.length > 0 && (
+                <select
+                  value=""
+                  onChange={e => {
+                    const l = otherLectures.find(x => x.id === Number(e.target.value));
+                    if (l && !picked[l.id]) togglePicked(l);
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base bg-white"
+                >
+                  <option value="">{todayLectures.length ? '+ Taking a different lecture?' : 'Choose a lecture from the plan'}</option>
+                  {otherLectures.filter(l => !picked[l.id]).map(l => (
+                    <option key={l.id} value={l.id}>
+                      {l.date ? `${formatDate(l.date)} · ` : ''}{lectureTitle(l)}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               {saveMsg && (
                 <p className="text-sm font-medium px-4 py-3 rounded-lg bg-red-50 text-red-600">{saveMsg}</p>
@@ -649,7 +673,7 @@ export default function TrainerDashboardPage() {
         </div>
       )}
 
-      {/* End-day modal: first half + second half, each with a typable lecture name and an activity type */}
+      {/* End-day modal: each session picked at Start My Day, with what it turned out to be */}
       {modalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center" onClick={() => !saving && setModalOpen(false)}>
           <div className="bg-white w-full sm:max-w-md rounded-t-xl sm:rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -660,27 +684,24 @@ export default function TrainerDashboardPage() {
               </p>
             </div>
 
-            <div className="px-6 py-4 space-y-4">
-              <div>
-                <label className="block text-base font-semibold text-gray-700 mb-2">First Half</label>
-                <input
-                  type="text"
-                  value={firstHalfTopic}
-                  onChange={e => setFirstHalfTopic(e.target.value)}
-                  placeholder="Lecture name"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-[#2E3093]"
-                  autoFocus
-                />
-                <select
-                  value={firstHalfActivity}
-                  onChange={e => setFirstHalfActivity(e.target.value as ActivityType)}
-                  className="mt-2 w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base bg-white"
-                >
-                  <option value="lecture">Lecture</option>
-                  <option value="assignment">Assignment</option>
-                  <option value="test">Test</option>
-                </select>
-              </div>
+            <div className="px-6 py-4 space-y-4 overflow-y-auto max-h-[60vh]">
+              {endLectures.length === 0 ? (
+                <p className="text-sm text-gray-500">No session was picked today.</p>
+              ) : endLectures.map(l => (
+                <div key={l.id}>
+                  <p className="text-sm font-semibold text-[#2E3093]">{lectureWhen(l)}</p>
+                  <p className="text-base font-semibold text-gray-800">{lectureTitle(l)}</p>
+                  <select
+                    value={endActivities[l.id] ?? defaultActivityFor(l)}
+                    onChange={e => setEndActivities(prev => ({ ...prev, [l.id]: e.target.value as ActivityType }))}
+                    className="mt-2 w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base bg-white"
+                  >
+                    <option value="lecture">Lecture</option>
+                    <option value="assignment">Assignment</option>
+                    <option value="test">Test</option>
+                  </select>
+                </div>
+              ))}
 
               <div>
                 <label className="block text-base font-semibold text-gray-700 mb-2">Break (minutes)</label>
@@ -693,28 +714,6 @@ export default function TrainerDashboardPage() {
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-[#2E3093]"
                 />
               </div>
-
-              <div>
-                <label className="block text-base font-semibold text-gray-700 mb-2">Second Half</label>
-                <input
-                  type="text"
-                  value={secondHalfTopic}
-                  onChange={e => setSecondHalfTopic(e.target.value)}
-                  placeholder="Lecture name"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base focus:outline-none focus:border-[#2E3093]"
-                />
-                <select
-                  value={secondHalfActivity}
-                  onChange={e => setSecondHalfActivity(e.target.value as ActivityType)}
-                  className="mt-2 w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-base bg-white"
-                >
-                  <option value="lecture">Lecture</option>
-                  <option value="assignment">Assignment</option>
-                  <option value="test">Test</option>
-                </select>
-              </div>
-
-              <p className="text-sm text-gray-400">Leave a field blank to skip that half.</p>
 
               {saveMsg && (
                 <p className="text-sm font-medium px-4 py-3 rounded-lg bg-red-50 text-red-600">{saveMsg}</p>

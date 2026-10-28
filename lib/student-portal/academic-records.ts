@@ -4,6 +4,7 @@ import { hasFinalExamAttemptColumn } from '@/lib/final-exam-attempt-schema';
 import { getAbsentAllDayByDate } from '@/lib/student-portal/academic-attendance';
 import { normalizeMark, type AcademicStatus, type AssessmentKind } from '@/lib/student-portal/academic-status';
 import type { StudentPortalContext } from '@/lib/student-portal/context';
+import { getPublishedSheetIds } from '@/lib/marks-publish';
 
 /**
  * One data contract for every individual academic record a student can see —
@@ -55,18 +56,8 @@ export interface AcademicRecord {
   disciplineDeduction: number | null;
   /** True / false when lecture attendance exists for that date, else null. */
   absentOnLectureDate: boolean | null;
-  /** Marks publishing isn't built yet (decided for a later phase) → always false. */
+  /** Staff switched "Publish to students" on for this record's sheet (lib/marks-publish.ts). */
   published: boolean;
-}
-
-/**
- * Whether students may see this record's result. Marks are only visible after
- * publication; no publishing mechanism exists yet, so nothing is published.
- * The later Academics phase replaces this with the real check.
- */
-export function isPublished(record: Pick<AcademicRecord, 'sourceModule' | 'parentId'>): boolean {
-  void record; // per-record once publishing exists
-  return false;
 }
 
 /** What a student is allowed to see: unpublished results become RESULT_PENDING
@@ -131,9 +122,7 @@ export async function getStudentAcademicRecords(
   const base = { studentId: ctx.studentId, published: false, statusConflict: false, disciplineDeduction: null, absentOnLectureDate: null };
 
   const push = (r: Omit<AcademicRecord, 'published'> & { published?: boolean }) => {
-    const rec = { ...r, published: false } as AcademicRecord;
-    rec.published = isPublished(rec);
-    records.push(rec);
+    records.push({ ...r, published: false } as AcademicRecord);
   };
 
   const fromRow = (row: any, kind: AssessmentKind) => {
@@ -309,6 +298,14 @@ export async function getStudentAcademicRecords(
         disciplineDeduction: row ? num(row.Discipline_Marks) : null,
       });
     }
+  }
+
+  // Published = staff switched the record's marks sheet on. A record with no
+  // sheet yet has nothing to publish.
+  for (const sourceModule of modules) {
+    const mineOfModule = records.filter((r) => r.sourceModule === sourceModule && r.sheetId !== null);
+    const published = await getPublishedSheetIds(pool, sourceModule, mineOfModule.map((r) => r.sheetId!));
+    for (const r of mineOfModule) r.published = published.has(r.sheetId!);
   }
 
   return records;

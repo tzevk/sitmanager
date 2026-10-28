@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getTrainerSession } from '@/app/api/trainer-portal/auth/session/route';
+import { ensureBatchTrainerTable, TRAINER_BATCH_CONDITION, trainerBatchParams } from '@/lib/batch-trainers';
 
 async function ensureBreakTimeColumn(pool: any) {
   const [cRows] = await pool.query(
@@ -94,11 +95,11 @@ export async function GET(req: NextRequest) {
     const breakTimeMinutes = Math.max(0, Math.round(Number(faculty?.BreakTimeMinutes ?? 60)));
     const hourlyRate = Number(faculty?.HourlyRate ?? 0);
 
-    // Assigned batches for this trainer with configured batch timings.
-    // Includes both planned (standard lecture plan) and already taken lectures,
-    // then auto-classifies by end date.
+    // Batches linked to this trainer (Batch Master "Trainers", see
+    // lib/batch-trainers.ts), auto-classified by start/end date.
+    await ensureBatchTrainerTable(pool);
     const [batchRows] = await pool.query<any[]>(
-      `SELECT DISTINCT b.Batch_Id, b.Batch_code, c.Course_Name, b.Category,
+      `SELECT b.Batch_Id, b.Batch_code, c.Course_Name, b.Category,
               b.SDate, b.EDate, b.No_of_Lectures, b.Timings,
               CASE
                 WHEN b.SDate IS NOT NULL AND b.EDate IS NOT NULL AND CURDATE() BETWEEN DATE(b.SDate) AND DATE(b.EDate)
@@ -112,19 +113,11 @@ export async function GET(req: NextRequest) {
               END AS Is_Closed
        FROM batch_mst b
        LEFT JOIN course_mst c ON b.Course_Id = c.Course_Id
-       LEFT JOIN batch_slecture_master bsl
-         ON bsl.batch_id = b.Batch_Id
-        AND (bsl.deleted IS NULL OR bsl.deleted = '0')
-        AND bsl.faculty_id = ?
-       LEFT JOIN lecture_taken_master ltm
-         ON ltm.Batch_Id = b.Batch_Id
-        AND (ltm.IsDelete = 0 OR ltm.IsDelete IS NULL)
-        AND ltm.Faculty_Id = ?
-       WHERE (bsl.id IS NOT NULL OR ltm.Take_Id IS NOT NULL)
+       WHERE ${TRAINER_BATCH_CONDITION}
          AND (b.Cancel = 0 OR b.Cancel IS NULL)
        ORDER BY Is_Current DESC, b.EDate DESC, b.Batch_Id DESC
        LIMIT 20`,
-      [facultyId, facultyId]
+      trainerBatchParams(facultyId)
     );
     // Only ongoing batches (today falls within the batch's start/end dates) belong on the dashboard.
     const currentBatches = (batchRows || []).filter((b) => Number(b.Is_Current || 0) === 1);
@@ -167,7 +160,7 @@ export async function GET(req: NextRequest) {
               ltm.ClassRoom, ltm.Faculty_Start, ltm.Faculty_End,
               b.Batch_code, c.Course_Name,
               (SELECT COUNT(*) FROM lecture_taken_child ltc
-               WHERE ltc.Take_Id = ltm.Take_Id AND ltc.Student_Atten = 1
+               WHERE ltc.Take_Id = ltm.Take_Id AND TRIM(ltc.Student_Atten) = 'Present'
                AND (ltc.IsDelete = 0 OR ltc.IsDelete IS NULL)) as students_present
        FROM lecture_taken_master ltm
        LEFT JOIN batch_mst b ON ltm.Batch_Id = b.Batch_Id
