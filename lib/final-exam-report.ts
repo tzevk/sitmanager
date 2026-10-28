@@ -3,41 +3,6 @@ import { getAttendanceSummary } from '@/lib/attendance-summary';
 import { isReExamSitting } from '@/lib/final-exam-attempt';
 import { ensureFinalExamAttemptColumn } from '@/lib/final-exam-attempt-schema';
 
-/* ─── Schema discovery ─────────────────────────────────────────────── */
-
-/** Returns the set of column names that actually exist in the given table. */
-async function getTableColumns(pool: any, table: string): Promise<Set<string>> {
-  try {
-    const [rows] = await pool.query(
-      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
-      [table]
-    );
-    return new Set((rows as any[]).map((r: any) => String(r.COLUMN_NAME)));
-  } catch {
-    return new Set();
-  }
-}
-
-/** Check whether a table exists at all. */
-async function tableExists(pool: any, table: string): Promise<boolean> {
-  const cols = await getTableColumns(pool, table);
-  return cols.size > 0;
-}
-
-/**
- * Find the first column whose lower-case name contains any of the candidates.
- * Returns the ORIGINAL-cased column name from the schema.
- */
-function pickCol(cols: Set<string>, candidates: string[]): string | null {
-  for (const c of candidates) {
-    for (const col of cols) {
-      if (col.toLowerCase().includes(c)) return col;
-    }
-  }
-  return null;
-}
-
 /**
  * Parse class boundaries from Passing_Criteria field in batch_mst.
  * Handles multiple formats:
@@ -177,15 +142,6 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
     return admToStudentId[rawId] ?? rawId;
   }
 
-  /* ── 3. Discover test_taken_child schema ── */
-  const ttcCols = await getTableColumns(pool, 'test_taken_child');
-  // Find student-id column: Try_Id, Student_Id, Admission_Id, student_id
-  const ttcStudentCol = pickCol(ttcCols, ['student_id', 'admission_id', 'studentid']) ?? 'Student_Id';
-  // Find marks column: Marks, Mark, Score, Obtained, marks_obtained
-  const ttcMarksCol   = pickCol(ttcCols, ['mark', 'score', 'obtain']) ?? 'Marks';
-  const ttcHasDelete  = ttcCols.has('IsDelete') || ttcCols.has('isdelete');
-  const ttcDeleteClause = ttcHasDelete ? "AND (ttc.IsDelete = 0 OR ttc.IsDelete IS NULL)" : '';
-
   /* ── 4. Unit tests for this batch ── */
   const [utRows] = await pool.query(
     `SELECT ttm.Take_Id,
@@ -204,16 +160,18 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
 
   /* ── 5. Per-student unit test marks (schema-aware) ── */
   const utMarksMap: Record<number, Record<number, number>> = {};
-  if (unitTests.length > 0 && ttcCols.size > 0) {
+  if (unitTests.length > 0) {
     try {
       const utTakeIds = unitTests.map((u: any) => u.Take_Id);
+      // Marks_Given is the mark obtained (Marks_from is the paper's max marks).
+      // ORDER BY ID: if a student has duplicate rows, the latest one wins.
       const [utChildRows] = await pool.query(
-        `SELECT ttc.Take_Id,
-                ttc.\`${ttcStudentCol}\` AS Student_Id,
-                IFNULL(ttc.\`${ttcMarksCol}\`, 0) AS Marks_Obtained
+        `SELECT ttc.Take_Id, ttc.Student_Id,
+                IFNULL(ttc.Marks_Given, 0) AS Marks_Obtained
          FROM test_taken_child ttc
          WHERE ttc.Take_Id IN (${utTakeIds.map(() => '?').join(',')})
-           ${ttcDeleteClause}`,
+           AND (ttc.IsDelete = 0 OR ttc.IsDelete IS NULL)
+         ORDER BY ttc.ID`,
         utTakeIds
       );
       for (const r of utChildRows as any[]) {
@@ -253,7 +211,8 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
                 IFNULL(agc.Marks_Given, 0) AS Marks_Obtained
          FROM assignment_given_child agc
          WHERE agc.Given_Id IN (${givenIds.map(() => '?').join(',')})
-           AND (agc.IsDelete = 0 OR agc.IsDelete IS NULL)`,
+           AND (agc.IsDelete = 0 OR agc.IsDelete IS NULL)
+         ORDER BY agc.ID`,
         givenIds
       );
       for (const r of assignChildRows as any[]) {
@@ -293,42 +252,29 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
   );
   const finalExams = feRows as any[];
 
-  /* ── 9. Discover final exam child table (may be named differently) ── */
+  /* ── 9. Per-student final exam marks ──
+   * exam_taken_child is where Final Exam Taken saves marks. Marks_Given is the
+   * mark obtained (Marks_from is the paper's max marks); latest row wins. */
   const feMarksMap: Record<number, Record<number, number>> = {};
   if (finalExams.length > 0) {
-    // Try known table names in order
-    const candidateTables = ['final_exam_child', 'final_exam_taken_child', 's_exam_taken_child', 'exam_taken_child'];
-    let feChildTable: string | null = null;
-    for (const t of candidateTables) {
-      if (await tableExists(pool, t)) { feChildTable = t; break; }
-    }
-
-    if (feChildTable) {
-      try {
-        const feCols = await getTableColumns(pool, feChildTable);
-        const feStudentCol = pickCol(feCols, ['student_id', 'admission_id', 'studentid']) ?? 'Student_Id';
-        const feMarksCol   = pickCol(feCols, ['mark', 'score', 'obtain']) ?? 'Marks';
-        const feHasDelete  = feCols.has('IsDelete') || feCols.has('isdelete');
-        const feDeleteClause = feHasDelete ? `AND (fec.IsDelete = 0 OR fec.IsDelete IS NULL)` : '';
-
-        const feTakeIds = finalExams.map((f: any) => f.Take_Id);
-        const [feChildRows] = await pool.query(
-          `SELECT fec.Take_Id,
-                  fec.\`${feStudentCol}\` AS Student_Id,
-                  IFNULL(fec.\`${feMarksCol}\`, 0) AS Marks_Obtained
-           FROM \`${feChildTable}\` fec
-           WHERE fec.Take_Id IN (${feTakeIds.map(() => '?').join(',')})
-             ${feDeleteClause}`,
-          feTakeIds
-        );
-        for (const r of feChildRows as any[]) {
-          const sid = resolveStudentId(Number(r.Student_Id));
-          if (!feMarksMap[sid]) feMarksMap[sid] = {};
-          feMarksMap[sid][r.Take_Id] = Number(r.Marks_Obtained) || 0;
-        }
-      } catch (e) {
-        console.warn(`${feChildTable} query failed:`, (e as any).message);
+    try {
+      const feTakeIds = finalExams.map((f: any) => f.Take_Id);
+      const [feChildRows] = await pool.query(
+        `SELECT fec.Take_Id, fec.Student_Id,
+                IFNULL(fec.Marks_Given, 0) AS Marks_Obtained
+         FROM exam_taken_child fec
+         WHERE fec.Take_Id IN (${feTakeIds.map(() => '?').join(',')})
+           AND (fec.IsDelete = 0 OR fec.IsDelete IS NULL)
+         ORDER BY fec.ID`,
+        feTakeIds
+      );
+      for (const r of feChildRows as any[]) {
+        const sid = resolveStudentId(Number(r.Student_Id));
+        if (!feMarksMap[sid]) feMarksMap[sid] = {};
+        feMarksMap[sid][r.Take_Id] = Number(r.Marks_Obtained) || 0;
       }
+    } catch (e) {
+      console.warn('exam_taken_child query failed:', (e as any).message);
     }
   }
 
@@ -354,7 +300,8 @@ export async function buildFinalExamReport(pool: any, batchId: number, studentId
                 IFNULL(Discipline_Marks, 0) AS Discipline_Marks
          FROM viva_moc_child
          WHERE viva_id IN (${vivaIds.map(() => '?').join(',')})
-           AND (IsDelete = 0 OR IsDelete IS NULL)`,
+           AND (IsDelete = 0 OR IsDelete IS NULL)
+         ORDER BY id`,
         vivaIds
       );
       for (const r of vivaChildRows as any[]) {
