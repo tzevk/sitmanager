@@ -32,6 +32,61 @@ async function getBatchInfo(pool: any, batchId: number) {
   return (rows as any[])[0] || null;
 }
 
+type BatchRollRow = { Admission_Id: number; Roll_No: string; Student_Name: string; Listed: boolean };
+
+// Every active (not deleted, not cancelled) admission in the batch, locked, in
+// admission order. Listed = the student also appears on the page (student
+// record not deleted). Duplicate checks must cover all of them, because the
+// "Same roll number" tag counts all of them.
+async function lockBatchRollRows(conn: any, batchId: number): Promise<BatchRollRow[]> {
+  const [rows] = await conn.query(
+    `SELECT
+       am.Admission_Id,
+       COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
+       COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', am.Student_Id)) AS Student_Name,
+       CASE WHEN s.Student_Id IS NOT NULL AND (s.IsDelete = 0 OR s.IsDelete IS NULL) THEN 1 ELSE 0 END AS Listed
+     FROM admission_master am
+     LEFT JOIN student_master s ON s.Student_Id = am.Student_Id
+     WHERE am.Batch_Id = ?
+       AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
+       AND (am.Cancel = 0 OR am.Cancel IS NULL)
+     ORDER BY am.Admission_Id ASC
+     FOR UPDATE`,
+    [batchId]
+  );
+  return (rows as any[]).map((r) => ({
+    Admission_Id: Number(r.Admission_Id),
+    Roll_No: String(r.Roll_No || '').trim(),
+    Student_Name: String(r.Student_Name || ''),
+    Listed: Number(r.Listed) === 1,
+  }));
+}
+
+// Serials (the last 4 digits) of roll numbers in this batch's format.
+function reservedSerials(rows: BatchRollRow[], prefix: string): Set<number> {
+  const serials = new Set<number>();
+  for (const r of rows) {
+    if (r.Roll_No.startsWith(prefix) && /^\d{4}$/.test(r.Roll_No.slice(prefix.length))) {
+      serials.add(Number(r.Roll_No.slice(prefix.length)));
+    }
+  }
+  return serials;
+}
+
+// Gives each row the next serial from `start` that isn't reserved, in order.
+async function allotSerials(conn: any, batchId: number, prefix: string, rows: BatchRollRow[], reserved: Set<number>, start: number) {
+  let serial = start;
+  for (const row of rows) {
+    while (reserved.has(serial)) serial += 1;
+    await conn.query(
+      `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
+      [buildRollNumber(prefix, serial), row.Admission_Id, batchId]
+    );
+    reserved.add(serial);
+    serial += 1;
+  }
+}
+
 async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: number, includeHidden = false) {
   const admissionDeleteCondition = includeHidden ? '(am.IsDelete = 0 OR am.IsDelete IS NULL OR am.IsDelete = 1)' : '(am.IsDelete = 0 OR am.IsDelete IS NULL)';
   const [rows] = await pool.query<any[]>(
@@ -215,28 +270,16 @@ export async function PATCH(req: NextRequest) {
     // Roll numbers are assigned once at admission grant (lib/roll-number.ts),
     // appended after the batch's highest serial — so late admissions end up
     // out of name order, and stray/duplicate numbers can creep in. This is the
-    // explicit, user-confirmed reset: sort every active student in the batch
+    // explicit, user-confirmed reset: sort every listed student in the batch
     // A–Z and renumber them 0001..N, overwriting existing roll numbers.
     if (action === 'reorder-roll-numbers') {
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
 
-        const [admissions] = await conn.query<any[]>(
-          `SELECT
-             am.Admission_Id,
-             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
-           FROM admission_master am
-           JOIN student_master s ON s.Student_Id = am.Student_Id
-           WHERE am.Batch_Id = ?
-             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-             AND (am.Cancel = 0 OR am.Cancel IS NULL)
-             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-           FOR UPDATE`,
-          [bid]
-        );
-
-        if (admissions.length === 0) {
+        const admissions = await lockBatchRollRows(conn, bid);
+        const listed = admissions.filter((a) => a.Listed);
+        if (listed.length === 0) {
           await conn.rollback();
           return NextResponse.json({ success: false, error: 'No students found in this batch.' }, { status: 400 });
         }
@@ -252,21 +295,17 @@ export async function PATCH(req: NextRequest) {
         // and stray/double spaces don't affect the order, whatever the column
         // collation is. Admission_Id breaks ties between identical names.
         const normalize = (name: unknown) => String(name || '').trim().replace(/\s+/g, ' ');
-        admissions.sort((a, b) =>
+        listed.sort((a, b) =>
           normalize(a.Student_Name).localeCompare(normalize(b.Student_Name), 'en', { sensitivity: 'base', numeric: true })
           || Number(a.Admission_Id) - Number(b.Admission_Id)
         );
 
-        for (let i = 0; i < admissions.length; i++) {
-          await conn.query(
-            `UPDATE admission_master SET Roll_No = ? WHERE Admission_Id = ? AND Batch_Id = ?`,
-            [buildRollNumber(prefix, i + 1), admissions[i].Admission_Id, bid]
-          );
-        }
+        const reserved = reservedSerials(admissions.filter((a) => !a.Listed), prefix);
+        await allotSerials(conn, bid, prefix, listed, reserved, 1);
 
         await conn.commit();
         const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
-        return NextResponse.json({ success: true, rows, updated: admissions.length });
+        return NextResponse.json({ success: true, rows, updated: listed.length });
       } catch (err) {
         await conn.rollback();
         throw err;
@@ -280,21 +319,7 @@ export async function PATCH(req: NextRequest) {
       try {
         await conn.beginTransaction();
 
-        const [admissions] = await conn.query<any[]>(
-          `SELECT
-             am.Admission_Id,
-             COALESCE(TRIM(CAST(am.Roll_No AS CHAR)), '') AS Roll_No,
-             COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name
-           FROM admission_master am
-           JOIN student_master s ON s.Student_Id = am.Student_Id
-           WHERE am.Batch_Id = ?
-             AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
-             AND (am.Cancel = 0 OR am.Cancel IS NULL)
-             AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
-           ORDER BY am.Admission_Id ASC
-           FOR UPDATE`,
-          [bid]
-        );
+        const admissions = await lockBatchRollRows(conn, bid);
 
         const batch = await getBatchInfo(conn, bid);
         if (!batch) {
@@ -303,63 +328,41 @@ export async function PATCH(req: NextRequest) {
         }
         const prefix = rollNumberPrefix(batch.Batch_code, batch.SDate);
 
-        // Derive the next serial from existing roll numbers under this
-        // batch's own prefix, rather than requiring a manually-allotted seed
-        // — any correctly-formatted roll number already present anchors it.
-        const usedSerials = new Set<number>();
-        let maxSerial = 0;
-
-        for (const admission of admissions) {
-          const currentRoll = String(admission.Roll_No || '').trim();
-          if (!currentRoll) continue;
-          if (currentRoll.startsWith(prefix) && /^\d{4}$/.test(currentRoll.slice(prefix.length))) {
-            const serial = Number(currentRoll.slice(prefix.length));
-            usedSerials.add(serial);
-            if (serial > maxSerial) maxSerial = serial;
-          }
-        }
-
-        // Duplicates: within each group sharing a roll number, the earliest
-        // admission (lowest Admission_Id — rows are already in that order)
-        // keeps it; every later one is re-allotted a fresh number below.
-        const seenRolls = new Set<string>();
-        const needsNumber: any[] = [];
+        const needsNumber: BatchRollRow[] = [];
         let duplicatesFixed = 0;
-        // regenerateAll: user-confirmed fresh allotment of the whole batch in
-        // admission order (0001..N), overwriting every existing roll number.
+        let reserved: Set<number>;
+
         if (regenerateAll) {
-          usedSerials.clear();
-          maxSerial = 0;
-          needsNumber.push(...admissions);
-        }
-        for (const admission of regenerateAll ? [] : admissions) {
-          const currentRoll = String(admission.Roll_No || '').trim();
-          if (!currentRoll) { needsNumber.push(admission); continue; }
-          if (seenRolls.has(currentRoll)) { needsNumber.push(admission); duplicatesFixed += 1; continue; }
-          seenRolls.add(currentRoll);
+          // User-confirmed fresh allotment of every listed student in
+          // admission order (0001..N), overwriting existing roll numbers —
+          // skipping any number still held by an unlisted active admission.
+          needsNumber.push(...admissions.filter((a) => a.Listed));
+          reserved = reservedSerials(admissions.filter((a) => !a.Listed), prefix);
+        } else {
+          // Duplicates are judged across every active admission in the batch —
+          // the same set the "Same roll number xN" tag counts, including
+          // admissions whose student record was deleted (not listed on the
+          // page). In each group the earliest admission (lowest Admission_Id;
+          // rows are in that order) keeps the number and every later one is
+          // re-allotted. Blank roll numbers are filled for listed students.
+          const seenRolls = new Set<string>();
+          for (const admission of admissions) {
+            const currentRoll = admission.Roll_No;
+            if (!currentRoll) { if (admission.Listed) needsNumber.push(admission); continue; }
+            if (seenRolls.has(currentRoll)) { needsNumber.push(admission); duplicatesFixed += 1; continue; }
+            seenRolls.add(currentRoll);
+          }
+          reserved = reservedSerials(admissions, prefix);
         }
 
-        let nextSerial = maxSerial + 1;
-        let updated = 0;
-        for (const admission of needsNumber) {
-          while (usedSerials.has(nextSerial)) nextSerial += 1;
-          const nextRollNo = buildRollNumber(prefix, nextSerial);
-
-          await conn.query(
-            `UPDATE admission_master
-             SET Roll_No = ?
-             WHERE Admission_Id = ?
-               AND Batch_Id = ?`,
-            [nextRollNo, admission.Admission_Id, bid]
-          );
-          usedSerials.add(nextSerial);
-          nextSerial += 1;
-          updated += 1;
-        }
+        // New numbers continue after the highest serial already in use, so
+        // nobody else's roll number is reused.
+        const start = regenerateAll ? 1 : Math.max(0, ...reserved) + 1;
+        await allotSerials(conn, bid, prefix, needsNumber, reserved, start);
 
         await conn.commit();
         const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
-        return NextResponse.json({ success: true, rows, updated, duplicatesFixed });
+        return NextResponse.json({ success: true, rows, updated: needsNumber.length, duplicatesFixed });
       } catch (err) {
         await conn.rollback();
         throw err;

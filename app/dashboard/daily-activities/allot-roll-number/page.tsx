@@ -121,16 +121,18 @@ export default function AllotRollNumberPage() {
     [batches, batchId]
   );
   const blankRollCount = rows.filter((row) => !String(row.Roll_No || '').trim()).length;
-  // Rows that will get a new number: every copy of a duplicated roll number
-  // except the earliest admission's (same rule the API applies).
+  // Admissions that will get a new number: every copy of a duplicated roll
+  // number except the earliest. Taken from the server's Roll_No_Duplicate_Count
+  // (one group per roll number) so copies held by admissions not listed here
+  // are counted too — same scope the API fixes.
   const duplicateRollCount = useMemo(() => {
-    const seen = new Set<string>();
-    let count = 0;
-    for (const row of [...rows].sort((a, b) => a.Admission_Id - b.Admission_Id)) {
+    const groups = new Map<string, number>();
+    for (const row of rows) {
       const roll = String(row.Roll_No || '').trim();
-      if (!roll || Number(row.Is_Hidden) === 1) continue;
-      if (seen.has(roll)) count += 1; else seen.add(roll);
+      if (roll && Number(row.Roll_No_Duplicate_Count) > 1) groups.set(roll, Number(row.Roll_No_Duplicate_Count));
     }
+    let count = 0;
+    for (const n of groups.values()) count += n - 1;
     return count;
   }, [rows]);
   const autoGenerateCount = blankRollCount + duplicateRollCount;
