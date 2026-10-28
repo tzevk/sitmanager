@@ -284,3 +284,7 @@ body {
     right: 0;
   }
 }
+/* Marks entry pages: plain number boxes, no up/down arrows */
+.no-spinner input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+.no-spinner input[type="number"]::-webkit-outer-spin-button,
+.no-spinner input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }

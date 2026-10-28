@@ -235,7 +235,7 @@ export default function AddAssignmentTakenPage() {
   if (!isEdit && !canCreate) return <AccessDenied message="You do not have permission to create assignments." />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 no-spinner">
 
       {/* ──── Page Header ──── */}
       <div className="flex items-center gap-3">

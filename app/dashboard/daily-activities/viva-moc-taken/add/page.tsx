@@ -188,7 +188,7 @@ export default function AddVivaMocTakenPage() {
   if (!isEdit && !canCreate) return <AccessDenied message="You do not have permission to create Viva/MOC records." />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 no-spinner">
 
       {/* ──── Page Header ──── */}
       <div className="flex items-center gap-3">

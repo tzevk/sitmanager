@@ -238,7 +238,7 @@ export default function AddUnitTestTakenPage() {
   if (!isEdit && !canCreate) return <AccessDenied message="You do not have permission to create unit tests." />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 no-spinner">
 
       {/* ──── Page Header ──── */}
       <div className="flex items-center gap-3">
