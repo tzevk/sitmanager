@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { AuthBackdrop, trackCardGlow } from '@/components/ui/AuthBackdrop';
 
 export default function StudentSigninPage() {
   const router = useRouter();
@@ -40,8 +41,8 @@ export default function StudentSigninPage() {
   if (splash) {
     const initials = splash.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#2E3093] px-6">
-        <div className="flex flex-col items-center gap-6 text-center" style={{ animation: 'fadeUp 0.4s ease both' }}>
+      <AuthBackdrop className="min-h-screen flex flex-col items-center justify-center bg-[#2E3093] px-6">
+        <div className="relative flex flex-col items-center gap-6 text-center" style={{ animation: 'fadeUp 0.4s ease both' }}>
           <div className="w-24 h-24 rounded-2xl bg-[#FAE452] flex items-center justify-center">
             <span className="text-3xl font-black text-[#2E3093]">{initials}</span>
           </div>
@@ -57,7 +58,7 @@ export default function StudentSigninPage() {
           </button>
         </div>
         <style>{`@keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }`}</style>
-      </div>
+      </AuthBackdrop>
     );
   }
 
@@ -65,11 +66,11 @@ export default function StudentSigninPage() {
     // Centered phone-width column on every screen size (the portal layout no
     // longer imposes one).
     <div className="min-h-screen bg-[#2E3093] flex justify-center">
-    <div className="w-full max-w-[430px] min-h-screen flex flex-col bg-[#2E3093]">
+    <AuthBackdrop className="w-full max-w-[430px] min-h-screen flex flex-col bg-gradient-to-b from-[#2E3093] via-[#2E3093] to-[#2A6BB5]">
 
       {/* Top — branding */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pt-14 pb-10 gap-5">
-        <div className="bg-white rounded-2xl p-4 w-20 h-20 flex items-center justify-center">
+      <div className="relative flex-1 flex flex-col items-center justify-center px-6 pt-14 pb-10 gap-5 auth-rise">
+        <div className="bg-white rounded-2xl p-4 w-20 h-20 flex items-center justify-center shadow-xl shadow-black/20 ring-4 ring-white/10 transition-transform duration-300 hover:-rotate-3 hover:scale-105">
           <Image src="/sit.png" alt="SIT" width={64} height={64} className="w-16 h-16 object-contain" />
         </div>
         <div className="text-center">
@@ -79,7 +80,7 @@ export default function StudentSigninPage() {
       </div>
 
       {/* Bottom — form */}
-      <div className="bg-[#f0f2f8] rounded-t-3xl px-6 pt-8 pb-10">
+      <div onPointerMove={trackCardGlow} className="auth-card auth-paper relative rounded-t-3xl px-6 pt-8 pb-10 shadow-[0_-12px_40px_-12px_rgba(0,0,0,0.35)] auth-rise" style={{ animationDelay: '0.1s' }}>
         <h2 className="text-2xl font-black text-[#2E3093]">Sign In</h2>
         <p className="text-gray-500 text-sm mt-1 mb-7">Sign in with your roll number and password</p>
 
@@ -93,7 +94,7 @@ export default function StudentSigninPage() {
         )}
 
         <form onSubmit={handleSignIn} className="space-y-3">
-          <div>
+          <div className="auth-field">
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Roll Number</label>
             <input
               type="text"
@@ -107,7 +108,7 @@ export default function StudentSigninPage() {
             />
           </div>
 
-          <div>
+          <div className="auth-field">
             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2">Password</label>
             <div className="relative">
               <input
@@ -141,7 +142,7 @@ export default function StudentSigninPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-[#2E3093] text-white text-sm font-black active:scale-[0.98] transition-transform disabled:opacity-50 mt-1"
+            className="auth-shine w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] hover:shadow-lg hover:shadow-[#2E3093]/30 text-white text-sm font-black active:scale-[0.98] transition-transform disabled:opacity-50 mt-1"
           >
             {loading ? (
               <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -154,7 +155,7 @@ export default function StudentSigninPage() {
           <span className="text-[#2E3093] font-bold">Contact the Placement Cell</span>
         </p>
       </div>
-    </div>
+    </AuthBackdrop>
     </div>
   );
 }

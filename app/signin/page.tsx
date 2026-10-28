@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { AuthBackdrop, trackCardGlow } from '@/components/ui/AuthBackdrop';
 
 const quotes = [
   {
@@ -64,22 +65,7 @@ export default function SignIn() {
   return (
     <div className="fixed inset-0 flex overflow-hidden">
       {/* Left Side - Decorative Colored Panel */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-[#2E3093] via-[#2A6BB5] to-[#2E3093]">
-        {/* Animated Background Shapes */}
-        <div className="absolute inset-0">
-          <div className="absolute top-20 left-20 w-72 h-72 bg-[#FAE452]/20 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute bottom-20 right-20 w-96 h-96 bg-[#2A6BB5]/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-white/5 rounded-full blur-2xl"></div>
-        </div>
-        
-        {/* Decorative Grid Pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute inset-0" style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-            backgroundSize: '40px 40px'
-          }}></div>
-        </div>
-
+      <AuthBackdrop className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#2E3093] via-[#2A6BB5] to-[#2E3093]">
         {/* Content */}
         <div className="relative z-10 flex flex-col items-center justify-center w-full p-12">
           <div className="text-white/80 text-lg text-center max-w-md leading-relaxed min-h-[16rem] flex items-center justify-center">
@@ -99,13 +85,13 @@ export default function SignIn() {
             <path d="M0 120L60 105C120 90 240 60 360 45C480 30 600 30 720 37.5C840 45 960 60 1080 67.5C1200 75 1320 75 1380 75L1440 75V120H1380C1320 120 1200 120 1080 120C960 120 840 120 720 120C600 120 480 120 360 120C240 120 120 120 60 120H0Z" fill="white" fillOpacity="0.05"/>
           </svg>
         </div>
-      </div>
+      </AuthBackdrop>
 
       {/* Right Side - White with Logo & Form */}
-      <div className="w-full lg:w-1/2 h-full flex items-center justify-center p-4 sm:p-6 md:p-8 bg-white overflow-hidden">
-        <div className="w-full max-w-md max-h-full overflow-y-auto">
+      <div className="w-full lg:w-1/2 h-full flex items-center justify-center p-4 sm:p-6 md:p-8 auth-paper overflow-hidden">
+        <div className="w-full max-w-md max-h-full overflow-y-auto auth-rise">
           {/* Form Card */}
-          <div className="bg-gray-10 rounded-3xl shadow-lg border border-gray-100 p-6 pt-2 sm:p-8 sm:pt-2">
+          <div onPointerMove={trackCardGlow} className="auth-card bg-white/90 backdrop-blur-sm rounded-3xl shadow-lg border border-gray-100 p-6 pt-2 sm:p-8 sm:pt-2">
             {/* Logo inside container */}
             <div className="flex flex-col items-center">
               <div className="w-32 h-32 sm:w-40 sm:h-40 relative flex items-center justify-center">
@@ -136,7 +122,7 @@ export default function SignIn() {
 
             <form onSubmit={handleSubmit} className="space-y-3">
               {/* Username Field */}
-              <div className="group">
+              <div className="group auth-field">
                 <label 
                   htmlFor="username" 
                   className="block text-sm font-semibold text-gray-700 mb-0"
@@ -162,7 +148,7 @@ export default function SignIn() {
               </div>
 
               {/* Password Field */}
-              <div className="group">
+              <div className="group auth-field">
                 <label 
                   htmlFor="password" 
                   className="block text-sm font-semibold text-gray-700 mb-0"
@@ -227,7 +213,7 @@ export default function SignIn() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="relative w-full py-3 px-6 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg hover:shadow-[#2A6BB5]/25 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none overflow-hidden group"
+                className="auth-shine relative w-full py-3 px-6 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] text-white font-bold rounded-xl transition-all duration-300 transform hover:scale-[1.02] hover:shadow-lg hover:shadow-[#2A6BB5]/25 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none overflow-hidden group"
               >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   {isLoading ? (

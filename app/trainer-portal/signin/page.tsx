@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { AuthBackdrop, trackCardGlow } from '@/components/ui/AuthBackdrop';
 
 export default function TrainerSignIn() {
   const router = useRouter();
@@ -38,17 +39,9 @@ export default function TrainerSignIn() {
   return (
     <div className="min-h-screen flex">
       {/* Left panel — branding */}
-      <div
-        className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center relative overflow-hidden"
-        style={{ background: 'linear-gradient(135deg, #2E3093 0%, #2A6BB5 100%)' }}
-      >
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10 bg-white" />
-        <div className="absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full opacity-10 bg-white" />
-        <div className="absolute top-1/2 left-1/4 w-64 h-64 rounded-full opacity-5 bg-[#FAE452]" />
-
-        <div className="relative z-10 flex flex-col items-center text-center px-12">
-          <div className="bg-white rounded-2xl p-4 shadow-2xl mb-8">
+      <AuthBackdrop className="hidden lg:flex lg:w-1/2 flex-col items-center justify-center bg-gradient-to-br from-[#2E3093] to-[#2A6BB5]">
+        <div className="relative z-10 flex flex-col items-center text-center px-12 auth-rise">
+          <div className="bg-white rounded-2xl p-4 shadow-2xl mb-8 ring-8 ring-white/10 transition-transform duration-300 hover:-rotate-3 hover:scale-105">
             <Image src="/sit.png" alt="SIT Logo" width={100} height={100} className="w-[100px] h-[100px] object-contain" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-4">Trainer Portal</h1>
@@ -61,26 +54,25 @@ export default function TrainerSignIn() {
             {['My Schedule', 'Daily Log', 'Assignments', 'Sign In & Out'].map(f => (
               <span
                 key={f}
-                className="px-4 py-2 rounded-full text-sm font-medium"
-                style={{ background: 'rgba(250,228,82,0.2)', color: '#FAE452' }}
+                className="px-4 py-2 rounded-full text-sm font-medium text-[#FAE452] bg-[#FAE452]/20 border border-[#FAE452]/25 backdrop-blur-sm cursor-default transition-all duration-200 hover:bg-[#FAE452] hover:text-[#2E3093] hover:-translate-y-0.5"
               >
                 {f}
               </span>
             ))}
           </div>
         </div>
-      </div>
+      </AuthBackdrop>
 
       {/* Right panel — sign in form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-gray-50">
-        <div className="w-full max-w-md">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 auth-paper">
+        <div className="w-full max-w-md auth-rise">
           {/* Mobile logo */}
           <div className="lg:hidden flex flex-col items-center mb-8">
             <Image src="/sit.png" alt="SIT Logo" width={72} height={72} className="w-[72px] h-[72px] object-contain mb-3" />
             <h2 className="text-2xl font-bold" style={{ color: '#2E3093' }}>Trainer Portal</h2>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-lg p-8">
+          <div onPointerMove={trackCardGlow} className="auth-card bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-100 p-8">
             <h2 className="text-2xl font-bold text-gray-800 mb-1">Welcome Back</h2>
             <p className="text-gray-500 mb-8" suppressHydrationWarning>Sign in using your trainer name and password</p>
 
@@ -95,7 +87,7 @@ export default function TrainerSignIn() {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Name / Username */}
-              <div>
+              <div className="auth-field">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5" suppressHydrationWarning>Trainer Name</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -117,7 +109,7 @@ export default function TrainerSignIn() {
               </div>
 
               {/* Password */}
-              <div>
+              <div className="auth-field">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -155,7 +147,7 @@ export default function TrainerSignIn() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl text-white font-semibold text-lg transition-all disabled:opacity-60"
+                className="auth-shine w-full py-3 rounded-xl text-white font-semibold text-lg transition-all hover:shadow-lg hover:shadow-[#2A6BB5]/30 hover:-translate-y-0.5 disabled:opacity-60 disabled:hover:translate-y-0"
                 style={{ background: loading ? '#9ca3af' : 'linear-gradient(135deg, #2E3093, #2A6BB5)' }}
               >
                 {loading ? (
