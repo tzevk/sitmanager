@@ -147,8 +147,11 @@ async function getBatchStudents(pool: ReturnType<typeof getPool>, batchId: numbe
        AND ${admissionDeleteCondition}
        AND (am.Cancel = 0 OR am.Cancel IS NULL)
        AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
+     -- Roll number order by numeric value (…0001, …0002, …), students
+     -- without a numeric roll number last; duplicates end up side by side.
      ORDER BY
-       CASE WHEN COALESCE(roll_dup.Duplicate_Count, 1) > 1 OR COALESCE(mobile_dup.Duplicate_Count, 1) > 1 OR COALESCE(email_dup.Duplicate_Count, 1) > 1 THEN 0 ELSE 1 END,
+       CASE WHEN TRIM(CAST(am.Roll_No AS CHAR)) REGEXP '^[0-9]+$' THEN 0 ELSE 1 END,
+       CAST(TRIM(CAST(am.Roll_No AS CHAR)) AS UNSIGNED) ASC,
        Student_Name ASC,
        am.Admission_Id ASC`,
      [batchId, batchId, batchId, batchId]
@@ -355,10 +358,10 @@ export async function PATCH(req: NextRequest) {
           reserved = reservedSerials(admissions, prefix);
         }
 
-        // New numbers continue after the highest serial already in use, so
-        // nobody else's roll number is reused.
-        const start = regenerateAll ? 1 : Math.max(0, ...reserved) + 1;
-        await allotSerials(conn, bid, prefix, needsNumber, reserved, start);
+        // Fill the lowest unused serials first (gaps such as 0003 in
+        // 0001, 0002, 0004), then continue past the highest — never reusing a
+        // number another active admission holds.
+        await allotSerials(conn, bid, prefix, needsNumber, reserved, 1);
 
         await conn.commit();
         const rows = await getBatchStudents(pool, bid, Boolean(includeHidden));
