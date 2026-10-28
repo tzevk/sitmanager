@@ -201,7 +201,7 @@ export async function PATCH(req: NextRequest) {
     const auth = await requirePermission(req, 'roll_number.update');
     if (auth instanceof NextResponse) return auth;
 
-    const { action, batchId, admissionId, studentId, rollNo, includeHidden } = await req.json().catch(() => ({}));
+    const { action, batchId, admissionId, studentId, rollNo, includeHidden, regenerateAll } = await req.json().catch(() => ({}));
     const bid = Number(batchId || 0);
     const aid = Number(admissionId || 0);
     const sid = Number(studentId || 0);
@@ -325,7 +325,14 @@ export async function PATCH(req: NextRequest) {
         const seenRolls = new Set<string>();
         const needsNumber: any[] = [];
         let duplicatesFixed = 0;
-        for (const admission of admissions) {
+        // regenerateAll: user-confirmed fresh allotment of the whole batch in
+        // admission order (0001..N), overwriting every existing roll number.
+        if (regenerateAll) {
+          usedSerials.clear();
+          maxSerial = 0;
+          needsNumber.push(...admissions);
+        }
+        for (const admission of regenerateAll ? [] : admissions) {
           const currentRoll = String(admission.Roll_No || '').trim();
           if (!currentRoll) { needsNumber.push(admission); continue; }
           if (seenRolls.has(currentRoll)) { needsNumber.push(admission); duplicatesFixed += 1; continue; }

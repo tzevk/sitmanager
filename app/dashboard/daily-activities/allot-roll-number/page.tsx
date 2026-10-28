@@ -320,17 +320,23 @@ export default function AllotRollNumberPage() {
   };
 
   const handleAutoGenerateRollNumbers = async () => {
-    if (!canUpdate || !batchId || autoGeneratingRolls || !autoGenerateCount) return;
+    if (!canUpdate || !batchId || autoGeneratingRolls || !rows.length) return;
 
+    // Nothing blank or duplicated → offer a fresh allotment of the whole batch.
+    const regenerateAll = autoGenerateCount === 0;
     const parts = [
       blankRollCount ? `${blankRollCount} student${blankRollCount === 1 ? '' : 's'} without a roll number` : '',
       duplicateRollCount ? `${duplicateRollCount} student${duplicateRollCount === 1 ? '' : 's'} with a duplicate roll number` : '',
     ].filter(Boolean);
     const ok = window.confirm(
-      `Auto-generate roll numbers for ${parts.join(' and ')}?` +
-      (duplicateRollCount
-        ? '\n\nFor each duplicate, the earliest admission keeps the roll number and the others get a new one — those students will need their new roll number to sign in to the student portal.'
-        : '\n\nExisting roll numbers will not be changed.')
+      regenerateAll
+        ? `Every student in batch ${selectedBatch?.Batch_code || batchId} already has a roll number.\n\n` +
+          `Re-generate roll numbers for all ${rows.length} students in admission order (0001, 0002, …)? ` +
+          'This overwrites every existing roll number. Students will need their new roll number to sign in to the student portal.'
+        : `Auto-generate roll numbers for ${parts.join(' and ')}?` +
+          (duplicateRollCount
+            ? '\n\nFor each duplicate, the earliest admission keeps the roll number and the others get a new one — those students will need their new roll number to sign in to the student portal.'
+            : '\n\nExisting roll numbers will not be changed.')
     );
     if (!ok) return;
 
@@ -344,6 +350,7 @@ export default function AllotRollNumberPage() {
         body: JSON.stringify({
           action: 'auto-generate-roll-numbers',
           batchId: Number(batchId),
+          regenerateAll,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -651,8 +658,10 @@ export default function AllotRollNumberPage() {
               <button
                 type="button"
                 onClick={handleAutoGenerateRollNumbers}
-                disabled={!batchId || !autoGenerateCount || autoGeneratingRolls}
-                title="Allots roll numbers to students without one, and gives a new roll number to every duplicate except the earliest admission"
+                disabled={!batchId || !rows.length || autoGeneratingRolls}
+                title={autoGenerateCount
+                  ? 'Allots roll numbers to students without one, and gives a new roll number to every duplicate except the earliest admission'
+                  : 'Re-generate every roll number in the batch in admission order (0001, 0002, …)'}
                 className="inline-flex items-center px-3 py-1.5 rounded-md bg-[#2E3093] text-white text-[11px] font-bold hover:bg-[#252778] disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {autoGeneratingRolls ? 'Generating...' : `Auto Generate${autoGenerateCount ? ` (${autoGenerateCount})` : ''}`}
