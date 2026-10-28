@@ -268,6 +268,16 @@ export default function AllotRollNumberPage() {
   const handleSaveRollNumber = async (row: StudentRow) => {
     if (!canUpdate || !batchId || savingRollAdmissionId) return;
 
+    const currentRoll = String(row.Roll_No || '').trim();
+    const nextRoll = String(rollInputs[row.Admission_Id] || '').trim();
+    if (currentRoll && nextRoll !== currentRoll) {
+      const ok = window.confirm(
+        `Change ${row.Student_Name || 'this student'}'s roll number from ${currentRoll} to ${nextRoll || '(blank)'}?\n\n` +
+        'The student will need the new roll number to sign in to the student portal.'
+      );
+      if (!ok) return;
+    }
+
     setError('');
     setMessage('');
     setSavingRollAdmissionId(row.Admission_Id);
@@ -667,6 +677,7 @@ export default function AllotRollNumberPage() {
               {!loadingRows && rows.map((row, index) => {
                 const labels = duplicateLabels(row);
                 const hasAllocatedRollNo = Boolean(String(row.Roll_No || '').trim());
+                const isRollChanged = (rollInputs[row.Admission_Id] ?? '').trim() !== String(row.Roll_No || '').trim();
                 const isSelected = selectedIds.has(row.Admission_Id);
                 return (
                   <tr key={row.Admission_Id} className={isSelected ? 'bg-red-50/60 transition-colors' : labels.length ? 'bg-amber-50/40 hover:bg-amber-50/70 transition-colors' : 'hover:bg-slate-50/70 transition-colors'}>
@@ -688,7 +699,8 @@ export default function AllotRollNumberPage() {
                         inputMode="numeric"
                         value={rollInputs[row.Admission_Id] ?? row.Roll_No ?? ''}
                         onChange={(event) => handleRollInputChange(row.Admission_Id, event.target.value)}
-                        disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id}
+                        onKeyDown={(event) => { if (event.key === 'Enter' && isRollChanged) handleSaveRollNumber(row); }}
+                        disabled={!canUpdate || savingRollAdmissionId === row.Admission_Id}
                         placeholder="Roll no"
                         className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 font-mono text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] disabled:bg-slate-50 disabled:text-slate-400"
                       />
@@ -714,10 +726,10 @@ export default function AllotRollNumberPage() {
                         <button
                           type="button"
                           onClick={() => handleSaveRollNumber(row)}
-                          disabled={!canUpdate || hasAllocatedRollNo || savingRollAdmissionId === row.Admission_Id || (rollInputs[row.Admission_Id] ?? '') === (row.Roll_No || '')}
+                          disabled={!canUpdate || savingRollAdmissionId === row.Admission_Id || !isRollChanged}
                           className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#2E3093]/10 text-[#2E3093] text-[11px] font-semibold hover:bg-[#2E3093]/15 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          {hasAllocatedRollNo ? 'Locked' : 'Save'}
+                          {savingRollAdmissionId === row.Admission_Id ? 'Saving...' : hasAllocatedRollNo ? 'Update' : 'Save'}
                         </button>
                         {canDelete && (
                           <button
