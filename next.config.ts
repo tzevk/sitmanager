@@ -48,13 +48,26 @@ const nextConfig: NextConfig = {
     // path, so Next's static import tracer can't see it — it and its
     // dependency tree must be explicitly included or the binary is missing
     // at runtime on Vercel even though the build succeeds locally.
+    // This must be the FULL transitive closure of secure-spreadsheet's
+    // dependencies (jszip's nested node_modules are covered by jszip/**).
+    // Re-check after upgrading it — a missing one only fails at runtime.
     '/api/admission-activity/student/nsdc-export/route': [
       './node_modules/secure-spreadsheet/**/*',
       './node_modules/.bin/secure-spreadsheet',
       './node_modules/csv-parse/**/*',
       './node_modules/xlsx-populate/**/*',
       './node_modules/cfb/**/*',
+      './node_modules/adler-32/**/*',
+      './node_modules/crc-32/**/*',
       './node_modules/jszip/**/*',
+      './node_modules/lie/**/*',
+      './node_modules/immediate/**/*',
+      './node_modules/pako/**/*',
+      './node_modules/setimmediate/**/*',
+      './node_modules/core-util-is/**/*',
+      './node_modules/inherits/**/*',
+      './node_modules/process-nextick-args/**/*',
+      './node_modules/util-deprecate/**/*',
       './node_modules/lodash/**/*',
       './node_modules/sax/**/*',
     ],
