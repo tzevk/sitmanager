@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         `SELECT user_id, user_name, page, last_click,
                 DATE_FORMAT(last_click_at, '%Y-%m-%d %H:%i:%s') AS last_click_at,
                 DATE_FORMAT(last_seen, '%Y-%m-%d %H:%i:%s') AS last_seen
-         FROM activity_presence WHERE last_seen >= NOW() - INTERVAL 150 SECOND ORDER BY user_name`
+         FROM activity_presence WHERE last_seen >= NOW() - INTERVAL 7 MINUTE ORDER BY user_name`
       );
       return NextResponse.json({ online }, { headers: { 'Cache-Control': 'no-store' } });
     }

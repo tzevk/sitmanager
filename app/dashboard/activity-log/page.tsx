@@ -28,7 +28,7 @@ type LogData = {
   pageSize: number;
 };
 
-const POLL_MS = 15000;
+const POLL_MS = 5 * 60 * 1000;
 
 type OnlineUser = {
   user_id: number;
@@ -156,6 +156,7 @@ export default function ActivityLogPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const latest = useRef(0);
   const [online, setOnline] = useState<OnlineUser[]>([]);
+  const refreshOnline = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -164,6 +165,7 @@ export default function ActivityLogPage() {
       const res = await fetch('/api/activity-log?live=1', { cache: 'no-store' }).catch(() => null);
       if (res?.ok) setOnline((await res.json()).online);
     };
+    refreshOnline.current = refresh;
     refresh();
     const timer = setInterval(refresh, POLL_MS);
     return () => clearInterval(timer);
@@ -237,8 +239,8 @@ export default function ActivityLogPage() {
           <p className="text-sm text-slate-500">See who did what in the software, and when. Click any row for more.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-          Live{updatedAt ? ` · checked ${updatedAt.toLocaleTimeString('en-IN')}` : ''}
+          <span>Updates every 5 minutes{updatedAt ? ` · last checked ${updatedAt.toLocaleTimeString('en-IN')}` : ''}</span>
+          <button onClick={() => { load(); refreshOnline.current(); }} className="px-3 py-1 border border-slate-300 rounded-lg bg-white text-slate-700">Refresh now</button>
         </div>
       </div>
 
@@ -252,8 +254,8 @@ export default function ActivityLogPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-slate-800 mb-2">Online now ({online.length})</div>
-        {online.length === 0 && <div className="text-sm text-slate-400">Nobody is active right now.</div>}
+        <div className="text-sm font-semibold text-slate-800 mb-2">Recently active, last 7 minutes ({online.length})</div>
+        {online.length === 0 && <div className="text-sm text-slate-400">Nobody has been active in the last 7 minutes.</div>}
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
           {online.map((u) => (
             <div key={u.user_id} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">

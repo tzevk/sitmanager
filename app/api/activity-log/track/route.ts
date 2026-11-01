@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
 import { ensureActivityTable, getActivityPool } from '@/lib/activity-log';
 
-const MAX_EVENTS = 50;
+const MAX_EVENTS = 300;
 const clean = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Receives page visits and clicks from staff browsers, plus a presence heartbeat. */

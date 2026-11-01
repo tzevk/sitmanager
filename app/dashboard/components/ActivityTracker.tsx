@@ -3,8 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 
-const FLUSH_MS = 15000;
-const HEARTBEAT_MS = 60000;
+const FLUSH_MS = 5 * 60 * 1000;
+const HEARTBEAT_MS = FLUSH_MS - 10_000;
 const CLICKABLE = 'button, a, [role="button"], [role="tab"], [role="menuitem"], summary';
 
 type TrackedEvent = { type: 'PAGE' | 'CLICK'; page: string; label?: string };
@@ -40,9 +40,12 @@ export default function ActivityTracker() {
         keepalive: true,
       }).catch(() => {});
     };
+    // Don't lose up to five minutes of activity when a tab closes or goes to the background.
+    const onHidden = () => { if (document.hidden && queue.current.length) flush(); };
+    document.addEventListener('visibilitychange', onHidden);
     document.addEventListener('click', onClick, true);
     const timer = setInterval(flush, FLUSH_MS);
-    return () => { document.removeEventListener('click', onClick, true); clearInterval(timer); };
+    return () => { document.removeEventListener('visibilitychange', onHidden); document.removeEventListener('click', onClick, true); clearInterval(timer); };
   }, []);
 
   return null;
