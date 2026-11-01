@@ -94,9 +94,11 @@ export function normalizeMobile(raw: unknown): string | null {
   return digits.slice(-10);
 }
 
+/** Lowercased email, or null when it isn't a real address. Placeholders like "-" must
+ * stay null: identity matches on this value, so a shared one merges unrelated people. */
 export function normalizeEmail(raw: unknown): string | null {
   const email = String(raw ?? '').trim().toLowerCase();
-  return email || null;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
 // ── Resolve / match ───────────────────────────────────────────────────────────
