@@ -1,5 +1,6 @@
 'use client';
 
+import ActivityTracker from './components/ActivityTracker';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { PermissionProvider, usePermissions } from '@/lib/permissions-context';
@@ -1209,6 +1210,8 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       )}
+
+      {session && <ActivityTracker />}
 
       {/* Super-admin support ticket popup */}
       {showTicketPopup && isSuperAdmin && ticketOpen > 0 && (

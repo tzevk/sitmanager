@@ -46,6 +46,15 @@ export async function GET(req: NextRequest) {
       (await pool.query(`SET STATEMENT max_statement_time=15 FOR ${sql}`, params))[0] as any[];
 
     const url = new URL(req.url);
+    if (url.searchParams.get('live')) {
+      const online = await run(
+        `SELECT user_id, user_name, page, last_click,
+                DATE_FORMAT(last_click_at, '%Y-%m-%d %H:%i:%s') AS last_click_at,
+                DATE_FORMAT(last_seen, '%Y-%m-%d %H:%i:%s') AS last_seen
+         FROM activity_presence WHERE last_seen >= NOW() - INTERVAL 90 SECOND ORDER BY user_name`
+      );
+      return NextResponse.json({ online }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     const param = (name: string) => url.searchParams.get(name)?.trim() ?? '';
     const from = DATE_RE.test(param('from')) ? param('from') : today;

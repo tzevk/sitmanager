@@ -90,7 +90,7 @@ const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
  */
 async function trackStaffWrite(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
-  if (!WRITE_METHODS.has(request.method) || !pathname.startsWith('/api/') || pathname.startsWith('/api/auth/')) return;
+  if (!WRITE_METHODS.has(request.method) || !pathname.startsWith('/api/') || pathname.startsWith('/api/auth/') || pathname === '/api/activity-log/track') return;
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (!token) return;
   try {

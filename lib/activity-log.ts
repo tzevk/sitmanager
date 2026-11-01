@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getPool } from '@/lib/db';
 import { getSession } from '@/lib/session';
 
-export type ActivityAction = 'VIEW' | 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_FAILED' | 'REQUEST';
+export type ActivityAction = 'VIEW' | 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_FAILED' | 'REQUEST' | 'PAGE' | 'CLICK';
 
 interface ActivityLogInput {
   tableName: string;
@@ -32,6 +32,16 @@ async function ensureActivityTable() {
       INDEX idx_activity_created (created_at),
       INDEX idx_activity_table_created (table_name, created_at),
       INDEX idx_activity_user_created (user_id, created_at)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activity_presence (
+      user_id INT NOT NULL PRIMARY KEY,
+      user_name VARCHAR(255) NULL,
+      page VARCHAR(255) NULL,
+      last_click VARCHAR(80) NULL,
+      last_click_at DATETIME NULL,
+      last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
   ensured = true;
