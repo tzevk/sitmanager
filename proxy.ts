@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import type { NextFetchEvent, NextRequest } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 
 // SECURITY: Never fall back to a default secret — fail hard if missing
@@ -81,36 +81,8 @@ function isPublicRoute(pathname: string): boolean {
   return false;
 }
 
-const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
-/**
- * Queues an activity-log row for a staff write request. Runs before the public-route
- * check because some public prefixes (e.g. /api/online-admission) also serve staff.
- * Login/logout are skipped: those routes log themselves with the real outcome.
- */
-async function trackStaffWrite(request: NextRequest, event: NextFetchEvent) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (!WRITE_METHODS.has(request.method) || !pathname.startsWith('/api/') || pathname.startsWith('/api/auth/') || pathname === '/api/activity-log/track') return;
-  const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) return;
-  try {
-    const { payload } = await jwtVerify(token, SECRET_KEY());
-    const userName = [payload.firstName, payload.lastName].filter(Boolean).join(' ').trim() || null;
-    const userId = Number(payload.userId) || null;
-    event.waitUntil(
-      import('@/lib/activity-log')
-        .then(({ logRequestActivity }) => logRequestActivity({ method: request.method, pathname, userId, userName }))
-        .catch(() => {})
-    );
-  } catch {
-    // Invalid session: nothing to attribute, and the checks below handle the response.
-  }
-}
-
-export async function proxy(request: NextRequest, event: NextFetchEvent) {
-  const { pathname } = request.nextUrl;
-
-  await trackStaffWrite(request, event);
 
   // Allow public paths
   if (isPublicRoute(pathname)) {

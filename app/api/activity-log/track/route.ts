@@ -4,6 +4,7 @@ import { getSession } from '@/lib/session';
 import { ensureActivityTable, getActivityPool } from '@/lib/activity-log';
 
 const MAX_EVENTS = 300;
+const MAX_AGE_MS = 15 * 60 * 1000;
 const clean = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 /** Receives page visits and clicks from staff browsers, plus a presence heartbeat. */
@@ -20,16 +21,31 @@ export async function POST(req: NextRequest) {
     const userName = [session.firstName, session.lastName].filter(Boolean).join(' ').trim() || null;
     const events = (Array.isArray(body?.events) ? body.events : []).slice(0, MAX_EVENTS);
 
+    // Events arrive in batches, so keep when they happened, not when they were sent.
+    const eventTime = (at: unknown) => {
+      const now = Date.now();
+      const ms = Number(at);
+      const safe = Number.isFinite(ms) && ms <= now && ms >= now - MAX_AGE_MS ? ms : now;
+      return new Date(safe).toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' });
+    };
+
     const rows = events
-      .filter((e: any) => e?.type === 'PAGE' || e?.type === 'CLICK')
+      .filter((e: any) => ['PAGE', 'CLICK', 'REQUEST'].includes(e?.type))
       .map((e: any) => {
         const path = clean(e.page, 255) || page;
+        if (e.type === 'REQUEST') {
+          const parts = path.split('/').filter(Boolean).slice(1);
+          const recordId = [...parts].reverse().find((p) => /^\d+$/.test(p)) ?? null;
+          const moduleName = parts.filter((p) => !/^\d+$/.test(p)).join('/').slice(0, 120) || 'api';
+          const details = { method: clean(e.method, 10), status: Number(e.status) || null, times: Number(e.count) || 1 };
+          return [moduleName, e.type, recordId, session.userId, userName, path, JSON.stringify(details), eventTime(e.at)];
+        }
         const label = clean(e.label, 80);
-        return [path.slice(0, 120), e.type, session.userId, userName, path, label ? JSON.stringify({ clicked: label }) : null];
+        return [path.slice(0, 120), e.type, null, session.userId, userName, path, label ? JSON.stringify({ clicked: label }) : null, eventTime(e.at)];
       });
     if (rows.length) {
       await pool.query(
-        `INSERT INTO system_activity_log (table_name, action_type, user_id, user_name, endpoint, details_json) VALUES ?`,
+        `INSERT INTO system_activity_log (table_name, action_type, record_id, user_id, user_name, endpoint, details_json, created_at) VALUES ?`,
         [rows]
       );
     }

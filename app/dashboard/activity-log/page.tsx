@@ -41,7 +41,7 @@ const WEEKLY_COLUMNS: [string, string[]][] = [
   ['Failed sign-ins', ['LOGIN_FAILED']],
 ];
 
-const POLL_MS = 5 * 60 * 1000;
+const POLL_MS = 10 * 60 * 1000;
 
 type OnlineUser = {
   user_id: number;
@@ -73,7 +73,7 @@ const ACTION_HELP: [string, string][] = [
   ['Opened page', 'Went to a screen in the software'],
   ['Clicked', 'Pressed a button or link'],
   ['Viewed', 'Opened or looked at something'],
-  ['Submitted', 'Sent a form or button action. It may not have saved, so check the item if it matters'],
+  ['Submitted', 'Sent a form or button action. The row says whether it saved or failed'],
   ['Failed sign-in', 'Someone tried to sign in and it was refused'],
 ];
 
@@ -88,6 +88,13 @@ const MODULE_LABELS: Record<string, string> = {
   role_permissions: 'role permissions',
   corporate_inquiry: 'a corporate inquiry',
 };
+
+function requestOutcome(details: unknown) {
+  const { status, times } = (details ?? {}) as { status?: number; times?: number };
+  const repeat = times && times > 1 ? ` ${times.toLocaleString('en-IN')} times` : '';
+  const result = status == null ? '' : status < 400 ? ' (saved)' : ' (failed)';
+  return `${repeat}${result}`;
+}
 
 const VERBS: Record<string, string> = {
   VIEW: 'viewed', CREATE: 'added', UPDATE: 'changed', DELETE: 'deleted', RESTORE: 'restored',
@@ -117,7 +124,7 @@ function describe(r: LogRow) {
   if (r.action_type === 'LOGIN') return `${who} signed in`;
   if (r.action_type === 'LOGOUT') return `${who} signed out`;
   if (r.action_type === 'LOGIN_FAILED') return `Failed sign-in attempt using the username "${who}"`;
-  if (r.action_type === 'REQUEST') return `${who} submitted an action in ${what}${record}`;
+  if (r.action_type === 'REQUEST') return `${who} submitted an action in ${what}${record}${requestOutcome(r.details)}`;
   return `${who} ${VERBS[r.action_type] ?? r.action_type.toLowerCase()} ${what}${record}`;
 }
 
@@ -262,7 +269,7 @@ export default function ActivityLogPage() {
           <p className="text-sm text-slate-500">See who did what in the software, and when. Click any row for more.</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>Updates every 5 minutes{updatedAt ? ` · last checked ${updatedAt.toLocaleTimeString('en-IN')}` : ''}</span>
+          <span>Updates every 10 minutes{updatedAt ? ` · last checked ${updatedAt.toLocaleTimeString('en-IN')}` : ''}</span>
           <button onClick={() => { load(); refreshOnline.current(); }} className="px-3 py-1 border border-slate-300 rounded-lg bg-white text-slate-700">Refresh now</button>
         </div>
       </div>
@@ -277,8 +284,8 @@ export default function ActivityLogPage() {
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4">
-        <div className="text-sm font-semibold text-slate-800 mb-2">Recently active, last 7 minutes ({online.length})</div>
-        {online.length === 0 && <div className="text-sm text-slate-400">Nobody has been active in the last 7 minutes.</div>}
+        <div className="text-sm font-semibold text-slate-800 mb-2">Recently active, last 12 minutes ({online.length})</div>
+        {online.length === 0 && <div className="text-sm text-slate-400">Nobody has been active in the last 12 minutes.</div>}
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
           {online.map((u) => (
             <div key={u.user_id} className="border border-slate-200 rounded-lg px-3 py-2 text-sm">

@@ -120,32 +120,3 @@ export async function logTableActivity(req: NextRequest, input: ActivityLogInput
     console.error('Activity logging failed:', message);
   }
 }
-
-/**
- * Records one staff write request (POST/PUT/PATCH/DELETE). Called from the proxy so
- * routes without their own logTableActivity call are still covered. The proxy runs
- * before the route, so this means "submitted", not "succeeded". Bodies and query
- * strings are never stored: they can hold passwords, tokens and personal data.
- */
-export async function logRequestActivity(input: {
-  method: string;
-  pathname: string;
-  userId: number | null;
-  userName: string | null;
-}): Promise<void> {
-  try {
-    await ensureActivityTable();
-    const segments = input.pathname.split('/').filter(Boolean).slice(1);
-    const recordId = [...segments].reverse().find((s) => /^\d+$/.test(s)) ?? null;
-    const moduleName = segments.filter((s) => !/^\d+$/.test(s)).join('/').slice(0, 120) || 'api';
-    await getActivityPool().query(
-      `INSERT INTO system_activity_log
-       (table_name, action_type, record_id, user_id, user_name, endpoint, details_json)
-       VALUES (?, 'REQUEST', ?, ?, ?, ?, ?)`,
-      [moduleName, recordId, input.userId, input.userName, input.pathname.slice(0, 255), JSON.stringify({ method: input.method })]
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown logging error';
-    console.error('Request activity logging failed:', message);
-  }
-}
