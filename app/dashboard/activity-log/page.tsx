@@ -28,7 +28,7 @@ type LogData = {
   pageSize: number;
 };
 
-const POLL_MS = 5000;
+const POLL_MS = 15000;
 
 type OnlineUser = {
   user_id: number;

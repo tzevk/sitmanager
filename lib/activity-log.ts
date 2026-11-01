@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
-import { getPool } from '@/lib/db';
+import mysql from 'mysql2/promise';
+import { getDbEnv } from '@/lib/env';
 import { getSession } from '@/lib/session';
 
 export type ActivityAction = 'VIEW' | 'CREATE' | 'UPDATE' | 'DELETE' | 'RESTORE' | 'LOGIN' | 'LOGOUT' | 'LOGIN_FAILED' | 'REQUEST' | 'PAGE' | 'CLICK';
@@ -15,9 +16,40 @@ interface ActivityLogInput {
 
 let ensured = false;
 
+declare global {
+  var __sitActivityPool: mysql.Pool | undefined;
+}
+
+/**
+ * One connection per instance, kept apart from the app pool. Logging runs on every
+ * write and browser heartbeat (and in the proxy, which would otherwise get a second
+ * full pool), so it must never be able to use up MySQL's connections. Rows queue here.
+ */
+export function getActivityPool(): mysql.Pool {
+  if (!global.__sitActivityPool) {
+    const env = getDbEnv();
+    global.__sitActivityPool = mysql.createPool({
+      host: env.DB_HOST,
+      port: env.DB_PORT,
+      database: env.DB_NAME,
+      user: env.DB_USER,
+      password: env.DB_PASSWORD,
+      waitForConnections: true,
+      connectionLimit: 1,
+      maxIdle: 1,
+      idleTimeout: 5_000,
+      queueLimit: 100,
+      connectTimeout: 10_000,
+      dateStrings: true,
+      ...(process.env.DB_SSL === 'true' && { ssl: { rejectUnauthorized: true } }),
+    });
+  }
+  return global.__sitActivityPool;
+}
+
 async function ensureActivityTable() {
   if (ensured) return;
-  const pool = getPool();
+  const pool = getActivityPool();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_activity_log (
       id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -52,7 +84,7 @@ export { ensureActivityTable };
 export async function logTableActivity(req: NextRequest, input: ActivityLogInput): Promise<void> {
   try {
     await ensureActivityTable();
-    const pool = getPool();
+    const pool = getActivityPool();
     const session = input.actor ? null : await getSession(req);
     const userName = input.actor
       ? input.actor.userName
@@ -96,7 +128,7 @@ export async function logRequestActivity(input: {
     const segments = input.pathname.split('/').filter(Boolean).slice(1);
     const recordId = [...segments].reverse().find((s) => /^\d+$/.test(s)) ?? null;
     const moduleName = segments.filter((s) => !/^\d+$/.test(s)).join('/').slice(0, 120) || 'api';
-    await getPool().query(
+    await getActivityPool().query(
       `INSERT INTO system_activity_log
        (table_name, action_type, record_id, user_id, user_name, endpoint, details_json)
        VALUES (?, 'REQUEST', ?, ?, ?, ?, ?)`,

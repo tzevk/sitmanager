@@ -3,8 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 
-const FLUSH_MS = 5000;
-const HEARTBEAT_MS = 30000;
+const FLUSH_MS = 15000;
+const HEARTBEAT_MS = 60000;
 const CLICKABLE = 'button, a, [role="button"], [role="tab"], [role="menuitem"], summary';
 
 type TrackedEvent = { type: 'PAGE' | 'CLICK'; page: string; label?: string };

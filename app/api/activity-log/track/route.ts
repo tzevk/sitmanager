@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/session';
-import { getPool } from '@/lib/db';
-import { ensureActivityTable } from '@/lib/activity-log';
+import { ensureActivityTable, getActivityPool } from '@/lib/activity-log';
 
 const MAX_EVENTS = 50;
 const clean = (v: unknown, max: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -14,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await ensureActivityTable();
-    const pool = getPool();
+    const pool = getActivityPool();
     const body = await req.json();
     const page = clean(body?.page, 255);
     if (!page.startsWith('/dashboard')) return NextResponse.json({ error: 'Invalid page' }, { status: 400 });

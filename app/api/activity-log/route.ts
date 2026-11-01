@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
         `SELECT user_id, user_name, page, last_click,
                 DATE_FORMAT(last_click_at, '%Y-%m-%d %H:%i:%s') AS last_click_at,
                 DATE_FORMAT(last_seen, '%Y-%m-%d %H:%i:%s') AS last_seen
-         FROM activity_presence WHERE last_seen >= NOW() - INTERVAL 90 SECOND ORDER BY user_name`
+         FROM activity_presence WHERE last_seen >= NOW() - INTERVAL 150 SECOND ORDER BY user_name`
       );
       return NextResponse.json({ online }, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -82,29 +82,28 @@ export async function GET(req: NextRequest) {
     const page = Math.max(1, Number(param('page')) || 1);
     const sort = param('sort') === 'oldest' ? 'ASC' : 'DESC';
 
-    const [rows, [summary], accounts, actions, [max]] = await Promise.all([
-      run(
+    // One at a time: this reloads often and must stay light on connections.
+    const rows = await run(
         `SELECT l.id, l.table_name, l.action_type, l.record_id, l.user_id, l.user_name, l.endpoint, l.details_json,
                 DATE_FORMAT(l.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
          FROM system_activity_log l WHERE ${visible}
          ORDER BY l.created_at ${sort}, l.id ${sort} LIMIT ? OFFSET ?`,
         [...params, PAGE_SIZE, (page - 1) * PAGE_SIZE]
-      ),
-      run(
+    );
+    const [summary] = await run(
         `SELECT COUNT(*) AS total, COUNT(DISTINCT l.user_id) AS accounts,
                 SUM(l.action_type = 'LOGIN_FAILED') AS failedLogins, SUM(l.action_type = 'DELETE') AS deletes
          FROM system_activity_log l WHERE ${visible}`,
         params
-      ),
-      run(
+    );
+    const accounts = await run(
         `SELECT l.user_id AS id, MAX(l.user_name) AS name, COUNT(*) AS count
          FROM system_activity_log l WHERE ${where.slice(0, 2).join(' AND ')} AND l.user_id IS NOT NULL
          GROUP BY l.user_id ORDER BY count DESC`,
         [from, to]
-      ),
-      run(`SELECT DISTINCT action_type AS action FROM system_activity_log ORDER BY action_type`),
-      run(`SELECT COALESCE(MAX(l.id), 0) AS latest FROM system_activity_log l WHERE ${filter}`, params),
-    ]);
+    );
+    const actions = await run(`SELECT DISTINCT action_type AS action FROM system_activity_log ORDER BY action_type`);
+    const [max] = await run(`SELECT COALESCE(MAX(l.id), 0) AS latest FROM system_activity_log l WHERE ${filter}`, params);
 
     return NextResponse.json({
       rows: rows.map(({ details_json, ...r }) => ({ ...r, details: parseDetails(details_json) })),
