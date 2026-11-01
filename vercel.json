@@ -7,6 +7,14 @@
   "regions": ["bom1"],
   "crons": [
     {
+      "path": "/api/cron/activity-log-weekly",
+      "schedule": "45 21 * * 0"
+    },
+    {
+      "path": "/api/cron/activity-log-cleanup",
+      "schedule": "30 21 * * *"
+    },
+    {
       "path": "/api/cron/meta-leads-refresh",
       "schedule": "*/2 * * * *"
     },

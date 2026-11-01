@@ -76,6 +76,16 @@ async function ensureActivityTable() {
       last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activity_weekly_summary (
+      week_start DATE NOT NULL,
+      user_id INT NOT NULL,
+      user_name VARCHAR(255) NULL,
+      action_type VARCHAR(30) NOT NULL,
+      events INT NOT NULL,
+      PRIMARY KEY (week_start, user_id, action_type)
+    )
+  `);
   ensured = true;
 }
 

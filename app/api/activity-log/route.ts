@@ -46,6 +46,14 @@ export async function GET(req: NextRequest) {
       (await pool.query(`SET STATEMENT max_statement_time=15 FOR ${sql}`, params))[0] as any[];
 
     const url = new URL(req.url);
+    if (url.searchParams.get('weekly')) {
+      const weekly = await run(
+        `SELECT DATE_FORMAT(week_start, '%Y-%m-%d') AS week_start, user_id, user_name, action_type, events
+         FROM activity_weekly_summary
+         WHERE week_start >= CURDATE() - INTERVAL 1 YEAR ORDER BY week_start DESC, user_name`
+      );
+      return NextResponse.json({ weekly }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     if (url.searchParams.get('live')) {
       const online = await run(
         `SELECT user_id, user_name, page, last_click,

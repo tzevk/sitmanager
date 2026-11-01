@@ -28,6 +28,19 @@ type LogData = {
   pageSize: number;
 };
 
+type WeeklyRow = { week_start: string; user_id: number; user_name: string | null; action_type: string; events: number };
+
+const WEEKLY_COLUMNS: [string, string[]][] = [
+  ['Pages opened', ['PAGE']],
+  ['Clicks', ['CLICK']],
+  ['Added', ['CREATE']],
+  ['Changed', ['UPDATE']],
+  ['Deleted', ['DELETE']],
+  ['Submitted', ['REQUEST']],
+  ['Sign-ins', ['LOGIN']],
+  ['Failed sign-ins', ['LOGIN_FAILED']],
+];
+
 const POLL_MS = 5 * 60 * 1000;
 
 type OnlineUser = {
@@ -156,6 +169,8 @@ export default function ActivityLogPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const latest = useRef(0);
   const [online, setOnline] = useState<OnlineUser[]>([]);
+  const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
+  const [week, setWeek] = useState('');
   const refreshOnline = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -217,6 +232,14 @@ export default function ActivityLogPage() {
     }, POLL_MS);
     return () => clearInterval(timer);
   }, [isSuperAdmin, load, query]);
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    fetch('/api/activity-log?weekly=1', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : { weekly: [] }))
+      .then((body) => { setWeekly(body.weekly); setWeek(body.weekly[0]?.week_start ?? ''); })
+      .catch(() => {});
+  }, [isSuperAdmin]);
 
   if (permLoading) return <PermissionLoading />;
   if (!isSuperAdmin) return <AccessDenied />;
@@ -355,6 +378,46 @@ export default function ActivityLogPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div>
+            <div className="text-sm font-semibold text-slate-800">Weekly report</div>
+            <div className="text-xs text-slate-500">Totals per person, Monday to Sunday. Kept even after detailed clicks are removed.</div>
+          </div>
+          {weekly.length > 0 && (
+            <select value={week} onChange={(e) => setWeek(e.target.value)} className={inputCls}>
+              {[...new Set(weekly.map((w) => w.week_start))].map((w) => <option key={w} value={w}>Week of {w}</option>)}
+            </select>
+          )}
+        </div>
+        {weekly.length === 0 ? (
+          <div className="text-sm text-slate-400">The first report appears after the first full week finishes.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-slate-500">
+                <tr><th className="py-1 pr-4">Person</th>{WEEKLY_COLUMNS.map(([label]) => <th key={label} className="py-1 pr-4">{label}</th>)}</tr>
+              </thead>
+              <tbody>
+                {[...new Set(weekly.filter((w) => w.week_start === week).map((w) => w.user_id))].map((id) => {
+                  const mine = weekly.filter((w) => w.week_start === week && w.user_id === id);
+                  return (
+                    <tr key={id} className="border-t border-slate-100 text-slate-700">
+                      <td className="py-1 pr-4">{mine[0].user_name || `User ${id}`}</td>
+                      {WEEKLY_COLUMNS.map(([label, types]) => (
+                        <td key={label} className="py-1 pr-4">
+                          {mine.filter((w) => types.includes(w.action_type)).reduce((sum, w) => sum + w.events, 0)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4">
