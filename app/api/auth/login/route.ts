@@ -3,14 +3,17 @@ import { createSession, REMEMBER_ME_DURATION, setSessionCookie } from '@/lib/ses
 import { loginRateLimiter } from '@/lib/rate-limit';
 import { sanitizeString, isNonEmpty } from '@/lib/validation';
 import { validateLogin } from '@/lib/services/auth.service';
+import { logTableActivity } from '@/lib/activity-log';
 
 export async function POST(request: NextRequest) {
+  let attemptedUsername = '';
   try {
     const rateLimited = await loginRateLimiter(request);
     if (rateLimited) return rateLimited;
 
     const body = await request.json();
     const username = sanitizeString(body.username);
+    attemptedUsername = username;
     const password = typeof body.password === 'string' ? body.password : '';
     const department = sanitizeString(body.department);
     const rememberMe = body?.rememberMe === true;
@@ -54,12 +57,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    await logTableActivity(request, {
+      tableName: 'auth',
+      action: 'LOGIN',
+      actor: { userId: user.id, userName: [user.firstname, user.lastname].filter(Boolean).join(' ').trim() || username },
+      details: { department: finalDepartment },
+    });
     setSessionCookie(response, sessionToken, { maxAgeSeconds: sessionMaxAge });
     return response;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error.';
     const status = (error as { status?: number }).status ?? 500;
     if (status < 500) {
+      await logTableActivity(request, {
+        tableName: 'auth',
+        action: 'LOGIN_FAILED',
+        actor: { userId: null, userName: attemptedUsername.slice(0, 100) || null },
+        details: { reason: message },
+      });
       return NextResponse.json({ success: false, message }, { status });
     }
     console.error('Login error:', error);
