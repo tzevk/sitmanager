@@ -103,10 +103,13 @@ interface FeeSummary {
   totalFees: number;
   totalPaid: number;
   balance: number;
-  transactions: Array<{
-    id: number; date: string | null; receiptNo: string; type: 'Payment' | 'Charge';
-    mode: string; reference: string; bank: string; particular: string; debit: number; credit: number;
-  }>;
+  transactions: FeeTxn[];
+}
+
+interface FeeTxn {
+  id: number; date: string | null; receiptNo: string; type: 'Payment' | 'Charge';
+  mode: string; reference: string; bank: string; particular: string;
+  debit: number; credit: number; remaining: number;
 }
 
 const inr = (n: number) => `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
@@ -1708,6 +1711,58 @@ export default function EditStudentPage() {
                 </div>
               ) : feeSummary && (
                 <div className="space-y-3">
+                  {feeSummary.transactions.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic py-2">No fee transactions recorded for this student.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      {([
+                        { title: 'Debit', rows: feeSummary.transactions.filter((t) => t.debit > 0), amount: (t: FeeTxn) => t.debit, tone: 'text-slate-800', head: 'bg-red-50 text-red-700' },
+                        { title: 'Credit', rows: feeSummary.transactions.filter((t) => t.credit > 0), amount: (t: FeeTxn) => t.credit, tone: 'text-green-700', head: 'bg-green-50 text-green-700' },
+                      ]).map(({ title, rows, amount, tone, head }) => (
+                        <div key={title} className="rounded-lg border border-slate-200 overflow-hidden">
+                          <p className={`px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide ${head}`}>{title}</p>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-[11px]">
+                              <thead className="bg-slate-50 text-slate-600">
+                                <tr>
+                                  {['Date', 'Particular', 'Amount', 'Remaining'].map((h) => (
+                                    <th key={h} className={`px-2.5 py-1.5 font-semibold border-b border-slate-200 whitespace-nowrap ${h === 'Amount' || h === 'Remaining' ? 'text-right' : 'text-left'}`}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.length === 0 ? (
+                                  <tr><td colSpan={4} className="px-2.5 py-3 text-center text-gray-400 italic">No {title.toLowerCase()} entries</td></tr>
+                                ) : rows.map((t) => (
+                                  <tr key={t.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                    <td className="px-2.5 py-1.5 whitespace-nowrap">{fmtDate(t.date)}</td>
+                                    <td className="px-2.5 py-1.5">
+                                      {t.particular || (t.debit ? 'Charge' : 'Payment')}
+                                      {(t.receiptNo || t.mode || t.reference) && (
+                                        <span className="block text-[10px] text-slate-400">
+                                          {[t.receiptNo, t.mode, t.bank, t.reference].filter(Boolean).join(' · ')}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className={`px-2.5 py-1.5 text-right font-mono whitespace-nowrap ${tone}`}>{inr(amount(t))}</td>
+                                    <td className={`px-2.5 py-1.5 text-right font-mono whitespace-nowrap ${t.remaining > 0 ? 'text-red-600' : 'text-slate-700'}`}>{inr(t.remaining)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-slate-50 font-bold">
+                                <tr>
+                                  <td className="px-2.5 py-1.5" colSpan={2}>Total {title}</td>
+                                  <td className={`px-2.5 py-1.5 text-right font-mono ${tone}`}>{inr(rows.reduce((sum, t) => sum + amount(t), 0))}</td>
+                                  <td />
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {[
                       { label: 'Total Fees', value: feeSummary.totalFees, cls: 'text-slate-800' },
@@ -1720,43 +1775,7 @@ export default function EditStudentPage() {
                       </div>
                     ))}
                   </div>
-
-                  {feeSummary.transactions.length === 0 ? (
-                    <p className="text-xs text-gray-400 italic py-2">No fee transactions recorded for this student.</p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full text-[11px]">
-                        <thead className="bg-slate-50 text-slate-600">
-                          <tr>
-                            {['Date', 'Receipt No', 'Particulars', 'Mode', 'Reference', 'Charge', 'Paid'].map((h) => (
-                              <th key={h} className={`px-2.5 py-1.5 font-semibold border-b border-slate-200 whitespace-nowrap ${h === 'Charge' || h === 'Paid' ? 'text-right' : 'text-left'}`}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {feeSummary.transactions.map((t) => (
-                            <tr key={t.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                              <td className="px-2.5 py-1.5 whitespace-nowrap">{fmtDate(t.date)}</td>
-                              <td className="px-2.5 py-1.5 whitespace-nowrap font-mono">{t.receiptNo || '—'}</td>
-                              <td className="px-2.5 py-1.5">{t.particular || (t.type === 'Charge' ? 'Charge' : 'Payment')}</td>
-                              <td className="px-2.5 py-1.5 whitespace-nowrap">{t.mode || '—'}{t.bank ? ` · ${t.bank}` : ''}</td>
-                              <td className="px-2.5 py-1.5 font-mono break-all">{t.reference || '—'}</td>
-                              <td className="px-2.5 py-1.5 text-right font-mono text-slate-700">{t.debit ? inr(t.debit) : ''}</td>
-                              <td className="px-2.5 py-1.5 text-right font-mono text-green-700">{t.credit ? inr(t.credit) : ''}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                        <tfoot className="bg-slate-50 font-bold">
-                          <tr>
-                            <td className="px-2.5 py-1.5" colSpan={5}>{feeSummary.transactions.length} transaction{feeSummary.transactions.length === 1 ? '' : 's'}</td>
-                            <td className="px-2.5 py-1.5 text-right font-mono">{inr(feeSummary.transactions.reduce((s, t) => s + t.debit, 0))}</td>
-                            <td className="px-2.5 py-1.5 text-right font-mono text-green-700">{inr(feeSummary.transactions.reduce((s, t) => s + t.credit, 0))}</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-slate-400">Total Fees comes from the batch&apos;s Total Fees (INR) plus any charges posted to the student. Charges listed here are those posted to the ledger.</p>
+                  <p className="text-[10px] text-slate-400">Remaining is the amount still owed after each entry, in date order. Total Fees comes from the batch&apos;s Total Fees (INR) plus any charges posted to the student.</p>
                 </div>
               )}
             </SectionCard>
