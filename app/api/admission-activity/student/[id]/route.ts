@@ -283,7 +283,7 @@ export async function GET(
          COALESCE(mtc.Course_Name, '')        AS Moved_To_Course_Name,
          COALESCE(b.SDate, b2.SDate)           AS Batch_StartDate,
          COALESCE(b.EDate, b2.EDate)           AS Batch_EndDate,
-         COALESCE(b.Fees_Full_Payment, b2.Fees_Full_Payment) AS Total_Fees,
+         COALESCE(NULLIF(CAST(REPLACE(IFNULL(b.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0), NULLIF(CAST(REPLACE(IFNULL(b2.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0), 0) AS Total_Fees,
          c.Course_Name,
          st.Status AS Status_name
        FROM student_master s

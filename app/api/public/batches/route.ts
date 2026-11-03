@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { RowDataPacket } from 'mysql2';
 
 // Public endpoint — no auth required (used by online admission form)
@@ -46,9 +47,9 @@ export async function GET(req: NextRequest) {
         `SELECT
            Category AS category,
            Course_Id AS courseId,
-           COALESCE(Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS totalFees,
-           COALESCE(Fees_Full_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesFullPayment,
-           COALESCE(Fees_Installment_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesInstallment
+           NULLIF(${batchTuitionSql('batch_mst')}, 0) AS totalFees,
+           NULLIF(${batchTuitionSql('batch_mst')}, 0) AS feesFullPayment,
+           NULLIF(${batchTuitionSql('batch_mst')}, 0) AS feesInstallment
          FROM batch_mst
          WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          ORDER BY COALESCE(IsActive, 0) DESC, COALESCE(Admission_Date, SDate, Date_Added) DESC, Batch_Id DESC
@@ -91,9 +92,9 @@ export async function GET(req: NextRequest) {
     // Match category with TRIM on both sides so ' Regular' = 'Regular'
     const [batches] = await pool.query<(RowDataPacket & { batchCode: string; timings: string | null; totalFees: number | null; feesFullPayment: number | null; feesInstallment: number | null })[]>(
       `SELECT Batch_code AS batchCode, Timings AS timings,
-              COALESCE(Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS totalFees,
-              COALESCE(Fees_Full_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesFullPayment,
-              COALESCE(Fees_Installment_Payment, Actual_Fees_Payment, INR_Total, INR_Basic + COALESCE(INR_ServiceTax, 0)) AS feesInstallment
+              NULLIF(${batchTuitionSql('batch_mst')}, 0) AS totalFees,
+              NULLIF(${batchTuitionSql('batch_mst')}, 0) AS feesFullPayment,
+              NULLIF(${batchTuitionSql('batch_mst')}, 0) AS feesInstallment
        FROM batch_mst
        WHERE Course_Id = ? AND TRIM(Category) = ? AND (IsDelete = 0 OR IsDelete IS NULL)
          AND (Cancel IS NULL OR Cancel = 0)

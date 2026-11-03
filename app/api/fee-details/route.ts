@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { requirePermission } from '@/lib/api-auth';
 
 export const runtime = 'nodejs';
@@ -191,9 +192,8 @@ export async function GET(req: NextRequest) {
     const studentRows = await runGuardedQuery(pool,
       // Batch resolved via a single deterministic row (latest non-deleted batch for
       // the code) so duplicate batch_mst rows can't fan students into duplicate rows
-      // or attach a stale/deleted batch. Fee resolved through the same fallback chain
-      // the per-student detail page uses (fees_structure → batch fees) instead of only
-      // Fees_Full_Payment, so batches that store the fee elsewhere don't show 0.
+      // or attach a stale/deleted batch. Batch tuition comes from the
+      // batch's Total Fees (INR), same as the per-student detail page (lib/fee-balance.ts).
       `WITH matched_students AS (
         SELECT
           sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
@@ -206,14 +206,7 @@ export async function GET(req: NextRequest) {
        SELECT
          sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
          cm.Course_Name, COALESCE(bm.Batch_code, sm.Batch_Code) AS Batch_code, bm.Batch_Id,
-         COALESCE(
-           NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-           0
-         ) AS Total_Fees,
+         ${batchTuitionSql('bm')} AS Total_Fees,
          0 AS Total_Paid,
          COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
          COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,

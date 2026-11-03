@@ -9,9 +9,27 @@ export const FEE_WAIVER_LABEL = 'Fee Waived - Admission Cancelled';
 const parseFee = (v: unknown): number => Number(String(v ?? '').replace(/,/g, '')) || 0;
 
 /**
+ * Batch tuition as a SQL expression. The batch's "Total Fees (INR)" (INR_Total)
+ * is the only source of a batch's fee and already includes the ₹899 membership
+ * fee, so tuition = INR_Total − 899. Every caller then adds the membership fee
+ * back (or the posted membership debit), so the student's total equals
+ * INR_Total + any other posted debits — never the membership fee twice.
+ * Pass several aliases to fall back across batch joins (e.g. 'bm', 'bm2').
+ */
+export function batchTuitionSql(...aliases: string[]): string {
+  const inr = aliases.map((a) => `NULLIF(CAST(REPLACE(IFNULL(${a}.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0)`);
+  return `GREATEST(COALESCE(${inr.join(', ')}, 0) - ${MEMBERSHIP_FEE_AMOUNT}, 0)`;
+}
+
+/** JS twin of batchTuitionSql for rows that already carry INR_Total. */
+export function batchTuitionFromInr(inrTotal: unknown): number {
+  return Math.max(parseFee(inrTotal) - MEMBERSHIP_FEE_AMOUNT, 0);
+}
+
+/**
  * Same Total Fees / Total Paid formula used by /api/fee-details, the Fee
- * Report, and its Excel/PDF exports: admission fee (or fees_structure/batch
- * fallback) + posted debits + the one-time membership fee, minus the full
+ * Report, and its Excel/PDF exports: admission fee (or batch Total Fees (INR)
+ * tuition) + posted debits + the one-time membership fee, minus the full
  * payment ledger. Kept as a single source of truth so a new caller (e.g. the
  * admission-cancellation auto-waiver) can't silently drift from those.
  */
@@ -22,24 +40,12 @@ export async function computeStudentFeeBalance(
   const [feeRows] = await pool.query(
     `SELECT
        am.Fees AS Admission_Fees,
-       COALESCE(
-         NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-         NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-         NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-         NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-         NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-         0
-       ) AS Resolved_Batch_Fee
+       ${batchTuitionSql('bm')} AS Resolved_Batch_Fee
      FROM student_master sm
      LEFT JOIN admission_master am
        ON am.Student_Id = sm.Student_Id AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
      LEFT JOIN batch_mst bm
        ON bm.Batch_code = sm.Batch_Code AND (bm.IsDelete = 0 OR bm.IsDelete IS NULL)
-     LEFT JOIN (
-       SELECT batch_id, MAX(id) AS id FROM fees_structure
-       WHERE deleted = 0 OR deleted IS NULL GROUP BY batch_id
-     ) latest_fs ON latest_fs.batch_id = bm.Batch_Id
-     LEFT JOIN fees_structure fs ON fs.id = latest_fs.id
      WHERE sm.Student_Id = ?
      ORDER BY am.Admission_Id DESC
      LIMIT 1`,

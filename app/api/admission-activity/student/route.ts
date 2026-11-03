@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 import { ensureNsdcColumns } from '@/lib/student-nsdc';
@@ -48,7 +49,7 @@ const LATEST_ADMISSION_JOIN = `JOIN (
 
 // Same Total Fees / Paid formula as /api/fee-details, the Fee Report, and
 // lib/fee-balance.ts's computeStudentFeeBalance: admission fee (or
-// fees_structure/batch fallback) + posted debits + the one-time membership
+// batch Total Fees (INR) tuition) + posted debits + the one-time membership
 // fee, minus the paid ledger. This list previously only used the batch's flat
 // Fees_Full_Payment (no membership fee, no posted debits), which made its
 // Total Fees / Balance figures disagree with the student's own Fee Details
@@ -135,15 +136,7 @@ export async function GET(req: NextRequest) {
            sm.IsActive,
            am.Payment_Type,
            am.Fees AS Admission_Fees,
-           COALESCE(
-             NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-             NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-             NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-             NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-             NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-             NULLIF(CAST(REPLACE(IFNULL(bm2.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-             0
-           ) AS Resolved_Batch_Fee,
+           ${batchTuitionSql('bm', 'bm2')} AS Resolved_Batch_Fee,
            COALESCE(fp.Paid, 0) AS Paid_Fees,
            COALESCE(fp.PostedDebit, 0) AS Posted_Debit,
            COALESCE(fp.HasMembershipDebit, 0) AS Has_Membership_Debit
@@ -183,8 +176,8 @@ export async function GET(req: NextRequest) {
     const searchedTotal = (countRows as any[])[0]?.total || 0;
 
     // Same Total Fees / Balance formula as /api/fee-details and the Fee Report
-    // (see lib/fee-balance.ts): admission fee (or fees_structure/batch
-    // fallback) + posted debits + the one-time ₹899 membership fee, minus paid.
+    // (see lib/fee-balance.ts): admission fee (or batch
+    // Total Fees (INR) tuition) + posted debits + the one-time ₹899 membership fee, minus paid.
     const parseFee = (v: unknown) => Number(String(v ?? '').replace(/,/g, '')) || 0;
     const MEMBERSHIP_FEE = 899;
     const rowsWithExactFees = (rows as any[]).map((row) => {

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionFromInr } from '@/lib/fee-balance';
 import { requirePermission } from '@/lib/api-auth';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const [studentRows] = await pool.query<any[]>(
       `SELECT sm.Student_Id, sm.Student_Name, sm.Present_Mobile, sm.Email,
               sm.Course_Id, cm.Course_Name, sm.Batch_Code, bm.Batch_Id,
-              bm.Actual_Fees_Payment, bm.Fees_Full_Payment,
+              bm.INR_Total,
               DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate,
               COALESCE(NULLIF(TRIM(sm.Transfered), ''), '') AS Transfered,
               COALESCE(sm.Moved_To_Batch_Code, '') AS Moved_To_Batch_Code,
@@ -65,7 +66,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     );
     const feePromise = pool.query<any[]>(
       `SELECT fs.duedate, fs.actualfees, fs.fullfees, fs.total_inr,
-              bm.Actual_Fees_Payment, bm.Fees_Full_Payment,
+              bm.INR_Total,
               DATE_FORMAT(bm.SDate, '%Y-%m-%d') AS Batch_SDate_Direct
        FROM batch_mst bm
        LEFT JOIN fees_structure fs ON fs.batch_id = bm.Batch_Id AND (fs.deleted = 0 OR fs.deleted IS NULL)
@@ -132,7 +133,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     // admitted before that logic existed, or whose Payment_Type was set outside that
     // exact flow, would otherwise never get it). Log it here too so viewing the page
     // is enough to make it appear, instead of requiring a re-grant.
-    const batchFeesFull = Number(student.Fees_Full_Payment ?? feeRow?.Fees_Full_Payment ?? 0);
+    const batchFeesFull = batchTuitionFromInr(student.INR_Total ?? feeRow?.INR_Total);
     if (admission?.Payment_Type === 'Full Payment' && batchFeesFull > 0) {
       const alreadyLogged = ledgerRows.some((r) => r.Payment_Type === 'Discount');
       if (!alreadyLogged) {
@@ -195,11 +196,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ studentId: 
     const parseFee = (v: unknown) => Number(String(v ?? '').replace(/,/g, '')) || 0;
     const totalDebit =
       parseFee(admission?.Fees) ||
-      parseFee(feeRow?.actualfees) ||
-      parseFee(feeRow?.fullfees) ||
-      parseFee(feeRow?.total_inr) ||
-      parseFee(feeRow?.Actual_Fees_Payment) ||
-      parseFee(feeRow?.Fees_Full_Payment) ||
+      batchTuitionFromInr(student.INR_Total ?? feeRow?.INR_Total) ||
       0;
     const postedDebit = ledger.reduce((s, r) => s + r.Debit, 0);
     const totalCredit = ledger.reduce((s, r) => s + r.Credit, 0);

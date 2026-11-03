@@ -46,7 +46,6 @@ interface BatchWiseFeesRow {
   Course_Name: string;
   Batch_Start: string | null;
   Batch_End: string | null;
-  Fees_Full_Payment?: number | null;
   Student_Id?: number | null;
   Cancel?: string | null;
   Transfered?: string | null;
@@ -401,7 +400,7 @@ function FeesReportContent() {
       }
 
       const r = g.first;
-      const totalFees = r.Total_Fees_Exact ?? r.Fees_Full_Payment ?? 0;
+      const totalFees = r.Total_Fees_Exact ?? 0;
       const totalPaid = r.Total_Paid_Exact ?? 0;
       const tuitionReceived = r.Tuition_Fees_Received ?? 0;
       const alumniReceived = r.Alumni_Fees_Received ?? 0;

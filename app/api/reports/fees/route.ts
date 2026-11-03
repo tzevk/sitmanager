@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { ensureStudentTransferColumns } from '@/lib/student-transfer';
 
 export const runtime = 'nodejs';
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
           `SELECT
              COALESCE(bm.Batch_code,'') AS Batch_Code,
              COALESCE(cm.Course_Name,'') AS Course_Name,
-             bm.SDate AS Batch_Start, bm.EDate AS Batch_End, bm.Fees_Full_Payment,
+             bm.SDate AS Batch_Start, bm.EDate AS Batch_End,
              sm.Student_Id AS Student_Id,
              am.Cancel AS Cancel,
              am.Fees AS Admission_Fees,
@@ -126,17 +127,9 @@ export async function GET(req: NextRequest) {
              sfm.Cheque_Date, sfm.Amount, sfm.Service_Tax, sfm.Total_Amt,
              sfm.UnPaid_Amt, sfm.Amt_Word, sfm.Notes,
              sfm.FeesMonth, sfm.FeesYear, sfm.Print,
-             -- Same resolution chain as /api/fee-details, so "Total Fees" here
-             -- matches the per-student Fee Details page exactly instead of
-             -- only ever reading the batch's flat Fees_Full_Payment.
-             COALESCE(
-               NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-               NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-               NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-               NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-               NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-               0
-             ) AS Resolved_Batch_Fee,
+             -- Batch tuition from Total Fees (INR) − ₹899 (lib/fee-balance.ts),
+             -- same as /api/fee-details, so "Total Fees" matches exactly.
+             ${batchTuitionSql('bm')} AS Resolved_Batch_Fee,
              -- Scalar subqueries (not a joined aggregate) so a student who has
              -- BOTH real-Batch_Id fee rows and legacy NULL-Batch_Id fee rows
              -- (430+ students) can't produce two matching ledger rows and

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 
@@ -50,11 +51,7 @@ export async function GET(req: NextRequest) {
           c.Course_Name,
           COALESCE(
             NULLIF(CAST(REPLACE(IFNULL(am.Fees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
+            NULLIF(${batchTuitionSql('bm')}, 0),
             0
           ) AS tuition,
           IFNULL(l.paid, 0) AS paid,

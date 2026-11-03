@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { requireAuth } from '@/lib/api-auth';
 import { dashboardRateLimiter } from '@/lib/rate-limit';
 import { cache, cacheTTL } from '@/lib/cache';
@@ -1040,16 +1041,7 @@ async function fetchDashboardData(dept?: string) {
           b.ActualDate,
           b.EDate,
           b.Duration,
-          COALESCE(
-            NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(b.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(b.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(b.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0),
-            NULLIF(CAST(REPLACE(IFNULL(b.INR_Basic, ''), ',', '') AS DECIMAL(15,2)), 0) + IFNULL(CAST(REPLACE(IFNULL(b.INR_ServiceTax, ''), ',', '') AS DECIMAL(15,2)), 0),
-            0
-          ) AS batch_fee
+          ${batchTuitionSql('b')} AS batch_fee
         FROM batch_mst b
         LEFT JOIN (
           SELECT batch_id, MAX(id) AS id

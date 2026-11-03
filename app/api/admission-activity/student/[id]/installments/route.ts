@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import { requirePermission } from '@/lib/api-auth';
 import { ensureInstallmentPlanTable, defaultInstallmentCount } from '@/lib/student-installments';
 
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
       const [admRows] = await pool.query(
         `SELECT a.Admission_Id, a.Payment_Type, a.Admission_Date,
-                COALESCE(NULLIF(a.Fees, 0), b.Fees_Full_Payment, b2.Fees_Full_Payment, 0) AS TotalFees
+                COALESCE(NULLIF(a.Fees, 0), NULLIF(${batchTuitionSql('b', 'b2')}, 0), 0) AS TotalFees
          FROM student_master s
          LEFT JOIN admission_master a
            ON a.Student_Id = s.Student_Id AND (a.IsDelete = 0 OR a.IsDelete IS NULL)

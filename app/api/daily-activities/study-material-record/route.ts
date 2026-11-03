@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
            a.Student_Id,
            COALESCE(NULLIF(TRIM(s.Student_Name), ''), TRIM(CONCAT_WS(' ', s.FName, s.LName)), CONCAT('Student #', s.Student_Id)) AS Student_Name,
            COALESCE(a.Admission_Date, s.Admission_Dt) AS Admission_Date,
-           COALESCE(b.Fees_Full_Payment, b.Actual_Fees_Payment, 0) AS Total_Fee,
+           COALESCE(NULLIF(CAST(REPLACE(IFNULL(b.INR_Total, ''), ',', '') AS DECIMAL(15,2)), 0), 0) AS Total_Fee,
            COALESCE(paid.Paid_Amt, 0) AS Paid_Amt
          FROM (
            SELECT MAX(a2.Admission_Id) AS Admission_Id

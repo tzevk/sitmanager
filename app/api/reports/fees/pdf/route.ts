@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { batchTuitionSql } from '@/lib/fee-balance';
 import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
@@ -63,24 +64,16 @@ export async function GET(req: NextRequest) {
          sm.Student_Id, MAX(bm.Course_Id) AS Course_Id, MAX(am.Admission_Date) AS Admission_Date, MAX(am.Fees) AS Fees,
          MAX(am.Payment_Type) AS Admission_Payment_Type,
          COALESCE(MAX(sm.Student_Name), MAX(CONCAT_WS(' ', sm.FName, sm.MName, sm.LName)), '') AS Student_Name,
-         COALESCE(MAX(bm.Batch_code),'') AS Batch_Code, MAX(bm.Fees_Full_Payment) AS Fees_Full_Payment,
+         COALESCE(MAX(bm.Batch_code),'') AS Batch_Code,
          MAX(bm.SDate) AS SDate, MAX(bm.EDate) AS EDate,
          COALESCE(MAX(cm.Course_Name),'') AS Course_Name,
          COALESCE(MAX(sm.Moved_To_Batch_Code), '') AS Moved_To_Batch_Code,
          COALESCE(MAX(sm.Moved_From_Batch_Code), '') AS Moved_From_Batch_Code,
          COALESCE(NULLIF(TRIM(MAX(sm.Transfered)), ''), '') AS Transfered,
          CASE WHEN LOWER(TRIM(CAST(MAX(COALESCE(am.Cancel,'')) AS CHAR))) IN ('yes','1','true') THEN 1 ELSE 0 END AS Cancelled,
-         -- Same resolution chain as /api/fee-details / the on-screen report,
-         -- so the PDF's "Amount" matches the Fee Details page exactly instead
-         -- of only ever reading the batch's flat Fees_Full_Payment.
-         MAX(COALESCE(
-           NULLIF(CAST(REPLACE(IFNULL(fs.actualfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(fs.fullfees, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(fs.total_inr, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(bm.Actual_Fees_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-           NULLIF(CAST(REPLACE(IFNULL(bm.Fees_Full_Payment, ''), ',', '') AS DECIMAL(15,2)), 0),
-           0
-         )) AS Resolved_Batch_Fee
+         -- Batch tuition from Total Fees (INR) − ₹899, same as /api/fee-details
+         -- and the on-screen report, so the PDF's "Amount" matches exactly.
+         MAX(${batchTuitionSql('bm')}) AS Resolved_Batch_Fee
        FROM (
          SELECT Student_Id, Batch_Id, MAX(Admission_Id) AS Admission_Id
          FROM admission_master

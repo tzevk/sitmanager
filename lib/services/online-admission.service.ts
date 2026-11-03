@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool } from '@/lib/db';
+import { batchTuitionFromInr } from '@/lib/fee-balance';
 import { generateFeesReceiptNo } from '@/lib/fees-receipt';
 import { assignRollNumberOnGrant } from '@/lib/roll-number';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
@@ -863,7 +864,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
   let resolvedBatchFees: number | null = null;
   if (rawBatchCode) {
     const [bRows] = await pool.query(
-      `SELECT Batch_Id, Batch_code, Fees_Full_Payment FROM batch_mst
+      `SELECT Batch_Id, Batch_code, INR_Total FROM batch_mst
        WHERE Batch_code = ? AND (IsDelete = 0 OR IsDelete IS NULL)
        ORDER BY COALESCE(IsActive, 0) DESC, Batch_Id DESC LIMIT 1`,
       [rawBatchCode]
@@ -871,7 +872,7 @@ export async function syncOnlineAdmissionIntoCurrentDb(
     if (bRows.length) {
       batchCode = String(bRows[0].Batch_code);
       resolvedBatchId = bRows[0].Batch_Id != null ? Number(bRows[0].Batch_Id) : null;
-      resolvedBatchFees = bRows[0].Fees_Full_Payment != null ? Number(bRows[0].Fees_Full_Payment) : null;
+      resolvedBatchFees = batchTuitionFromInr(bRows[0].INR_Total) || null;
     }
   }
   const batchCategory = firstNonEmpty(input.trainingCategory, input.Batch_Category_id) || null;
