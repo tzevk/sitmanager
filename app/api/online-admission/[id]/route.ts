@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
+import { isValidAadhar, normalizeAadhar } from '@/lib/aadhar';
 import { requirePermission } from '@/lib/api-auth';
 import { apiRateLimiter } from '@/lib/rate-limit';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
@@ -395,6 +396,7 @@ export async function GET(
       mobile:         si.Student_Present_Mobile || payload.mobile || si.Present_Mobile || '',
       telephone:      si.Student_Telephone || payload.telephone || si.Present_Mobile2 || '',
       familyContact:  payload.familyContact || '',
+      aadharNumber:   normalizeAadhar(payload.aadharNumber) || '',
 
       // address
       presentFlat:        payload.presentFlat        || '',
@@ -457,6 +459,15 @@ export async function GET(
       postgrad_ktCount:    payload.postgrad_ktCount      || '0',
       postgrad_ktDetails:  payload.postgrad_ktDetails    || [],
       educationRemark:     payload.educationRemark       || '',
+      educationPath:       payload.educationPath         || '',
+      iti_tradeName:       payload.iti_tradeName         || '',
+      iti_instituteName:   payload.iti_instituteName     || '',
+      iti_yearOfPassing:   payload.iti_yearOfPassing     || '',
+      iti_percentage:      payload.iti_percentage        || '',
+      iti_ktCount:         payload.iti_ktCount           || '0',
+      iti_ktDetails:       payload.iti_ktDetails         || [],
+      medicalHistory:        payload.medicalHistory === true || payload.medicalHistory === 'true',
+      medicalHistoryDetails: payload.medicalHistoryDetails || '',
       qualification:       si.Student_Qualification || payload.qualification || si.Qualification || '',
       discipline:          si.Student_Discipline || payload.discipline || si.Discipline || '',
       percentage:          toStr(si.Student_Percentage) || payload.percentage || '',
@@ -487,6 +498,10 @@ export async function GET(
       razorpayOrderId:       String(payload.razorpayOrderId  || ''),
       razorpayAmount:        payload.razorpayAmount != null ? Number(payload.razorpayAmount) : null,
       paymentSubMethod:      payload.paymentSubMethod || '',
+      payAtOfficeOverrideUsed: Boolean(payload.payAtOfficeOverrideUsed),
+      upiTransferConfirmed:  Boolean(payload.upiTransferConfirmed),
+      upiTransferReference:  String(payload.upiTransferReference || ''),
+      upiAmount:             payload.upiAmount != null ? Number(payload.upiAmount) : null,
       neftTransactionNumber: String(payload.neftTransactionNumber || ''),
       neftAmount:            payload.neftAmount != null ? Number(payload.neftAmount) : null,
       neftBankDetails:       payload.neftBankDetails || null,
@@ -500,6 +515,9 @@ export async function GET(
       experiencedConsentAcknowledged: Boolean(payload.experiencedConsentAcknowledged),
       consentChecks:         Array.isArray(payload.consentChecks) ? payload.consentChecks : [],
       consentData:           payload.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
+      dpdpConsent:           payload.dpdpConsent === true,
+      dpdpConsentAt:         payload.dpdpConsentAt || null,
+      termsVersion:          payload.termsVersion || null,
       draftMeta:             payload.__draftProgress || null,
       savedAdmissionAssetsDetail,
     });
@@ -611,6 +629,20 @@ export async function PUT(
       return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
     }
 
+    // Aadhaar must be on file (and valid) before an Indian applicant can be
+    // accepted — it's copied onto the student record at grant.
+    {
+      const existing = await getPayload(pool, inquiryId);
+      const incomingAadhar = normalizeAadhar(body.aadharNumber);
+      if (incomingAadhar && !isValidAadhar(incomingAadhar)) {
+        return NextResponse.json({ error: 'Aadhaar number is invalid — it must be the 12-digit number printed on the Aadhaar card.' }, { status: 400 });
+      }
+      const international = body.isInternational === true || existing?.isInternational === true || existing?.isInternational === 'true';
+      if (body.statusAction === 'accept' && !international && !isValidAadhar(incomingAadhar || existing?.aadharNumber)) {
+        return NextResponse.json({ error: 'Enter and save the applicant\'s Aadhaar number before accepting this admission.' }, { status: 400 });
+      }
+    }
+
     // Determine status change
     let newStatus: number | null = null;
     if (body.statusAction === 'accept') newStatus = 8;   // Admitted
@@ -665,7 +697,7 @@ export async function PUT(
       // Apply only non-empty fields that were explicitly provided in the request body.
       const safeMergeFields = ['firstName', 'middleName', 'lastName', 'email', 'mobile',
         'dob', 'gender', 'batchCode', 'trainingProgrammeId', 'trainingProgrammeName',
-        'trainingCategory', 'modeOfPayment'] as const;
+        'trainingCategory', 'modeOfPayment', 'aadharNumber'] as const;
       for (const field of safeMergeFields) {
         const incoming = body[field];
         if (incoming != null && String(incoming).trim() !== '') {
@@ -691,7 +723,7 @@ export async function PUT(
       }
     }
 
-    for (const key of ['ssc_ktDetails', 'hsc_ktDetails', 'diploma_ktDetails', 'grad_ktDetails', 'postgrad_ktDetails']) {
+    for (const key of ['ssc_ktDetails', 'hsc_ktDetails', 'diploma_ktDetails', 'iti_ktDetails', 'grad_ktDetails', 'postgrad_ktDetails']) {
       if (Array.isArray(cleanBody[key])) cleanBody[key] = stripFiles(cleanBody[key]);
     }
 

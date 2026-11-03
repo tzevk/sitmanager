@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import { formatAadhar, isValidAadhar, normalizeAadhar } from '@/lib/aadhar';
+import { ADMISSION_TERMS_SECTIONS, consentDeclarationItems, DpdpNotice, DPDP_CONSENT_STATEMENT } from '@/components/admission/admission-terms';
 import { useRouter, useParams } from 'next/navigation';
 import { useResourcePermissions } from '@/lib/permissions-context';
 import { AccessDenied, PermissionLoading } from '@/components/ui/PermissionGate';
@@ -21,8 +23,8 @@ interface PayAtOfficeAudit {
 
 
 
-type EduTab = 'SSC' | 'HSC' | 'Diploma' | 'Graduation' | 'Post-Grad';
-type MainTab = 'personal' | 'academic' | 'occupational' | 'training' | 'payment' | 'terms';
+type EduTab = 'SSC' | 'HSC' | 'Diploma' | 'ITI' | 'Graduation' | 'Post-Grad';
+type MainTab = 'personal' | 'documents' | 'academic' | 'occupational' | 'training' | 'payment' | 'terms';
 
 /* ─── Style constants ────────────────────────────────────────────────────── */
 const lbl = 'block text-[11px] font-semibold text-gray-500 mb-0.5';
@@ -43,6 +45,7 @@ const INDIAN_STATES = [
 /* ─── Main tab definitions ───────────────────────────────────────────────── */
 const MAIN_TABS: { id: MainTab; label: string }[] = [
   { id: 'personal',     label: 'Personal Info' },
+  { id: 'documents',    label: 'Documents & Photos' },
   { id: 'academic',     label: 'Academic' },
   { id: 'occupational', label: 'Occupational' },
   { id: 'training',     label: 'Training' },
@@ -200,6 +203,47 @@ function PaymentDetailPanel({ tone, icon, title, children }: {
   );
 }
 
+interface UploadItem { key: string; label: string; url: string; isImage: boolean }
+const IMAGE_EXT = /\.(jpe?g|png|webp|gif)$/i;
+
+/** 'ssc_marksheet' → 'SSC Marksheet', 'grad_kt_2_marksheet' → 'Graduation KT 2 Marksheet'. */
+function uploadLabel(key: string): string {
+  const level: Record<string, string> = {
+    ssc: 'SSC', hsc: 'HSC', diploma: 'Diploma', iti: 'ITI', grad: 'Graduation', graduation: 'Graduation',
+    postgrad: 'Post-Graduation', postgraduation: 'Post-Graduation',
+  };
+  const kt = key.match(/^([a-z]+)_kt_(\d+)_marksheet$/);
+  if (kt) return `${level[kt[1]] || kt[1].toUpperCase()} KT ${kt[2]} Marksheet`;
+  const m = key.match(/^([a-z]+)_marksheet$/);
+  if (m) return `${level[m[1]] || m[1].toUpperCase()} Marksheet`;
+  return key.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function UploadGallery({ items }: { items: UploadItem[] }) {
+  if (!items.length) return <p className="text-xs text-gray-400 italic">The applicant has not uploaded any documents or photos.</p>;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      {items.map(item => (
+        <a key={item.key} href={item.url} target="_blank" rel="noopener noreferrer"
+          className="group rounded-lg border border-gray-200 bg-white overflow-hidden hover:border-[#2A6BB5] hover:shadow-sm transition-all">
+          <div className="h-36 bg-gray-50 flex items-center justify-center overflow-hidden">
+            {item.isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.url} alt={item.label} className="max-h-full max-w-full object-contain" loading="lazy" />
+            ) : (
+              <iframe src={`${item.url}#toolbar=0&view=FitH`} title={item.label} className="w-full h-full pointer-events-none" loading="lazy" />
+            )}
+          </div>
+          <div className="px-2 py-1.5 border-t border-gray-100 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-semibold text-gray-700 truncate">{item.label}</span>
+            <span className="text-[10px] text-[#2A6BB5] font-semibold shrink-0 group-hover:underline">Open</span>
+          </div>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function KTTable({ ktCount, ktDetails }: { ktCount: string; ktDetails: KTDetail[] }) {
   const count = Number(ktCount);
   if (!count || !ktDetails.length) return null;
@@ -270,7 +314,7 @@ export default function EditOnlineAdmissionPage() {
   // granted. Once granted, the same files live on the student's own document row
   // instead, fetched separately into studentDocuments below.
   const [savedAdmissionAssetsDetail, setSavedAdmissionAssetsDetail] =
-    useState<Array<{ key: string; isPhoto: boolean; url: string }>>([]);
+    useState<Array<{ key: string; isPhoto: boolean; url: string; filename?: string }>>([]);
   const [studentDocuments, setStudentDocuments] =
     useState<Array<{ id: number; doc_name: string; upload_image: string }>>([]);
 
@@ -286,7 +330,7 @@ export default function EditOnlineAdmissionPage() {
   const [formData, setFormData] = useState({
     firstName: '', middleName: '', lastName: '', shortName: '',
     dob: '', gender: '', nationality: 'Indian',
-    email: '', mobile: '', telephone: '', familyContact: '',
+    email: '', mobile: '', telephone: '', familyContact: '', aadharNumber: '',
     presentFlat: '', presentBuilding: '', presentStreet: '',
     presentArea: '', presentLandmark: '', presentCity: '',
     presentDistrict: '', presentState: '', presentPin: '', presentCountry: 'India',
@@ -307,7 +351,10 @@ export default function EditOnlineAdmissionPage() {
     postgrad_degree: '', postgrad_specialization: '', postgrad_university: '',
     postgrad_yearOfPassing: '', postgrad_percentage: '',
     postgrad_ktCount: '0', postgrad_ktDetails: [] as KTDetail[],
-    educationRemark: '',
+    iti_tradeName: '', iti_instituteName: '', iti_yearOfPassing: '', iti_percentage: '',
+    iti_ktCount: '0', iti_ktDetails: [] as KTDetail[],
+    educationRemark: '', educationPath: '',
+    medicalHistory: false, medicalHistoryDetails: '',
     qualification: '', discipline: '', percentage: '',
     occupationalStatus: '', jobOrganisation: '', jobDescription: '',
     jobDesignation: '', workingFromYears: '', workingFromMonths: '',
@@ -326,6 +373,9 @@ export default function EditOnlineAdmissionPage() {
     experiencedConsentAcknowledged: false,
     consentData: { eligibility: '', qualification: '', candidateRemark: '' },
     consentChecks: [] as boolean[],
+    dpdpConsent: false, dpdpConsentAt: '', termsVersion: '',
+    termsSectionsAcknowledged: [] as boolean[],
+    payAtOfficeOverrideUsed: false, upiAmount: null as number | null,
   });
 
   const set = (field: string, value: string | boolean) =>
@@ -426,7 +476,7 @@ export default function EditOnlineAdmissionPage() {
       // photo endpoint; before that, fall back to the inquiry-scoped saved upload.
       const realSid = d.studentId ? String(d.studentId) : '';
       setRealStudentId(realSid);
-      const assetDetails: Array<{ key: string; isPhoto: boolean; url: string }> =
+      const assetDetails: Array<{ key: string; isPhoto: boolean; url: string; filename?: string }> =
         Array.isArray(d.savedAdmissionAssetsDetail) ? d.savedAdmissionAssetsDetail : [];
       setSavedAdmissionAssetsDetail(assetDetails);
       if (realSid && Boolean(d.photo)) {
@@ -458,6 +508,7 @@ export default function EditOnlineAdmissionPage() {
         nationality: d.nationality || 'Indian',
         email: d.email || '', mobile: d.mobile || '',
         telephone: d.telephone || '', familyContact: d.familyContact || '',
+        aadharNumber: d.aadharNumber || '',
         presentFlat: d.presentFlat || '', presentBuilding: d.presentBuilding || '',
         presentStreet: d.presentStreet || d.presentAddress || '',
         presentArea: d.presentArea || '', presentLandmark: d.presentLandmark || '',
@@ -490,7 +541,12 @@ export default function EditOnlineAdmissionPage() {
         postgrad_university: d.postgrad_university || '',
         postgrad_yearOfPassing: d.postgrad_yearOfPassing || '', postgrad_percentage: d.postgrad_percentage || '',
         postgrad_ktCount: d.postgrad_ktCount || '0', postgrad_ktDetails: d.postgrad_ktDetails || [],
+        iti_tradeName: d.iti_tradeName || '', iti_instituteName: d.iti_instituteName || '',
+        iti_yearOfPassing: d.iti_yearOfPassing || '', iti_percentage: d.iti_percentage || '',
+        iti_ktCount: d.iti_ktCount || '0', iti_ktDetails: d.iti_ktDetails || [],
         educationRemark: d.educationRemark || '',
+        educationPath: d.educationPath || '',
+        medicalHistory: Boolean(d.medicalHistory), medicalHistoryDetails: d.medicalHistoryDetails || '',
         qualification: d.qualification || '',
         discipline: d.discipline || '',
         percentage: d.percentage ? String(d.percentage) : '',
@@ -525,6 +581,11 @@ export default function EditOnlineAdmissionPage() {
         experiencedConsentAcknowledged: Boolean(d.experiencedConsentAcknowledged),
         consentData: d.consentData || { eligibility: '', qualification: '', candidateRemark: '' },
         consentChecks: Array.isArray(d.consentChecks) ? d.consentChecks : [],
+        dpdpConsent: Boolean(d.dpdpConsent), dpdpConsentAt: d.dpdpConsentAt || '',
+        termsVersion: d.termsVersion || '',
+        termsSectionsAcknowledged: Array.isArray(d.termsSectionsAcknowledged) ? d.termsSectionsAcknowledged : [],
+        payAtOfficeOverrideUsed: Boolean(d.payAtOfficeOverrideUsed),
+        upiAmount: d.upiAmount != null ? Number(d.upiAmount) : null,
       });
     } catch {
       alert('Failed to load admission data');
@@ -598,6 +659,12 @@ export default function EditOnlineAdmissionPage() {
   /* ── Submit action ── */
   const submitAction = async (action: 'accept' | 'update' | 'reject') => {
     if (action === 'reject' && !confirm('Reject this admission? Status will be set to Cancelled.')) return;
+    if (formData.aadharNumber && !isValidAadhar(formData.aadharNumber)) {
+      alert('The Aadhaar number is invalid — please check the 12 digits.'); setActiveTab('personal'); return;
+    }
+    if (action === 'accept' && aadharMissing) {
+      alert('Enter the applicant\'s Aadhaar number before accepting this admission.'); setActiveTab('personal'); return;
+    }
     setActionType(action); setSubmitting(true);
     try {
       // Strip read-only Razorpay fields — never let the admin form overwrite payment records
@@ -688,12 +755,36 @@ export default function EditOnlineAdmissionPage() {
     );
   };
 
+  /* ── Every uploaded file (photo, marksheets, KT marksheets, anything else) ──
+     Before grant they live on the inquiry; after grant, on the student's own
+     documents (doc_name 'oa:<key>' for form uploads). */
+  const studentDocUrl = (uploadImage: string) => {
+    const safePath = String(uploadImage || '').replace(/\\/g, '/').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+    return `/api/student-documents/${encodeURIComponent(realStudentId)}/${safePath}`;
+  };
+  const allUploads: UploadItem[] = realStudentId
+    ? [
+        ...(photoUrl ? [{ key: 'photo', label: 'Photograph', url: photoUrl, isImage: true }] : []),
+        ...studentDocuments.map(doc => {
+          const key = doc.doc_name.startsWith('oa:') ? doc.doc_name.slice(3) : doc.doc_name;
+          return { key: `doc-${doc.id}`, label: uploadLabel(key), url: studentDocUrl(doc.upload_image), isImage: IMAGE_EXT.test(doc.upload_image) };
+        }),
+      ]
+    : savedAdmissionAssetsDetail.map(a => ({
+        key: a.key,
+        label: a.isPhoto ? 'Photograph' : uploadLabel(a.key),
+        url: a.url,
+        isImage: a.isPhoto || IMAGE_EXT.test(a.filename || ''),
+      }));
+  const aadharMissing = !isInternational && !isValidAadhar(formData.aadharNumber);
+
   /* ── Education sub-tabs ── */
-  const eduTabs: EduTab[] = ['SSC', 'HSC', 'Diploma', 'Graduation', 'Post-Grad'];
+  const eduTabs: EduTab[] = ['SSC', 'HSC', 'Diploma', 'ITI', 'Graduation', 'Post-Grad'];
   const eduFilled: Record<EduTab, boolean> = {
     'SSC':        !!(formData.ssc_board || formData.ssc_schoolName || formData.ssc_yearOfPassing),
     'HSC':        !!(formData.hsc_board || formData.hsc_collegeName || formData.hsc_yearOfPassing),
     'Diploma':    !!(formData.diploma_degree || formData.diploma_institute || formData.diploma_yearOfPassing),
+    'ITI':        !!(formData.iti_tradeName || formData.iti_instituteName || formData.iti_yearOfPassing),
     'Graduation': !!(formData.grad_degree || formData.grad_university || formData.grad_yearOfPassing),
     'Post-Grad':  !!(formData.postgrad_degree || formData.postgrad_university || formData.postgrad_yearOfPassing),
   };
@@ -701,6 +792,7 @@ export default function EditOnlineAdmissionPage() {
   /* ── Tab completion indicators ── */
   const tabFilled: Record<MainTab, boolean> = {
     personal:     !!(formData.firstName && formData.lastName && formData.email && formData.mobile),
+    documents:    allUploads.length > 0,
     academic:     Object.values(eduFilled).some(Boolean),
     occupational: !!formData.occupationalStatus,
     training:     !!(formData.trainingProgrammeId && formData.batchCode),
@@ -945,6 +1037,17 @@ export default function EditOnlineAdmissionPage() {
                 <input type="tel" value={formData.familyContact} onChange={e => set('familyContact', e.target.value)} className={inp} />
               </div>
               <div>
+                <label className={lbl}>Aadhaar Number {!isInternational && <span className="text-red-400">*</span>}</label>
+                <input
+                  type="text" inputMode="numeric" autoComplete="off" maxLength={14}
+                  value={formatAadhar(formData.aadharNumber)}
+                  onChange={e => set('aadharNumber', (normalizeAadhar(e.target.value) || '').slice(0, 12))}
+                  placeholder="XXXX XXXX XXXX"
+                  className={`${inp} ${aadharMissing || (formData.aadharNumber && !isValidAadhar(formData.aadharNumber)) ? '!border-red-400' : ''}`}
+                />
+                {aadharMissing && <p className="text-[10px] text-red-600 mt-0.5">Required before accepting</p>}
+              </div>
+              <div>
                 <label className={lbl}>ID Proof Type</label>
                 <select value={formData.idProofType} onChange={e => set('idProofType', e.target.value)} className={sel}>
                   <option value="">— Select —</option>
@@ -1003,6 +1106,13 @@ export default function EditOnlineAdmissionPage() {
       {/* ══════════════════════════════════════════════
           TAB: Academic
       ══════════════════════════════════════════════ */}
+      {activeTab === 'documents' && (
+        <SectionCard title="Documents & Photos Uploaded by the Applicant" icon="doc">
+          <p className="text-[11px] text-gray-500 mb-3">Check every document before accepting. Click a file to open it full size.</p>
+          <UploadGallery items={allUploads} />
+        </SectionCard>
+      )}
+
       {activeTab === 'academic' && (
         <SectionCard title="Academic Details" icon="cap">
           {/* Sub-tab bar */}
@@ -1129,6 +1239,32 @@ export default function EditOnlineAdmissionPage() {
             </div>
           )}
 
+          {/* ITI */}
+          {activeEduTab === 'ITI' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+                <div>
+                  <label className={lbl}>Trade Name</label>
+                  <input type="text" value={formData.iti_tradeName} onChange={e => set('iti_tradeName', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Institute Name</label>
+                  <input type="text" value={formData.iti_instituteName} onChange={e => set('iti_instituteName', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Year of Passing</label>
+                  <input type="number" value={formData.iti_yearOfPassing} onChange={e => set('iti_yearOfPassing', e.target.value)} className={inp} />
+                </div>
+                <div>
+                  <label className={lbl}>Percentage / CGPA</label>
+                  <input type="text" value={formData.iti_percentage} onChange={e => set('iti_percentage', e.target.value)} className={inp} />
+                </div>
+              </div>
+              <DocumentViewLink label="ITI Marksheet" url={savedAssetUrl('iti_marksheet')} />
+              <KTTable ktCount={formData.iti_ktCount} ktDetails={formData.iti_ktDetails} />
+            </div>
+          )}
+
           {/* Graduation */}
           {activeEduTab === 'Graduation' && (
             <div className="space-y-3">
@@ -1241,6 +1377,7 @@ export default function EditOnlineAdmissionPage() {
           TAB: Occupational
       ══════════════════════════════════════════════ */}
       {activeTab === 'occupational' && (
+        <div className="space-y-4">
         <SectionCard title="Occupational Information" icon="briefcase">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-2">
             <div>
@@ -1303,6 +1440,18 @@ export default function EditOnlineAdmissionPage() {
             </>)}
           </div>
         </SectionCard>
+
+        <SectionCard title="Medical History" icon="doc">
+          {formData.medicalHistory ? (
+            <div>
+              <p className="text-[11px] font-semibold text-amber-700 mb-1">Applicant declared a medical history</p>
+              <textarea value={formData.medicalHistoryDetails} onChange={e => set('medicalHistoryDetails', e.target.value)} rows={3} className={txta} />
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">Applicant declared no medical history.</p>
+          )}
+        </SectionCard>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════
@@ -1552,11 +1701,12 @@ export default function EditOnlineAdmissionPage() {
         <div className="space-y-4">
           {/* Summary badges */}
           <SectionCard title="Agreement Status" icon="shield">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               {[
                 { label: 'Terms & Conditions', value: formData.termsAgreed },
                 { label: 'Student Eligibility Consent', value: formData.consentAcknowledged },
                 { label: 'Experienced Candidate Consent', value: formData.experiencedConsentAcknowledged },
+                { label: 'Data Protection Consent (DPDP Act, 2023)', value: formData.dpdpConsent },
               ].map(item => (
                 <div
                   key={item.label}
@@ -1603,7 +1753,7 @@ export default function EditOnlineAdmissionPage() {
                         </svg>
                       )}
                     </div>
-                    <span className="text-[11px] text-gray-600">Consent item {i + 1}</span>
+                    <span className="text-[11px] text-gray-600">{consentDeclarationItems(formData.trainingCategory)[i] || `Consent item ${i + 1}`}</span>
                   </div>
                 ))}
               </div>
@@ -1641,6 +1791,51 @@ export default function EditOnlineAdmissionPage() {
               </div>
             </SectionCard>
           )}
+
+          {/* DPDP Act consent */}
+          <SectionCard title="Data Protection Consent (DPDP Act, 2023)" icon="shield">
+            {formData.dpdpConsent ? (
+              <p className="text-[11px] font-semibold text-emerald-700 mb-2">
+                Consent given{formData.dpdpConsentAt ? ` on ${new Date(formData.dpdpConsentAt).toLocaleString('en-IN')}` : ''}: &ldquo;{DPDP_CONSENT_STATEMENT}&rdquo;
+              </p>
+            ) : (
+              <p className="text-[11px] font-semibold text-amber-700 mb-2">
+                No DPDP consent on record — this form was submitted before the consent step was added. Obtain consent from the applicant before accepting.
+              </p>
+            )}
+            <details className="text-xs">
+              <summary className="cursor-pointer text-[#2A6BB5] font-semibold">Notice shown to the applicant</summary>
+              <div className="mt-2"><DpdpNotice /></div>
+            </details>
+          </SectionCard>
+
+          {/* Full Terms & Conditions the applicant acknowledged */}
+          <SectionCard title="Terms & Conditions Agreed by the Applicant" icon="doc">
+            <p className="text-[11px] text-gray-500 mb-3">
+              {formData.termsAgreed ? 'The applicant accepted the declaration below' : 'The applicant has not accepted the declaration yet'}
+              {formData.termsVersion ? ` (terms version ${formData.termsVersion})` : ''}. Read through before accepting the admission.
+            </p>
+            <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+              {ADMISSION_TERMS_SECTIONS.map(({ idx, title, content }) => {
+                const ack = formData.termsSectionsAcknowledged[idx];
+                return (
+                  <div key={idx} className="rounded-lg border border-gray-200 bg-white">
+                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-gray-50 border-b border-gray-200">
+                      <span className="text-xs font-bold text-[#2E3093]">{idx + 1}. {title}</span>
+                      {formData.termsSectionsAcknowledged.length > 0 && (
+                        <span className={`text-[10px] font-bold ${ack ? 'text-emerald-700' : 'text-gray-400'}`}>{ack ? 'Acknowledged' : 'Not acknowledged'}</span>
+                      )}
+                    </div>
+                    <div className="px-3 py-2 text-xs">{content}</div>
+                  </div>
+                );
+              })}
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-gray-700">
+                <span className="font-semibold">Declaration:</span> I hereby declare that all the information provided by me is true and correct to the best of my knowledge.
+                I understand that any false information may result in the cancellation of my admission. I agree to abide by all the rules and regulations of the institute.
+              </div>
+            </div>
+          </SectionCard>
 
           {!formData.termsAgreed && !formData.consentAcknowledged && !formData.experiencedConsentAcknowledged && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
@@ -1743,9 +1938,13 @@ export default function EditOnlineAdmissionPage() {
             )}
             Update
           </button>
+          {aadharMissing && (
+            <span className="text-[11px] font-semibold text-red-600">Aadhaar number required to accept</span>
+          )}
           <button
             type="button"
-            disabled={submitting}
+            disabled={submitting || aadharMissing}
+            title={aadharMissing ? 'Enter the Aadhaar number in Personal Info first' : undefined}
             onClick={() => submitAction('accept')}
             className="flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all disabled:opacity-50"
           >

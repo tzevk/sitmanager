@@ -6,6 +6,8 @@ import { assignRollNumberOnGrant } from '@/lib/roll-number';
 import { sendOnlineAdmissionSubmissionEmail } from '@/lib/mailer';
 import { getAdmissionInquiryAssetSummary, hasAdmissionUploads, type AdmissionUploadBundle, saveAdmissionAssetsForStudent, saveAdmissionAssetsForInquiry, attachInquiryAssetsToStudent } from '@/lib/student-documents.server';
 import { ensureFamilyContactColumn } from '@/lib/student-family-contact';
+import { ensureNsdcColumns } from '@/lib/student-nsdc';
+import { isValidAadhar, normalizeAadhar } from '@/lib/aadhar';
 
 let inquiryTableNameCache: string | null = null;
 let statusTableNameCache: string | null | undefined;
@@ -100,6 +102,7 @@ const FORM_COLUMNS: [string, string][] = [
   ['Present_Mobile',    'VARCHAR(20) NULL'],
   ['Telephone',         'VARCHAR(20) NULL'],
   ['Family_Contact',    'VARCHAR(100) NULL'],
+  ['Aadhar_Number',     'VARCHAR(20) NULL'],
   ['ID_Proof_Type',     'VARCHAR(100) NULL'],
   // Present address
   ['Present_Flat',      'VARCHAR(100) NULL'],
@@ -465,6 +468,7 @@ export async function saveStructuredAdmissionData(
     ['Present_Mobile',  n(input.mobile)],
     ['Telephone',       n(input.telephone)],
     ['Family_Contact',  n(input.familyContact)],
+    ['Aadhar_Number',   normalizeAadhar(input.aadharNumber)],
     ['ID_Proof_Type',   n(input.idProofType)],
     // Present address
     ['Present_Flat',      n(input.presentFlat)],
@@ -1115,6 +1119,15 @@ export async function syncOnlineAdmissionIntoCurrentDb(
     }
   }
 
+  const aadhar = normalizeAadhar(input.aadharNumber);
+  if (aadhar && resolvedStudentId > 0) {
+    await ensureNsdcColumns(pool);
+    await pool.query(
+      `UPDATE \`${studentMasterTable}\` SET Aadhar_Number = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      [aadhar, resolvedStudentId]
+    );
+  }
+
   if (statusAction === 'accept' && resolvedStudentId > 0) {
     // Reuse the batch already resolved above so the admission and the student record
     // always reference the exact same batch.
@@ -1590,6 +1603,17 @@ export async function submitOnlineAdmission(
   if (isInternational && /2-payment|loan/i.test(String(input.modeOfPayment || ''))) {
     throw Object.assign(new Error('International candidates pay the full fee. Please select Full Payment.'), { status: 400 });
   }
+  if (input.dpdpConsent !== true) {
+    throw Object.assign(new Error('Please give consent under the Digital Personal Data Protection Act, 2023 to submit the form'), { status: 400 });
+  }
+  if (!isInternational && !isValidAadhar(input.aadharNumber)) {
+    throw Object.assign(new Error('A valid 12-digit Aadhaar number is required'), { status: 400 });
+  }
+  if (normalizeAadhar(input.aadharNumber) && !isValidAadhar(input.aadharNumber)) {
+    throw Object.assign(new Error('Aadhaar number is invalid'), { status: 400 });
+  }
+  input.aadharNumber = normalizeAadhar(input.aadharNumber);
+  input.dpdpConsentAt = new Date().toISOString();
   if (String(input.paymentSubMethod || '').toLowerCase() === 'neft' && !normalizeText(input.neftTransactionNumber)) {
     throw Object.assign(new Error('NEFT transaction number is required'), { status: 400 });
   }
@@ -1645,6 +1669,7 @@ export async function submitOnlineAdmission(
     ssc_ktDetails: stripFiles(rest.ssc_ktDetails),
     hsc_ktDetails: stripFiles(rest.hsc_ktDetails),
     diploma_ktDetails: stripFiles(rest.diploma_ktDetails),
+    iti_ktDetails: stripFiles(rest.iti_ktDetails),
     grad_ktDetails: stripFiles(rest.grad_ktDetails),
     postgrad_ktDetails: stripFiles(rest.postgrad_ktDetails),
   };
