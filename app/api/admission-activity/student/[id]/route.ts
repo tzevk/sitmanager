@@ -335,19 +335,12 @@ export async function GET(
       [id]
     ) as [any[], any];
 
-    // Fees paid = sum of credit (TypeR='C') entries in the fees ledger
-    const [feeRows] = await pool.query(
-      `SELECT COALESCE(SUM(Amount), 0) AS Paid
-       FROM s_fees_mst
-       WHERE Student_Id = ? AND TypeR = 'C' AND IsDelete = 0`,
-      [id]
-    ) as [any[], any];
-    const totalFees = Number(rows[0].Total_Fees) || 0;
-    const paidFees  = Number(feeRows[0]?.Paid) || 0;
+    // Same Total / Paid / Balance as Fee Details and the Fee Report.
+    const balance = await computeStudentFeeBalance(pool, Number(id));
     const fees = {
-      total: totalFees,
-      paid: paidFees,
-      balance: totalFees - paidFees,
+      total: balance.totalFees,
+      paid: balance.totalPaid,
+      balance: balance.balance,
     };
 
     // A student can have MULTIPLE online-admission inquiries/submissions, and the data they
