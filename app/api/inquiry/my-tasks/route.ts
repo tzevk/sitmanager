@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
+import { notifyManualAssignment } from '@/lib/services/lead-allocation.service';
 import { assignLeads, canSeeAllTasks, getMyTaskAppointments, getMyTaskLeads, getMyTasksMonth, getDailyActivity, unassignLeads } from '@/lib/services/my-tasks.service';
 
 export const runtime = 'nodejs';
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
     const [ok] = await getPool().query('SELECT 1 FROM appt_counsellors WHERE user_id = ? LIMIT 1', [userId]);
     if (!(ok as unknown[]).length) return NextResponse.json({ error: 'Leads can only be assigned to a counsellor' }, { status: 400 });
     const count = await assignLeads(ids, userId, auth.session.userId);
+    await notifyManualAssignment(ids, userId).catch((err) => console.error('Manual assign notify:', err));
     return NextResponse.json({ success: true, assigned: count });
   } catch (error) {
     console.error('My tasks assign error:', error);

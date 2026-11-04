@@ -478,6 +478,9 @@ export default function AddInquiryPage() {
     ? [discN, discF, discA, discB, discT, discU].some(v => v.trim())
     : Boolean(newDiscussion.trim());
   const levelOk = meetingLevel !== '2' || Boolean(level2Date && level2Account);
+  // Same closed-status rule the discussions API enforces: only a closed lead may skip the next date.
+  const leadClosed = /admission (taken|confirmed)|not interested|irrelevant|junk|lost lead|clos|duplicate|not eligible/i
+    .test(opts?.statusMaster?.find(s => s.id === discStatusId)?.label ?? '');
   useEffect(() => { setMeetingLevel(isFirstDiscussion ? '1' : '3'); }, [isFirstDiscussion]);
 
   const openL2Modal = () => { setMDate(''); setMLink(''); setMAccount(''); setMNote(''); setMError(''); setL2Modal(true); };
@@ -522,14 +525,14 @@ export default function AddInquiryPage() {
 
   const handleAddDiscussion = async () => {
     const finalText = meetingLevel === '1' ? buildStructuredDiscussion() : newDiscussion.trim();
-    if (!finalText || !newNextDate || !editId || !levelOk) return;
-    if (newNextDate === today()) { setShowSameDateModal(true); return; }
+    if (!finalText || (!newNextDate && !leadClosed) || !editId || !levelOk) return;
+    if (newNextDate && newNextDate === today()) { setShowSameDateModal(true); return; }
     setDiscLoading(true);
     try {
       const res = await fetch('/api/inquiry/discussions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate,
+          inquiryId: editId, discussion: finalText, nextFollowUpDate: newNextDate || null,
           meetingLevel: Number(meetingLevel), level2Date, level2AccountId: Number(level2Account) || undefined,
         }),
       });
@@ -1049,10 +1052,13 @@ export default function AddInquiryPage() {
                 <tr className="border-b border-slate-100 bg-slate-50/60">
                   <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-500 align-top">{fmtDate(today())}</td>
                   <td className="py-2 px-3 min-w-[160px] align-top">
-                    <input type="date" value={newNextDate} onChange={e => {
+                    <input type="date" value={newNextDate} min={tomorrow()} onChange={e => {
                       if (e.target.value === today()) { setShowSameDateModal(true); return; }
                       setNewNextDate(e.target.value);
                     }} className={ctrl} />
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      {leadClosed ? 'Lead is closed: date optional' : 'Required: every open lead needs a next step'}
+                    </p>
                   </td>
                   <td className="py-2 px-3 min-w-[170px] align-top">
                     <div className="space-y-1">
@@ -1101,7 +1107,7 @@ export default function AddInquiryPage() {
                     )}
                   </td>
                   <td className="py-2 px-3 text-center">
-                    <button onClick={handleAddDiscussion} disabled={discLoading || !canAddDiscussion || !newNextDate || !levelOk}
+                    <button onClick={handleAddDiscussion} disabled={discLoading || !canAddDiscussion || (!newNextDate && !leadClosed) || !levelOk}
                       className="inline-flex items-center gap-1 bg-[#2E3093] text-white px-3 py-1 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
                       {discLoading
                         ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />

@@ -10,6 +10,7 @@ import {
   updateInquiry,
   updateInquiryStatus,
 } from '@/lib/services/inquiry.service';
+import { allocateNewInquiry } from '@/lib/services/lead-allocation.service';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
       details: { studentName: body.Student_Name?.trim() ?? null, courseId: body.Course_Id ?? null },
     });
 
+    await allocateNewInquiry(insertId, auth.session.userId);
     invalidateCache('api:inquiry');
 
     return NextResponse.json({ success: true, Student_Id: insertId });

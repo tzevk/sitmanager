@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { PermissionProvider, usePermissions } from '@/lib/permissions-context';
 import AppointmentReminderPopup from './components/AppointmentReminderPopup';
 import FollowUpDueToast from './components/FollowUpDueToast';
+import LeadAlertToast from './components/LeadAlertToast';
 
 // ── Static data hoisted outside component to avoid re-creation ──────
 const MENU_ITEMS = [
@@ -50,6 +51,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Admission Activity > Add Inquiry': '/dashboard/inquiry/add',
   'Admission Activity > Inquiry': '/dashboard/inquiry',
   'Admission Activity > My Tasks': '/dashboard/my-tasks',
+  'Admission Activity > Lead Allocation': '/dashboard/my-tasks/allocation',
   'Admission Activity > Meta Leads': '/dashboard/meta-leads',
   'Admission Activity > Online Admission': '/dashboard/online-admission',
   'Admission Activity > Student': '/dashboard/student',
@@ -63,6 +65,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Corporate Training > Invoices & Payments': '/dashboard/corporate-invoices',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
+  'Reports > Lead Response': '/dashboard/reports/lead-response',
   'Reports > Pune Inquiries': '/dashboard/reports/suvidya-pune',
   'Reports > Online Students': '/dashboard/reports/online-student',
   'Reports > Student Report': '/dashboard/reports/student',
@@ -148,6 +151,7 @@ const SUB_MENUS: Record<string, string[]> = {
     'Add Inquiry',
     'Inquiry',
     'My Tasks',
+    'Lead Allocation',
     'Meta Leads',
     'Online Admission',
     'Student',
@@ -179,6 +183,7 @@ const SUB_MENUS: Record<string, string[]> = {
   ],
   'Reports': [
     'Inquiry',
+    'Lead Response',
     'Pune Inquiries',
     'Online Students',
     'Full Attendance Report',
@@ -298,6 +303,8 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Admission Activity > Add Inquiry': ['inquiry.create'],
   'Admission Activity > Inquiry': ['inquiry.view'],
   'Admission Activity > My Tasks': ['inquiry.view'],
+  'Admission Activity > Lead Allocation': ['inquiry.view'],
+  'Reports > Lead Response': ['report_inquiry.view'],
   'Admission Activity > Meta Leads': ['inquiry.view', 'meta_lead.view'],
   'Admission Activity > Online Admission': ['online_admission.view'],
   'Admission Activity > Student': ['student.view'],
@@ -1080,6 +1087,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 
       {/* Due inquiry follow-ups (latest next follow-up date), top of every screen */}
       <FollowUpDueToast />
+
+      {/* New lead assigned / not contacted in time / could not be assigned (own alerts only) */}
+      <LeadAlertToast />
 
       {/* ── Reset Password Modal ── */}
       {showResetModal && (

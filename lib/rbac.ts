@@ -670,6 +670,8 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admission Activity
   '/dashboard/inquiry': ['inquiry.view'],
   '/dashboard/my-tasks': ['inquiry.view'],
+  '/dashboard/my-tasks/allocation': ['inquiry.view'],
+  '/dashboard/reports/lead-response': ['report_inquiry.view'],
   '/dashboard/inquiry/add': ['inquiry.create'],
   '/dashboard/online-admission': ['online_admission.view'],
   '/dashboard/student': ['student.view'],

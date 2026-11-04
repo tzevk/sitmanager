@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getPool, cached } from '@/lib/db';
-import { FOLLOW_UP_DUE_WINDOW_DAYS } from '@/lib/services/inquiry.service';
 import { nowLocal } from '@/lib/appointments/time';
 import { isSuperAdminRole } from '@/lib/super-admin';
 
@@ -98,8 +97,14 @@ export interface TaskLead {
   OwnerName: string | null;
   /** The counsellor who wrote the first discussion; set only for the initiated scope. */
   InitiatedByName?: string | null;
-  Reason: 'Follow-up due' | 'Overdue' | 'Upcoming' | 'New lead' | 'Lead';
+  Reason: TaskReason;
 }
+
+export type TaskReason = 'Overdue' | 'Reminder' | 'Not contacted' | 'Follow-up due' | 'No next step' | 'Upcoming' | 'New lead' | 'Lead';
+
+/** How far back the today queue reaches for overdue follow-ups, reminders and owned leads.
+ * Wider than the old 7-day tray so a missed follow-up no longer silently drops off. */
+export const ACTION_QUEUE_DAYS = 60;
 
 export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
   await ensureAssignmentsTable();
@@ -119,11 +124,15 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
 
   // 1. Candidates — kept as small, separate queries: a single big join over the whole inquiry
   //    and discussion tables is far too slow.
-  const [due, fresh] = await Promise.all([
+  //    Today's view is the one action queue: overdue follow-ups (last ACTION_QUEUE_DAYS, not just 7),
+  //    reminders that went off, and — for leads with an owner — never-contacted leads and leads
+  //    whose latest discussion left no next step.
+  const queue = isToday && !f.all;
+  const [due, fresh, reminders, ownedRecent] = await Promise.all([
     guarded(
       `SELECT d.Inquiry_id AS iid, DATE_FORMAT(d.nextdate, '%Y-%m-%d') AS nextdate, d.created_by
          FROM awt_inquirydiscussion d
-        WHERE d.deleted = 0 AND ${f.all ? 'd.nextdate >= DATE_SUB(?, INTERVAL 90 DAY)' : isToday ? `d.nextdate BETWEEN DATE_SUB(?, INTERVAL ${FOLLOW_UP_DUE_WINDOW_DAYS} DAY) AND ?` : 'd.nextdate = ?'}
+        WHERE d.deleted = 0 AND ${f.all ? 'd.nextdate >= DATE_SUB(?, INTERVAL 90 DAY)' : isToday ? `d.nextdate BETWEEN DATE_SUB(?, INTERVAL ${ACTION_QUEUE_DAYS} DAY) AND ?` : 'd.nextdate = ?'}
           AND NOT EXISTS (SELECT 1 FROM awt_inquirydiscussion d2 WHERE d2.Inquiry_id = d.Inquiry_id AND d2.deleted = 0 AND d2.id > d.id)`,
       isToday && !f.all ? [f.date, f.date] : [f.date]
     ),
@@ -131,10 +140,53 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
       `SELECT Inquiry_Id FROM student_inquiry WHERE ${f.all ? '_inquiry_date >= DATE_SUB(?, INTERVAL 90 DAY)' : '_inquiry_date = ?'} AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [f.date]
     ),
+    queue
+      ? guarded(
+          `SELECT Inquiry_Id FROM student_inquiry
+            WHERE Reminder_At IS NOT NULL AND Reminder_At <= NOW() AND Reminder_At >= NOW() - INTERVAL ${ACTION_QUEUE_DAYS} DAY
+              AND (IsDelete = 0 OR IsDelete IS NULL)`,
+          []
+        ).catch(() => [] as any[]) // Reminder_At is added lazily; absent on a fresh DB
+      : Promise.resolve([] as any[]),
+    queue
+      ? guarded(
+          `SELECT Inquiry_Id FROM inquiry_assignments WHERE Assigned_At >= NOW() - INTERVAL ${ACTION_QUEUE_DAYS} DAY`,
+          []
+        )
+      : Promise.resolve([] as any[]),
   ]);
   const dueBy = new Map<number, { next: string; by: number | null }>();
   due.forEach((r) => dueBy.set(Number(r.iid), { next: r.nextdate, by: r.created_by == null ? null : Number(r.created_by) }));
-  const ids = [...new Set([...dueBy.keys(), ...fresh.map((r) => Number(r.Inquiry_Id))])].filter((n) => Number.isInteger(n) && n > 0);
+  const reminderIds = new Set(reminders.map((r) => Number(r.Inquiry_Id)));
+
+  // Owned recent leads: latest discussion per lead (idx_disc_lookup) → never contacted / no next step.
+  const notContacted = new Set<number>();
+  const noNextStep = new Set<number>();
+  const ownedIds = ownedRecent.map((r) => Number(r.Inquiry_Id)).filter((n) => Number.isInteger(n) && n > 0 && !dueBy.has(n));
+  for (let i = 0; i < ownedIds.length; i += 1000) {
+    const part = ownedIds.slice(i, i + 1000);
+    const latest = await guarded(
+      `SELECT d.Inquiry_id AS iid, d.nextdate,
+              (SELECT COUNT(*) FROM awt_inquirydiscussion d3 WHERE d3.Inquiry_id = d.Inquiry_id AND d3.deleted = 0
+                 AND d3.created_by IS NOT NULL AND d3.created_by > 0) AS staff_notes
+         FROM awt_inquirydiscussion d
+        WHERE d.deleted = 0 AND d.Inquiry_id IN (${part.map(() => '?').join(',')})
+          AND NOT EXISTS (SELECT 1 FROM awt_inquirydiscussion d2 WHERE d2.Inquiry_id = d.Inquiry_id AND d2.deleted = 0 AND d2.id > d.id)`,
+      part
+    );
+    const seen = new Set<number>();
+    for (const r of latest) {
+      const iid = Number(r.iid);
+      seen.add(iid);
+      if (Number(r.staff_notes) === 0) notContacted.add(iid);
+      else if (r.nextdate == null) noNextStep.add(iid);
+    }
+    part.forEach((iid) => { if (!seen.has(iid)) notContacted.add(iid); });
+  }
+
+  const ids = [...new Set([
+    ...dueBy.keys(), ...fresh.map((r) => Number(r.Inquiry_Id)), ...reminderIds, ...notContacted, ...noNextStep,
+  ])].filter((n) => Number.isInteger(n) && n > 0);
   if (!ids.length) return [];
   const marks = ids.map(() => '?').join(',');
 
@@ -180,7 +232,10 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
     const d = dueBy.get(id);
     const isDue = Boolean(d) && !closed;
     const isNew = r.InquiryDate === f.date;
-    if (!f.all && !isDue && !isNew) continue;
+    const isReminder = reminderIds.has(id) && !closed;
+    const isUncontacted = notContacted.has(id) && !closed;
+    const isNoNext = noNextStep.has(id) && !closed;
+    if (!f.all && !isDue && !isNew && !isReminder && !isUncontacted && !isNoNext) continue;
     const ownerId = ownerOf(id);
     if (f.statuses?.length && !f.statuses.includes(r.StatusLabel)) continue;
     if (f.courseIds?.length && !f.courseIds.includes(Number(r.Course_Id))) continue;
@@ -196,12 +251,15 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
       NextFollowUpDate: d?.next ?? null, InquiryDate: r.InquiryDate,
       OwnerId: ownerId, OwnerName: ownerId != null ? userName.get(ownerId) ?? null : null,
       ...(initiated ? { InitiatedByName: firstBy.has(id) ? userName.get(firstBy.get(id)!) ?? null : null } : {}),
-      Reason: isDue
-        ? (d!.next < f.date ? 'Overdue' : d!.next === f.date ? 'Follow-up due' : 'Upcoming')
+      Reason: isDue && d!.next < f.date ? 'Overdue'
+        : isReminder ? 'Reminder'
+        : isUncontacted ? 'Not contacted'
+        : isDue ? (d!.next === f.date ? 'Follow-up due' : 'Upcoming')
+        : isNoNext ? 'No next step'
         : isNew ? 'New lead' : 'Lead',
     });
   }
-  const rank = { 'Overdue': 0, 'Follow-up due': 1, 'Upcoming': 2, 'New lead': 3, 'Lead': 4 } as const;
+  const rank = { 'Overdue': 0, 'Reminder': 1, 'Not contacted': 2, 'Follow-up due': 3, 'No next step': 4, 'Upcoming': 5, 'New lead': 6, 'Lead': 7 } as const;
   out.sort((a, b) => rank[a.Reason] - rank[b.Reason] || b.Inquiry_Id - a.Inquiry_Id);
   return out.slice(0, f.all ? 1500 : 500);
 }

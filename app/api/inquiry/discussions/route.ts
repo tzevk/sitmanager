@@ -7,6 +7,9 @@ import { buildLevel2Link } from '@/lib/appointments/calendly';
 
 let supportsStatementTimeout: boolean | null = null;
 
+/** Statuses that end a lead, so a discussion on it needs no next follow-up date. */
+const NEXT_STEP_CLOSED_REGEXP = 'admission (taken|confirmed)|not interested|irrelevant|junk|lost lead|clos|duplicate|not eligible';
+
 function withStatementTimeout(sql: string, seconds: number): string {
   const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
   return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
@@ -267,10 +270,36 @@ export async function POST(req: NextRequest) {
     }
 
     if (nextFollowUpDate) {
-      const [same] = await pool.query(`SELECT 1 AS same FROM DUAL WHERE CURDATE() = DATE(?)`, [nextFollowUpDate]);
-      if ((same as any[]).length) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(nextFollowUpDate))) {
+        perfCode = 400;
+        return NextResponse.json({ error: 'Next follow-up date is not a valid date' }, { status: 400 });
+      }
+      const [cmp] = await pool.query(`SELECT DATE(?) <= CURDATE() AS notFuture, CURDATE() = DATE(?) AS same`, [nextFollowUpDate, nextFollowUpDate]);
+      if (Number((cmp as any[])[0]?.same) === 1) {
         perfCode = 400;
         return NextResponse.json({ error: 'Next follow-up date cannot be the same as the current date' }, { status: 400 });
+      }
+      if (Number((cmp as any[])[0]?.notFuture) === 1) {
+        perfCode = 400;
+        return NextResponse.json({ error: 'Next follow-up date must be in the future' }, { status: 400 });
+      }
+    } else if (meetingLevel !== 2) {
+      // A Level 2 meeting is itself the next step. Every other open lead must leave a discussion with a next step. Without a date the lead has to
+      // be closed first (Admission confirmed, Not interested, Lost lead, Irrelevant, …).
+      const [st] = await pool.query(
+        `SELECT LOWER(COALESCE(s.Status, '')) REGEXP ? AS closed
+           FROM \`${inquiryTable}\` si
+           LEFT JOIN status_master s ON s.Id = CAST(NULLIF(si.OnlineState, '') AS UNSIGNED)
+          WHERE si.Inquiry_Id = ? LIMIT 1`,
+        [NEXT_STEP_CLOSED_REGEXP, inquiryIdNum]
+      );
+      const row = (st as any[])[0];
+      if (row && Number(row.closed) !== 1) {
+        perfCode = 400;
+        return NextResponse.json({
+          error: 'Set the next follow-up date, or change the status to a closed one (Admission confirmed, Not interested, Lost lead, Irrelevant) first.',
+          code: 'NEXT_STEP_REQUIRED',
+        }, { status: 400 });
       }
     }
 

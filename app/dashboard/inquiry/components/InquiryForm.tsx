@@ -204,7 +204,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ inquiryId: editId, discussion: newDiscussion }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed');
       setNewDiscussion('');
       fetchDiscussions();
     } catch (err: any) {

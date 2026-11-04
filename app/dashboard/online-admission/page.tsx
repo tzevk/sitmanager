@@ -83,6 +83,13 @@ function fmtCurrency(amount: number | null | undefined): string {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+/** Tomorrow (local), the earliest allowed next follow-up date. */
+function discMinDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function OnlineAdmissionPage() {
   const router = useRouter();
   const { canView, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('online_admission');
@@ -108,6 +115,8 @@ export default function OnlineAdmissionPage() {
   const [discLoading, setDiscLoading] = useState(false);
   const [discText, setDiscText]       = useState('');
   const [discPosting, setDiscPosting] = useState(false);
+  const [discNextDate, setDiscNextDate] = useState(discMinDate());
+  const [discError, setDiscError]     = useState('');
   const [, startDiscTransition]       = useTransition();
 
   const fetchData = useCallback(async () => {
@@ -156,13 +165,20 @@ export default function OnlineAdmissionPage() {
   const postDiscussion = async () => {
     if (!discModal || !discText.trim()) return;
     setDiscPosting(true);
+    setDiscError('');
     try {
-      await fetch('/api/inquiry/discussions', {
+      const post = await fetch('/api/inquiry/discussions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inquiryId: discModal.inquiryId, discussion: discText.trim() }),
+        body: JSON.stringify({ inquiryId: discModal.inquiryId, discussion: discText.trim(), nextFollowUpDate: discNextDate || null }),
       });
+      if (!post.ok) {
+        const err = await post.json().catch(() => ({}));
+        setDiscError(err.error || 'Could not save the note');
+        return;
+      }
       setDiscText('');
+      setDiscNextDate(discMinDate());
       const res  = await fetch(`/api/inquiry/discussions?inquiryId=${discModal.inquiryId}`);
       const data = await res.json();
       setDiscussions(data.discussions ?? []);
@@ -593,7 +609,18 @@ export default function OnlineAdmissionPage() {
                     placeholder="Add a note or follow-up…"
                     className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093] transition-colors"
                   />
-                  <div className="flex justify-end">
+                  {discError && <p className="text-[11px] font-semibold text-rose-600">{discError}</p>}
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                      Next follow-up
+                      <input
+                        type="date"
+                        value={discNextDate}
+                        min={discMinDate()}
+                        onChange={e => setDiscNextDate(e.target.value)}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] text-slate-700 focus:outline-none focus:border-[#2E3093]"
+                      />
+                    </label>
                     <button
                       disabled={discPosting || !discText.trim()}
                       onClick={postDiscussion}

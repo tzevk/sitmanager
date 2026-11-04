@@ -23,7 +23,7 @@ interface Lead {
   OwnerId: number | null;
   OwnerName: string | null;
   InitiatedByName?: string | null;
-  Reason: 'Follow-up due' | 'Overdue' | 'Upcoming' | 'New lead' | 'Lead';
+  Reason: 'Overdue' | 'Reminder' | 'Not contacted' | 'Follow-up due' | 'No next step' | 'Upcoming' | 'New lead' | 'Lead';
 }
 interface Appt {
   id: number; appointment_code: string; name: string; mobile: string; program_name: string | null;
@@ -46,6 +46,9 @@ const fmtLong = (date: string) =>
 const REASON_STYLE: Record<Lead['Reason'], string> = {
   'Follow-up due': 'bg-sky-100 text-sky-800',
   'Overdue': 'bg-rose-100 text-rose-700',
+  'Reminder': 'bg-amber-100 text-amber-800',
+  'Not contacted': 'bg-orange-100 text-orange-700',
+  'No next step': 'bg-fuchsia-100 text-fuchsia-700',
   'Upcoming': 'bg-violet-100 text-violet-700',
   'New lead': 'bg-emerald-100 text-emerald-700',
   'Lead': 'bg-slate-100 text-slate-600',
@@ -306,7 +309,7 @@ export default function MyTasksPage() {
       {/* Filters */}
       {view !== 'month' && <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-2">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, mobile, email…" className={`${ctrl} w-52`} />
-        <MultiSelect label="Type" options={['Follow-up due', 'Overdue', 'Upcoming', 'New lead', 'Lead']} value={fReason} onChange={setFReason} />
+        <MultiSelect label="Type" options={['Overdue', 'Reminder', 'Not contacted', 'Follow-up due', 'No next step', 'Upcoming', 'New lead', 'Lead']} value={fReason} onChange={setFReason} />
         <MultiSelect label="Status" options={statusOpts} value={fStatus} onChange={setFStatus} />
         <MultiSelect label="Course" options={courseOpts} value={fCourse} onChange={setFCourse} />
         <MultiSelect label="Batches" options={batchOpts} value={fBatch} onChange={setFBatch} />
@@ -477,7 +480,7 @@ export default function MyTasksPage() {
             <p className="text-[11px] text-slate-500">{selected.size ? `${selected.size} selected` : activeFilters ? 'Filtered leads' : view === 'all' ? `All leads (last 90 days + follow-ups)` : 'All leads for the day'}</p>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {((view === 'month' ? [['Follow-ups', monthSum('followUps'), 'text-sky-700'], ['New leads', monthSum('newLeads'), 'text-emerald-600'], ['Appointments', monthSum('appointments'), 'text-[#2E3093]']] : [['Follow-ups due', reasonCount('Follow-up due'), 'text-sky-700'], ['Overdue', reasonCount('Overdue'), 'text-rose-600'], [view === 'all' ? 'Upcoming' : 'New leads', view === 'all' ? reasonCount('Upcoming') : reasonCount('New lead'), view === 'all' ? 'text-violet-600' : 'text-emerald-600'], ['Appointments', appts.length, 'text-[#2E3093]']]) as [string, number, string][]).map(([label, n, c]) => (
+            {((view === 'month' ? [['Follow-ups', monthSum('followUps'), 'text-sky-700'], ['New leads', monthSum('newLeads'), 'text-emerald-600'], ['Appointments', monthSum('appointments'), 'text-[#2E3093]']] : [['Follow-ups due', reasonCount('Follow-up due'), 'text-sky-700'], ['Overdue', reasonCount('Overdue'), 'text-rose-600'], ...(view === 'all' ? [] : [['Not contacted', reasonCount('Not contacted'), 'text-orange-600'], ['Reminder / no next step', reasonCount('No next step') + reasonCount('Reminder'), 'text-fuchsia-700']]), [view === 'all' ? 'Upcoming' : 'New leads', view === 'all' ? reasonCount('Upcoming') : reasonCount('New lead'), view === 'all' ? 'text-violet-600' : 'text-emerald-600'], ['Appointments', appts.length, 'text-[#2E3093]']]) as [string, number, string][]).map(([label, n, c]) => (
               <div key={label} className="rounded-lg bg-slate-50 p-2">
                 <div className={`text-xl font-black ${c}`}>{n}</div>
                 <div className="text-[10px] font-semibold text-slate-500">{label}</div>
