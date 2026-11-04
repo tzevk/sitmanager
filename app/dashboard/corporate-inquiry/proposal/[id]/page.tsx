@@ -79,23 +79,6 @@ async function readFileAsAttachment(file: File): Promise<Attachment> {
   return { name: file.name, mime: file.type || 'application/octet-stream', dataUrl };
 }
 
-async function urlToDataUrl(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    const dataUrl: string = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-    return dataUrl;
-  } catch {
-    return null;
-  }
-}
-
 const DEFAULT_ABOUT_ORGANISATION = `1. Introduction
 "Suvidya Institute of Technology Pvt. Ltd." is a Training organization formed to "Make Everyone Eligible for Working in Global Industry" by enhancing skills as per the industrial project activities. SIT training is supported by an EPC company "Ms. Accent Techno Solutions Pvt. Ltd." by providing working professionals as a Trainer and Providing project case studies for making training Rehearsal of actual working.
 
@@ -668,7 +651,8 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
     setDownloadingWord(true);
     try {
       const origin = typeof window !== 'undefined' ? window.location.origin : '';
-      const logoDataUrl = await urlToDataUrl(`${origin}/sit.png`);
+      // Word does not render data: URIs in HTML documents, so point at the hosted logo.
+      const logoDataUrl = origin ? `${origin}/sit.png` : '';
 
       const e = (v: unknown) =>
         String(v ?? '')
@@ -676,6 +660,7 @@ export default function CorporateProposalPage({ params }: { params: Promise<{ id
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;');
+      const ml = (v: unknown) => e(v).replace(/\r?\n/g, '<br/>');
 
       /* ── Training rows ── */
       const trainingRowsHtml = trainingData.days.map(day => {
@@ -753,58 +738,12 @@ body,p,td,th,li { font-family:Calibri,sans-serif; font-size:11pt; color:#1A1A1A;
 body { margin:0; padding:0; line-height:1.45; }
 p { margin:0 0 3pt 0; }
 table { border-collapse:collapse; }
-.pgbrk { page-break-before:always; mso-break-type:section-break; }
-.pgbrk { display:block; clear:both; height:0; margin:0; padding:0; page-break-before:always; break-before:page; mso-page-break-before:always; mso-break-type:section-break; }
+/* Header/footer live in an off-page table so Word uses them as page header/footer
+   instead of printing them as body content on page 1. */
+table#hdrftrtbl { margin:0in 0in 0in 900in; width:1px; height:1px; overflow:hidden; }
 </style>
 </head>
 <body>
-
-<!-- ═══ HEADER ═══ -->
-<div style="mso-element:header" id="h1">
-${headerWatermarkVml}
-<table style="width:100%;border:none;border-collapse:collapse;">
-  <tr>
-    <td style="border:none;padding:1pt 3pt;text-align:center;width:22%;">
-      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="height:34pt;width:auto;"/>` : '<div style="height:34pt;"></div>'}
-    </td>
-    <td style="border:none;padding:1pt 3pt;text-align:center;width:18%;">
-      <p style="font-size:14pt;font-weight:bold;color:#2E3093;margin:0;line-height:1;">EC</p>
-      <p style="font-size:10pt;font-weight:bold;color:#2E3093;margin:0;">ITB</p>
-    </td>
-    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
-      <p style="font-size:9pt;font-weight:bold;margin:0;">Skill India</p>
-      <p style="font-size:7pt;color:#555;margin:0;">&#2360;&#2381;&#2325;&#2367;&#2354; &#2311;&#2306;&#2337;&#2367;&#2351;&#2366;</p>
-    </td>
-    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
-      <p style="font-size:9pt;font-weight:bold;margin:0;">N&middot;S&middot;D&middot;C</p>
-      <p style="font-size:7pt;color:#555;margin:0;">National Skill Development Corporation</p>
-    </td>
-    <td style="border:none;width:20%;"></td>
-  </tr>
-</table>
-<p style="font-size:14pt;font-weight:bold;text-align:center;margin:0;padding:3pt 6pt;border-top:2.25pt solid #2E3093;border-bottom:0.75pt solid #AAAAAA;font-family:Calibri,sans-serif;">Suvidya Institute of Technology Pvt. Ltd.</p>
-<p style="font-size:8.5pt;font-weight:bold;text-align:center;margin:0;padding:2pt 6pt;border-bottom:2.25pt solid #2E3093;background:#F0F0F0;font-family:Calibri,sans-serif;">Making Everyone Eligible For Strengthening Companies To Contribute In Making Nation Technologically Self-Reliant.</p>
-</div>
-
-<!-- ═══ FOOTER ═══ -->
-<div style="mso-element:footer" id="f1">
-<table style="width:100%;border:none;border-collapse:collapse;border-top:0.75pt solid #AAAAAA;">
-  <tr>
-    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 4pt;width:52%;vertical-align:top;">
-      <p style="font-size:7.5pt;font-weight:bold;margin:0;">M/s.Suvidya Institute of Technology Pvt. Ltd.</p>
-      <p style="font-size:7pt;margin:0;color:#444;">18/140, Anand Nagar, Near Vakola Police Station, Santacruz (East), Mumbai-400055, Maharashtra, <b>INDIA</b>.</p>
-      <p style="font-size:7pt;margin:0;color:#444;">P:0091-22-26682290&nbsp;&nbsp;M:0091-9167219403&nbsp;&nbsp;Web:www.suvidya.ac.in</p>
-    </td>
-    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 5pt;width:12%;text-align:center;vertical-align:middle;">
-      <p style="font-size:9pt;font-weight:bold;margin:0;">Page&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>PAGE<span style="mso-element:field-separator"></span><![endif]-->1<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->&nbsp;of&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>NUMPAGES<span style="mso-element:field-separator"></span><![endif]-->3<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]--></p>
-    </td>
-    <td style="border:none;padding:2pt 4pt;width:36%;vertical-align:top;">
-      <p style="font-size:7pt;margin:0;color:#444;">This Training Proposal is sole property of <b>Suvidya Institute of Technology Pvt. Ltd.</b>, prepared to enhance skills of actual working. Printing and/or copying invalidate the proposal.</p>
-    </td>
-  </tr>
-</table>
-<p style="font-size:8pt;margin:1pt 0 0 0;font-family:Calibri,sans-serif;">(F/CT/03/00)</p>
-</div>
 
 <div class="Section1">
 
@@ -821,9 +760,7 @@ ${headerWatermarkVml}
 <p style="text-align:center;font-size:11pt;color:#555;margin:0 0 2pt 0;font-family:Calibri,sans-serif;">on</p>
 <p style="text-align:center;font-size:16pt;font-weight:bold;margin:0 0 28pt 0;font-family:Calibri,sans-serif;">${e(proposalTitle || '')}</p>
 
-<p style="text-align:center;margin:30pt 0 30pt 0;">
-  ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="width:160pt;height:auto;opacity:0.035;filter:alpha(opacity=4);"/>` : ''}
-</p>
+<p style="margin:30pt 0 30pt 0;">&nbsp;</p>
 
 <table align="center" style="width:60%;border:none;border-collapse:collapse;margin:0 auto;">
   <tr>
@@ -841,9 +778,9 @@ ${headerWatermarkVml}
 </table>
 
 <p style="font-size:14pt;font-weight:bold;text-align:center;margin:0 0 10pt 0;padding-bottom:4pt;border-bottom:1pt solid #AAAAAA;font-family:Calibri,sans-serif;">About Our Organisation</p>
-<div style="white-space:pre-wrap;font-size:11pt;line-height:1.5;text-align:justify;font-family:Calibri,sans-serif;">${e(aboutOrganisation || '')}</div>
+<div style="font-size:11pt;line-height:1.5;text-align:justify;font-family:Calibri,sans-serif;">${ml(aboutOrganisation || '')}</div>
 
-<div class="pgbrk"></div>
+<br clear="all" style="page-break-before:always;mso-break-type:page-break;"/>
 
 <!-- ════ PAGE 2 : TRAINING CONTENTS ════ -->
 <p style="background:#FFD700;text-align:center;padding:5pt 8pt;font-weight:bold;font-size:13pt;margin:0;border:0.75pt solid #999;font-family:Calibri,sans-serif;">${e((quotationData.recipientCompany || clientName || companyName || '') + (trainingData.venue || venue ? ' – ' + (trainingData.venue || venue) : ''))}</p>
@@ -873,7 +810,7 @@ ${trainingData.pleaseNote.length ? `<table style="width:100%;border:0.75pt solid
   </tr>
 </table>` : ''}
 
-<div class="pgbrk"></div>
+<br clear="all" style="page-break-before:always;mso-break-type:page-break;"/>
 
 <!-- ════ PAGE 3 : PROFORMA INVOICE ════ -->
 <table style="width:100%;border:0.75pt solid #AAAAAA;border-collapse:collapse;background:#F9F9F9;">
@@ -883,7 +820,7 @@ ${trainingData.pleaseNote.length ? `<table style="width:100%;border:0.75pt solid
     </td>
     <td style="border:none;padding:6pt 8pt;vertical-align:middle;">
       <p style="font-size:13pt;font-weight:bold;margin:0;font-family:Calibri,sans-serif;">${e(quotationData.recipientCompany || clientName || companyName || '')}</p>
-      ${quotationData.recipientAddress ? `<p style="font-size:9pt;color:#555;margin:0;font-family:Calibri,sans-serif;">${e(quotationData.recipientAddress)}</p>` : ''}
+      ${quotationData.recipientAddress ? `<p style="font-size:9pt;color:#555;margin:0;font-family:Calibri,sans-serif;">${ml(quotationData.recipientAddress)}</p>` : ''}
     </td>
   </tr>
 </table>
@@ -891,12 +828,12 @@ ${trainingData.pleaseNote.length ? `<table style="width:100%;border:0.75pt solid
 
 <table style="width:100%;border-collapse:collapse;font-size:11pt;">
   <tr>
-    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:30%;vertical-align:top;">Company Authority :<br/><span style="font-weight:normal;white-space:pre-wrap;">${e(quotationData.companyAuthority || '')}</span></td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:30%;vertical-align:top;">Company Authority :<br/><span style="font-weight:normal;">${ml(quotationData.companyAuthority || '')}</span></td>
     <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;width:20%;">Pro. Invoice No.</td>
     <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;" colspan="2">${e(quotationData.proformaInvoiceNo || '')}</td>
   </tr>
   <tr>
-    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;vertical-align:top;white-space:pre-wrap;"><b>Participants Details :</b> ${e(quotationData.participantsDetails || '')}</td>
+    <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;vertical-align:top;"><b>Participants Details :</b> ${ml(quotationData.participantsDetails || '')}</td>
     <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;font-weight:bold;">Date</td>
     <td style="border:0.75pt solid #AAAAAA;padding:4pt 6pt;" colspan="2">${e(quotationData.invoiceDate || '')}</td>
   </tr>
@@ -952,7 +889,7 @@ ${`${quotationData.bankDetails ? `<table style="width:100%;border-collapse:colla
   </tr>
   <tr>
     <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
-      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.bankDetails)}</div>
+      <div style="font-family:Calibri,sans-serif;font-size:11pt;">${ml(quotationData.bankDetails)}</div>
     </td>
   </tr>
 </table>` : ''}`}
@@ -964,7 +901,7 @@ ${`${quotationData.coordinator ? `<table style="width:100%;border-collapse:colla
   </tr>
   <tr>
     <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
-      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.coordinator)}</div>
+      <div style="font-family:Calibri,sans-serif;font-size:11pt;">${ml(quotationData.coordinator)}</div>
     </td>
   </tr>
 </table>` : ''}`}
@@ -976,7 +913,7 @@ ${`${quotationData.notes ? `<table style="width:100%;border-collapse:collapse;fo
   </tr>
   <tr>
     <td colspan="5" style="border:0.75pt solid #AAAAAA;padding:5pt 8pt;">
-      <div style="white-space:pre-wrap;font-family:Calibri,sans-serif;font-size:11pt;">${e(quotationData.notes)}</div>
+      <div style="font-family:Calibri,sans-serif;font-size:11pt;">${ml(quotationData.notes)}</div>
     </td>
   </tr>
 </table>` : ''}`}
@@ -991,6 +928,55 @@ ${`${quotationData.notes ? `<table style="width:100%;border-collapse:collapse;fo
     </td>
   </tr>
 </table>
+
+<table id="hdrftrtbl" border="0" cellspacing="0" cellpadding="0"><tr><td>
+<!-- ═══ HEADER ═══ -->
+<div style="mso-element:header" id="h1">
+${headerWatermarkVml}
+<table style="width:100%;border:none;border-collapse:collapse;">
+  <tr>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:22%;">
+      ${logoDataUrl ? `<img src="${logoDataUrl}" alt="SIT" style="height:34pt;width:auto;"/>` : '<div style="height:34pt;"></div>'}
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:18%;">
+      <p style="font-size:14pt;font-weight:bold;color:#2E3093;margin:0;line-height:1;">EC</p>
+      <p style="font-size:10pt;font-weight:bold;color:#2E3093;margin:0;">ITB</p>
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">Skill India</p>
+      <p style="font-size:7pt;color:#555;margin:0;">&#2360;&#2381;&#2325;&#2367;&#2354; &#2311;&#2306;&#2337;&#2367;&#2351;&#2366;</p>
+    </td>
+    <td style="border:none;padding:1pt 3pt;text-align:center;width:20%;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">N&middot;S&middot;D&middot;C</p>
+      <p style="font-size:7pt;color:#555;margin:0;">National Skill Development Corporation</p>
+    </td>
+    <td style="border:none;width:20%;"></td>
+  </tr>
+</table>
+<p style="font-size:14pt;font-weight:bold;text-align:center;margin:0;padding:3pt 6pt;border-top:2.25pt solid #2E3093;border-bottom:0.75pt solid #AAAAAA;font-family:Calibri,sans-serif;">Suvidya Institute of Technology Pvt. Ltd.</p>
+<p style="font-size:8.5pt;font-weight:bold;text-align:center;margin:0;padding:2pt 6pt;border-bottom:2.25pt solid #2E3093;background:#F0F0F0;font-family:Calibri,sans-serif;">Making Everyone Eligible For Strengthening Companies To Contribute In Making Nation Technologically Self-Reliant.</p>
+</div>
+
+<!-- ═══ FOOTER ═══ -->
+<div style="mso-element:footer" id="f1">
+<table style="width:100%;border:none;border-collapse:collapse;border-top:0.75pt solid #AAAAAA;">
+  <tr>
+    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 4pt;width:52%;vertical-align:top;">
+      <p style="font-size:7.5pt;font-weight:bold;margin:0;">M/s.Suvidya Institute of Technology Pvt. Ltd.</p>
+      <p style="font-size:7pt;margin:0;color:#444;">18/140, Anand Nagar, Near Vakola Police Station, Santacruz (East), Mumbai-400055, Maharashtra, <b>INDIA</b>.</p>
+      <p style="font-size:7pt;margin:0;color:#444;">P:0091-22-26682290&nbsp;&nbsp;M:0091-9167219403&nbsp;&nbsp;Web:www.suvidya.ac.in</p>
+    </td>
+    <td style="border:none;border-right:0.75pt solid #AAAAAA;padding:2pt 5pt;width:12%;text-align:center;vertical-align:middle;">
+      <p style="font-size:9pt;font-weight:bold;margin:0;">Page&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>PAGE<span style="mso-element:field-separator"></span><![endif]-->1<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]-->&nbsp;of&nbsp;<!--[if supportFields]><span style="mso-element:field-begin"></span>NUMPAGES<span style="mso-element:field-separator"></span><![endif]-->3<!--[if supportFields]><span style="mso-element:field-end"></span><![endif]--></p>
+    </td>
+    <td style="border:none;padding:2pt 4pt;width:36%;vertical-align:top;">
+      <p style="font-size:7pt;margin:0;color:#444;">This Training Proposal is sole property of <b>Suvidya Institute of Technology Pvt. Ltd.</b>, prepared to enhance skills of actual working. Printing and/or copying invalidate the proposal.</p>
+    </td>
+  </tr>
+</table>
+<p style="font-size:8pt;margin:1pt 0 0 0;font-family:Calibri,sans-serif;">(F/CT/03/00)</p>
+</div>
+</td></tr></table>
 
 </div>
 </body>

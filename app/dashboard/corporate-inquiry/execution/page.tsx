@@ -173,6 +173,13 @@ export default function TrainingExecutionIndexPage() {
                             >
                               Inquiry
                             </button>
+                            <button
+                              onClick={() => router.push(`/dashboard/corporate-invoices?newForInquiry=${r.Id}`)}
+                              className="px-3 py-1.5 rounded-lg border border-green-300 text-green-700 text-xs font-semibold hover:bg-green-50"
+                              title="Raise an invoice for this training"
+                            >
+                              Invoice
+                            </button>
                           </>
                         )}
                       </div>

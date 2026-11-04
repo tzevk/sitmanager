@@ -676,6 +676,7 @@ export const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/dashboard/corporate-inquiry': ['corporate_inquiry.view'],
   '/dashboard/corporate-inquiry/add': ['corporate_inquiry.create'],
   '/dashboard/corporate-inquiry/edit': ['corporate_inquiry.update'],
+  '/dashboard/corporate-invoices': ['corporate_inquiry.view'],
   '/dashboard/reports/college-follow-up': ['report_college_followup.view'],
 
   // Appointments

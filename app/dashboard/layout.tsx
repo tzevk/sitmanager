@@ -60,6 +60,7 @@ const SUB_MENU_ROUTES: Record<string, string> = {
   'Monitoring > Weekly Report': '/dashboard/monitoring',
   'Corporate Training > Corporate Inquiry': '/dashboard/corporate-inquiry',
   'Corporate Training > Training Execution': '/dashboard/corporate-inquiry/execution',
+  'Corporate Training > Invoices & Payments': '/dashboard/corporate-invoices',
   'Reports > Inquiry': '/dashboard/reports/inquiry',
   'Reports > Inquiry Report': '/dashboard/reports/inquiry',
   'Reports > Pune Inquiries': '/dashboard/reports/suvidya-pune',
@@ -228,6 +229,7 @@ const SUB_MENUS: Record<string, string[]> = {
   'Corporate Training': [
     'Corporate Inquiry',
     'Training Execution',
+    'Invoices & Payments',
   ],
   'Utility': [
     'Festival Photo Upload',
@@ -306,6 +308,7 @@ const SUB_MENU_PERMISSIONS: Record<string, string[]> = {
   'Monitoring > Weekly Report': ['monitoring.view'],
   'Corporate Training > Corporate Inquiry': ['corporate_inquiry.view'],
   'Corporate Training > Training Execution': ['corporate_inquiry.view'],
+  'Corporate Training > Invoices & Payments': ['corporate_inquiry.view'],
   'Reports > Inquiry': ['report_inquiry.view'],
   'Reports > Corporate Record': ['report_corporate_record.view'],
   'Reports > College Follow Up': ['report_college_followup.view'],
