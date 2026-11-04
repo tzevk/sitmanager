@@ -241,6 +241,9 @@ export default function AddInquiryPage() {
   const [statusSaved, setStatusSaved] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  // Which inquiry the form fields currently hold. Saving is blocked until it matches
+  // editId, so a stale/slow load can never write one lead's details onto another.
+  const [loadedEditId, setLoadedEditId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [duplicateCheck, setDuplicateCheck] = useState<{
     personName: string | null;
@@ -291,9 +294,12 @@ export default function AddInquiryPage() {
 
   useEffect(() => {
     if (!editId) return;
+    let cancelled = false;
+    setLoadedEditId(null);
     fetch(`/api/inquiry?id=${editId}`).then(r => r.json()).then(data => {
       const d = data.inquiry;
-      if (!d) return;
+      if (cancelled || !d) return;
+      if (d.Inquiry_Id != null && Number(d.Inquiry_Id) !== editId) return;
       setName(d.Student_Name || '');
       setGender(d.Sex || '');
       setDob(d.DOB ? String(d.DOB).slice(0,10) : '');
@@ -321,7 +327,9 @@ export default function AddInquiryPage() {
       setPercentage(d.Percentage != null ? String(d.Percentage) : '');
       setReminderAt(d.Reminder_At || null);
       setLeadTemp((d.lead_temperature as 'hot' | 'warm' | 'cold' | '') || '');
+      setLoadedEditId(editId);
     }).catch(console.error);
+    return () => { cancelled = true; };
   }, [editId, opts]);
 
   useEffect(() => {
@@ -372,6 +380,7 @@ export default function AddInquiryPage() {
   };
 
   const handleSave = async (skipDuplicateCheck = false) => {
+    if (editId && loadedEditId !== editId) { setError('This inquiry is still loading — please wait a moment and try again.'); return; }
     if (!Number.isInteger(statusId) || statusId <= 0) { setError('Status is required'); return; }
     if (!mobile.trim()) { setError('Mobile is required'); setMissingFields(['Mobile']); return; }
     if (!isStatusOnlySave) {

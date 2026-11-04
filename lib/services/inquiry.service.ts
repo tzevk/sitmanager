@@ -6,6 +6,8 @@ import {
   resolvePersonForEnquiry,
   detectReEnquiry,
   recordIdentityConflict,
+  normalizeMobile,
+  normalizeEmail,
 } from '@/lib/services/person.service';
 
 let inquiryTableNameCache: string | null = null;
@@ -2144,6 +2146,41 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
   };
 }
 
+/**
+ * An edit can change a lead's mobile/email so it no longer belongs to the person it was
+ * created under (e.g. a record re-typed for a different student). The list shows the
+ * person's name/mobile, so a stale link makes the lead display as someone else. When
+ * neither the new mobile nor the new email matches the linked person, re-resolve it.
+ * Unlinked rows (identity conflicts / legacy) are left alone.
+ */
+async function relinkPersonIfContactChanged(
+  pool: ReturnType<typeof getPool>,
+  inquiryTable: string,
+  id: number,
+  name: string,
+  mobile: string | null | undefined,
+  email: string | null | undefined,
+): Promise<void> {
+  await ensureInquiryPersonColumns(pool, inquiryTable);
+  const [rows] = await pool.query(
+    `SELECT si.Person_Id, p.Normalized_Mobile, p.Normalized_Email
+     FROM \`${inquiryTable}\` si LEFT JOIN person_master p ON p.Person_Id = si.Person_Id
+     WHERE si.Inquiry_Id = ? LIMIT 1`,
+    [id]
+  );
+  const cur = (rows as any[])[0];
+  if (!cur?.Person_Id) return;
+  const nextMobile = normalizeMobile(mobile);
+  const nextEmail = normalizeEmail(email);
+  if (!nextMobile && !nextEmail) return;
+  const stillMatches =
+    (nextMobile && nextMobile === cur.Normalized_Mobile) ||
+    (nextEmail && nextEmail === cur.Normalized_Email);
+  if (stillMatches) return;
+  const resolved = await resolvePersonForEnquiry({ name, mobile, email });
+  await pool.query(`UPDATE \`${inquiryTable}\` SET Person_Id = ? WHERE Inquiry_Id = ?`, [resolved.personId, id]);
+}
+
 export async function updateInquiry(id: number, data: UpdateInquiryInput, createdBy = 1): Promise<void> {
   const studentName = normalizeInquiryText(data.Student_Name);
   if (!studentName) throw new Error('Name is required');
@@ -2201,6 +2238,7 @@ export async function updateInquiry(id: number, data: UpdateInquiryInput, create
     ]
   );
   if ('lead_temperature' in data) await setLeadTemperature(pool, id, data.lead_temperature);
+  await relinkPersonIfContactChanged(pool, inquiryTable, id, studentName, data.Present_Mobile, data.Email);
 
   if (nextDiscussion && nextDiscussion !== previousDiscussion) {
     await pool.query(
