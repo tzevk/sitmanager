@@ -132,11 +132,33 @@ export async function GET(request: NextRequest) {
       console.warn('cbd-lead-funnel meta count skipped:', metaErr?.message || metaErr);
     }
 
+    // "Converted" = admissions actually taken in the selected period, counted by ADMISSION date
+    // (one per student, not deleted, not cancelled) — the same numbers as Reports → Online Students.
+    // The old figure counted leads by the month they ENQUIRED and treated any linked student record
+    // as converted, so it disagreed with every admissions report (e.g. Oct 2026: 69 vs 35 real).
+    const isMonth = Boolean(month && Number.isFinite(month) && month >= 1 && month <= 12);
+    const periodStart = isMonth ? `${year}-${String(month).padStart(2, '0')}-01` : `${year}-04-01`;
+    const periodEnd = isMonth
+      ? (month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`)
+      : `${year + 1}-04-01`;
+    const [admRows] = await pool.query<any[]>(
+      `SET STATEMENT max_statement_time=8 FOR
+       SELECT COUNT(DISTINCT am.Student_Id) AS admissions
+         FROM admission_master am
+        WHERE am.IsDelete = 0
+          AND LOWER(TRIM(COALESCE(am.Cancel, ''))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+          AND am.Admission_Date >= ? AND am.Admission_Date < ?`,
+      [periodStart, periodEnd]
+    );
+    const admissions = Number((admRows as any[])[0]?.admissions || 0);
+
     return NextResponse.json({
       total:     Number(row.total     || 0) + metaLeads,
       contacted: Number(row.contacted || 0),
       interested:Number(row.interested|| 0),
-      converted: Number(row.converted || 0),
+      converted: admissions,
+      // Old cohort figure kept for reference: leads enquiring in the period that later converted.
+      convertedFromPeriodEnquiries: Number(row.converted || 0),
       metaLeads,
     });
   } catch (err: any) {

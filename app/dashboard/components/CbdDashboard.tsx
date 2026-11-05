@@ -347,7 +347,7 @@ export default function CbdDashboard({ data, loading }: { data: any; loading: bo
     { label: 'Total Enquiries', value: activeFunnel.total,      pct: null,                                                                            color: '#2E3093', bg: 'bg-indigo-50/70' },
     { label: 'Contacted',       value: activeFunnel.contacted,  pct: activeFunnel.total ? activeFunnel.contacted  / activeFunnel.total * 100 : null,  color: '#2A6BB5', bg: 'bg-blue-50/70'   },
     { label: 'Interested',      value: activeFunnel.interested, pct: activeFunnel.total ? activeFunnel.interested / activeFunnel.total * 100 : null,  color: '#059669', bg: 'bg-emerald-50/70' },
-    { label: 'Converted',       value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
+    { label: 'Admissions',      value: activeFunnel.converted,  pct: activeFunnel.total ? activeFunnel.converted  / activeFunnel.total * 100 : null,  color: '#D97706', bg: 'bg-amber-50/70'   },
   ];
 
   // Apply the Pending Fees filters (ongoing batches + batch start-date range).

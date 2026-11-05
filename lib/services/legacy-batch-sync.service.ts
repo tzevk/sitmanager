@@ -93,6 +93,18 @@ async function upsertRows(
   if (!rows.length) return 0;
   if (dryRun) return rows.length;
 
+  // The old software labels weekend batches "Weekend Batches"; the batch-category master and the
+  // new CRM use "Weekend". Normalise on the way in so reports show one Weekend group and the next
+  // sync doesn't put the old label back.
+  if (table.toLowerCase() === 'batch_mst') {
+    const catCol = columns.find((c) => c.toLowerCase() === 'category');
+    if (catCol) {
+      for (const row of rows) {
+        if (typeof row[catCol] === 'string' && row[catCol].trim().toLowerCase() === 'weekend batches') row[catCol] = 'Weekend';
+      }
+    }
+  }
+
   const colSql = columns.map((c) => `\`${c}\``).join(', ');
   const sql = buildUpsertSql(table, colSql);
   let written = 0;
@@ -169,6 +181,12 @@ export async function syncLegacyBatchData(options: LegacyBatchSyncOptions = {}):
       });
       summary.totalFetched += rows.length;
       summary.totalUpserted += upserted;
+    }
+
+    // Also merge any CRM-side rows still carrying the old label (rows that never came from the
+    // old software are not covered by the upsert above).
+    if (!options.dryRun) {
+      await newPool.query(`UPDATE batch_mst SET Category = 'Weekend' WHERE TRIM(Category) = 'Weekend Batches'`);
     }
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
