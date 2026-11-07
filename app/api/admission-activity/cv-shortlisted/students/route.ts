@@ -31,6 +31,11 @@ export async function GET(req: NextRequest) {
 
     // Get students by batch
     if (batchCode) {
+      // student_master.Batch_Code is often stored without the leading zero
+      // ("9065" for 09065) or with a suffix ("01156 - Full Time") — ~1.3k
+      // admitted students. Match those forms too (prefix LIKEs keep the index).
+      const code = batchCode.trim();
+      const bare = code.replace(/^0+/, '') || code;
       // student_master.Batch_Code is also set on inquiry-stage duplicates that
       // were never admitted, and the CV forms dedupe by name keeping the first
       // row — so within the same name, list the student actually admitted to
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest) {
            TRIM(s.Student_Name) AS Student_Name,
            s.Batch_Code
          FROM student_master s
-         WHERE s.Batch_Code = ?
+         WHERE (s.Batch_Code IN (?, ?) OR s.Batch_Code LIKE ? OR s.Batch_Code LIKE ?)
            AND (s.IsDelete = 0 OR s.IsDelete IS NULL)
            AND s.Student_Name IS NOT NULL
            AND TRIM(s.Student_Name) <> ''
@@ -54,12 +59,12 @@ export async function GET(req: NextRequest) {
              FROM admission_master am
              JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
              WHERE am.Student_Id = s.Student_Id
-               AND b.Batch_code = s.Batch_Code
+               AND b.Batch_code = ?
                AND (am.IsDelete = 0 OR am.IsDelete IS NULL)
                AND (am.Cancel = 0 OR am.Cancel IS NULL)
            ) DESC,
            s.Student_Id DESC`,
-        [batchCode]
+        [code, bare, `${code} %`, `${bare} %`, code]
       );
       return NextResponse.json({ students });
     }

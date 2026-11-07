@@ -43,7 +43,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
-    const replies = await getReplies(id);
+    const replies = await getReplies(id, canManage);
     return NextResponse.json({ success: true, data: { ticket, replies }, canManage });
   } catch (error) {
     console.error('Error fetching support ticket:', error);

@@ -33,6 +33,7 @@ interface Reply {
   message: string;
   author_name: string | null;
   is_admin: number;
+  is_internal?: number;
   created_at: string;
 }
 
@@ -345,6 +346,7 @@ export default function SupportPage() {
                   <ThreadBubble
                     key={r.id}
                     admin={r.is_admin === 1}
+                    internal={r.is_internal === 1}
                     name={r.author_name || (r.is_admin ? 'Support' : 'Account')}
                     when={r.created_at}
                     text={r.message}
@@ -406,7 +408,7 @@ export default function SupportPage() {
               <>
                 <ThreadBubble admin={false} name={detail.ticket.user_name || 'Account'} when={detail.ticket.created_at} text={detail.ticket.message} />
                 {detail.replies.map((r) => (
-                  <ThreadBubble key={r.id} admin={r.is_admin === 1} name={r.author_name || (r.is_admin ? 'Support' : 'Account')} when={r.created_at} text={r.message} />
+                  <ThreadBubble key={r.id} admin={r.is_admin === 1} internal={r.is_internal === 1} name={r.author_name || (r.is_admin ? 'Support' : 'Account')} when={r.created_at} text={r.message} />
                 ))}
               </>
             )}
@@ -428,7 +430,7 @@ export default function SupportPage() {
   );
 }
 
-function ThreadBubble({ admin, name, when, text }: { admin: boolean; name: string; when: string; text: string }) {
+function ThreadBubble({ admin, name, when, text, internal = false }: { admin: boolean; name: string; when: string; text: string; internal?: boolean }) {
   return (
     <div className={`flex gap-3 ${admin ? 'flex-row-reverse' : ''}`}>
       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${admin ? 'bg-[#2E3093]/10 text-[#2E3093]' : 'bg-slate-200 text-slate-500'}`}>
@@ -438,11 +440,13 @@ function ThreadBubble({ admin, name, when, text }: { admin: boolean; name: strin
         <div className={`flex items-center gap-1.5 text-[11px] text-slate-400 mb-1 ${admin ? 'flex-row-reverse' : ''}`}>
           <span className="font-semibold text-slate-600">{name}</span>
           {admin && <FaCircle className="w-1 h-1 text-[#2E3093]" />}
-          {admin && <span className="text-[#2E3093] font-medium">Support</span>}
+          {admin && !internal && <span className="text-[#2E3093] font-medium">Support</span>}
+          {internal && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">Internal note · only admins see this</span>}
           <span>· {fmtDate(when)}</span>
         </div>
         <div className={`px-3.5 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words text-left ${
-          admin ? 'bg-[#2E3093] text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm'
+          internal ? 'bg-amber-50 border border-dashed border-amber-300 text-amber-900 rounded-tr-sm'
+          : admin ? 'bg-[#2E3093] text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-sm'
         }`}>
           {text}
         </div>

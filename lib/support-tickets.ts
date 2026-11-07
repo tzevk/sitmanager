@@ -42,6 +42,7 @@ export interface SupportTicketReply {
   author_user_id: number | null;
   author_name: string | null;
   is_admin: number;
+  is_internal: number;
   created_at: string;
 }
 
@@ -79,10 +80,20 @@ async function ensureTables() {
       author_user_id INT NULL,
       author_name VARCHAR(255) NULL,
       is_admin TINYINT(1) NOT NULL DEFAULT 0,
+      is_internal TINYINT(1) NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_replies_ticket (ticket_id, created_at)
     )
   `);
+  // Internal notes (admin-only, never shown to the ticket owner) — added after
+  // the table first shipped, so add the column on existing installs.
+  const [cols] = await pool.query(
+    `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_ticket_replies' AND COLUMN_NAME = 'is_internal'`
+  );
+  if (Number((cols as { c: number }[])[0]?.c ?? 0) === 0) {
+    await pool.query(`ALTER TABLE support_ticket_replies ADD COLUMN is_internal TINYINT(1) NOT NULL DEFAULT 0 AFTER is_admin`);
+  }
   ensured = true;
 }
 
@@ -135,11 +146,12 @@ export async function getTicket(id: number): Promise<SupportTicket | null> {
   return (rows as SupportTicket[])[0] ?? null;
 }
 
-export async function getReplies(ticketId: number): Promise<SupportTicketReply[]> {
+export async function getReplies(ticketId: number, includeInternal = false): Promise<SupportTicketReply[]> {
   await ensureTables();
   const pool = getPool();
   const [rows] = await pool.query(
-    'SELECT * FROM support_ticket_replies WHERE ticket_id = ? ORDER BY created_at ASC',
+    `SELECT * FROM support_ticket_replies WHERE ticket_id = ?${includeInternal ? '' : ' AND is_internal = 0'}
+     ORDER BY created_at ASC`,
     [ticketId]
   );
   return rows as SupportTicketReply[];
