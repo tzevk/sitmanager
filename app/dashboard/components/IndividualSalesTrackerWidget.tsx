@@ -142,7 +142,7 @@ export default function IndividualSalesTrackerWidget({ mode = 'all' }: { mode?: 
         <div className="min-w-0">
           <h2 className="font-bold">{mode === 'mine' ? `My Sales Tracker · ${person?.employee ?? ''}` : `Individual Sales Tracker · ${person ? person.employee : 'All employees'}`}</h2>
           <p className="text-[11px] text-white/80 mt-0.5">
-            {stats.from && stats.to ? `${fmtDay(stats.from)} – ${fmtDay(stats.to)} 2026 · ` : ''}from the employee&apos;s daily prospect sheet
+            {stats.from && stats.to ? `${fmtDay(stats.from)} – ${fmtDay(stats.to)} · ` : ''}from the Inquiry master · discussions logged in the last 90 days
           </p>
         </div>
         {mode === 'all' && people.length > 0 && (
@@ -170,7 +170,7 @@ export default function IndividualSalesTrackerWidget({ mode = 'all' }: { mode?: 
           {showAll && (
             <div className="min-w-0">
               <h3 className="text-sm font-bold text-slate-800">By employee</h3>
-              <p className="text-[11px] text-slate-500 mb-3">Each salesperson&apos;s sheet. Click a row to see that person&apos;s tracker.</p>
+              <p className="text-[11px] text-slate-500 mb-3">Each employee&apos;s inquiry discussions. Click a row to see that person&apos;s tracker.</p>
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-xs">
                   <thead className="bg-slate-50 text-slate-500">

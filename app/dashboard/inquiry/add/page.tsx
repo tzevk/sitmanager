@@ -411,6 +411,7 @@ export default function AddInquiryPage() {
       if (!name.trim()) { setError('Name is required'); return; }
       if (!inquiryMode.trim()) { setError('Mode is required'); return; }
       if (!inquiryType.trim()) { setError('How They Know About SIT is required'); return; }
+      if (!assignedCounsellor) { setError('Assigned Counsellor is required'); setMissingFields(['Assigned Counsellor']); return; }
       if (!batchCode.trim() && !isFirstContact) { setError('Batch Code is required'); return; }
       // On the edit page every field except Discussion is compulsory.
       if (editId) {
@@ -466,8 +467,7 @@ export default function AddInquiryPage() {
           Qualification: qualification || null, Discipline: discipline || null,
           Percentage: percentage ? parseFloat(percentage) : null,
           lead_temperature: leadTemp || null,
-          // New lead with no pick → left out so auto-allocation can assign it.
-          ...(editId || assignedCounsellor ? { Assigned_Counsellor_Id: assignedCounsellor ? Number(assignedCounsellor) : null } : {}),
+          ...(assignedCounsellor ? { Assigned_Counsellor_Id: Number(assignedCounsellor) } : {}),
         }),
       });
       const data = await res.json();
@@ -964,9 +964,12 @@ export default function AddInquiryPage() {
               </select>
             </div>
             <div className={editId ? 'col-span-2' : 'col-span-1'}>
-              <label className={lbl}>Assigned Counsellor</label>
+              <label className={lbl}>
+                Assigned Counsellor
+                {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
+              </label>
               <select value={assignedCounsellor} onChange={e => setAssignedCounsellor(e.target.value)} className={ctrl}>
-                <option value="">— Not assigned —</option>
+                <option value="">— Select —</option>
                 {staff.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 {assignedCounsellor && staff.length > 0 && !staff.some(u => String(u.id) === assignedCounsellor) && (
                   <option value={assignedCounsellor}>User #{assignedCounsellor}</option>

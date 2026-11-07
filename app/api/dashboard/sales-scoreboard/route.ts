@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requirePermission } from '@/lib/api-auth';
-import { findEmployeeSheet, getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+import { getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+import { getInquiryIndividuals } from '@/lib/services/individual-tracker.service';
+import { cached } from '@/lib/db';
+
+const INQUIRY_SOURCE = { source: 'Inquiry master', dataThrough: null, uploadedAt: null, uploadedBy: null };
 
 export const runtime = 'nodejs';
 
@@ -19,12 +23,9 @@ export async function GET(req: NextRequest) {
     const auth = await requireAuth(req);
     if (auth instanceof NextResponse) return auth;
     try {
-      const board = await getScoreboard();
-      const mine = findEmployeeSheet(board, auth.session.firstName ?? '', auth.session.lastName ?? '');
-      return NextResponse.json({
-        source: board.source, dataThrough: board.dataThrough, uploadedAt: board.uploadedAt ?? null, uploadedBy: board.uploadedBy ?? null,
-        individuals: mine ? [mine] : [],
-      });
+      // Individual tracking comes from the Inquiry master: the signed-in user's own discussions.
+      const individuals = await cached(`inquiry-individual-tracker:${auth.session.userId}`, 300, () => getInquiryIndividuals(auth.session.userId));
+      return NextResponse.json({ ...INQUIRY_SOURCE, individuals });
     } catch (error) {
       console.error('Sales scoreboard (mine) GET error:', error);
       return NextResponse.json({ error: 'Could not load your sales tracker' }, { status: 500 });
@@ -37,9 +38,13 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
+    if (view === 'individual') {
+      const individuals = await cached('inquiry-individual-tracker:all', 300, () => getInquiryIndividuals());
+      return NextResponse.json({ ...INQUIRY_SOURCE, individuals });
+    }
     const board = await getScoreboard();
     const meta = { source: board.source, dataThrough: board.dataThrough, uploadedAt: board.uploadedAt ?? null, uploadedBy: board.uploadedBy ?? null };
-    return NextResponse.json(view === 'tracker' ? { ...meta, rows: board.tracker } : { ...meta, individuals: board.individuals });
+    return NextResponse.json({ ...meta, rows: board.tracker });
   } catch (error) {
     console.error('Sales scoreboard GET error:', error);
     return NextResponse.json({ error: 'Could not load the sales scoreboard' }, { status: 500 });
