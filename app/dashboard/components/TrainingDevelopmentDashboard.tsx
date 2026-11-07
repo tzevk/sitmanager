@@ -2,19 +2,19 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from 'react';
+import Link from 'next/link';
 import type { ComponentType, ReactNode } from 'react';
 import {
   AlertTriangle,
   Award,
   BookOpenCheck,
   CalendarCheck,
+  Clock,
   GraduationCap,
   MessageSquareWarning,
   Presentation,
   School,
   Star,
-  TrendingUp,
-  Users,
 } from 'lucide-react';
 import { TableSkeleton, WidgetSkeleton } from './Skeletons';
 import { toBatchNumber } from '@/lib/batch-display';
@@ -82,54 +82,58 @@ function EmptyState({ children = 'No data available' }: { children?: ReactNode }
   return <div className="px-3 py-5 text-center text-xs text-slate-400">{children}</div>;
 }
 
-function Section({ title, icon: Icon, count, children, className = '' }: { title: string; icon: IconType; count?: number; children: ReactNode; className?: string }) {
+function Section({ title, hint, href, linkLabel = 'Open', icon: Icon, count, children, className = '' }: { title: string; hint?: string; href?: string; linkLabel?: string; icon: IconType; count?: number; children: ReactNode; className?: string }) {
   return (
-    <section className={`bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden min-h-full ${className}`}>
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-[#2A6BB5]/20 bg-[#2A6BB5]/8 text-[#2E3093]">
+    <section className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col ${className}`}>
+      <div className="flex items-start justify-between gap-2 border-b border-gray-100 px-4 py-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#2E3093]/[0.07] text-[#2E3093]">
             <Icon className="h-3.5 w-3.5" />
           </span>
-          <h3 className="truncate text-xs font-black uppercase tracking-wide text-slate-800">{title}</h3>
+          <div className="min-w-0">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-[#2E3093]">
+              <span className="truncate">{title}</span>
+              {typeof count === 'number' && (
+                <span className="rounded-full bg-[#2A6BB5]/10 px-2 py-0.5 text-[10px] font-semibold text-[#2A6BB5]">{count.toLocaleString('en-IN')}</span>
+              )}
+            </h3>
+            {hint && <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>}
+          </div>
         </div>
-        {typeof count === 'number' && (
-          <span className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
-            {count.toLocaleString('en-IN')}
-          </span>
+        {href && (
+          <Link href={href} className="shrink-0 text-[11px] font-semibold text-[#2A6BB5] hover:text-[#2E3093] hover:underline">{linkLabel} →</Link>
         )}
       </div>
-      {children}
+      <div className="max-h-72 overflow-y-auto">{children}</div>
     </section>
   );
 }
 
 function DashboardBand({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-2.5 sm:p-3">
-      <div className="mb-2 flex flex-col gap-0.5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h3 className="text-xs font-black uppercase tracking-wide text-slate-900">{title}</h3>
-          <p className="text-[11px] font-medium text-slate-500">{description}</p>
-        </div>
+    <div>
+      <div className="mb-2.5 flex items-baseline gap-2">
+        <h2 className="text-sm font-bold text-[#1a1f3c]">{title}</h2>
+        <p className="text-xs text-slate-500">{description}</p>
       </div>
       {children}
     </div>
   );
 }
 
-function MetricCard({ label, value, detail, icon: Icon, tone }: { label: string; value: string | number; detail: string; icon: IconType; tone: string }) {
+function MetricCard({ label, value, detail, icon: Icon, alert = false }: { label: string; value: string | number; detail: string; icon: IconType; alert?: boolean }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="mt-1.5 text-xl font-black leading-none text-slate-950">{value}</p>
+          <p className="text-xs font-medium text-slate-500">{label}</p>
+          <p className={`mt-1.5 text-2xl font-bold leading-none tabular-nums ${alert ? 'text-rose-600' : 'text-[#2E3093]'}`}>{value}</p>
         </div>
-        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${tone}`}>
+        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${alert ? 'bg-rose-50 text-rose-600' : 'bg-[#2E3093]/[0.07] text-[#2E3093]'}`}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
-      <p className="mt-2 truncate text-[11px] font-medium text-slate-500">{detail}</p>
+      <p className="mt-2 truncate text-[11px] text-slate-500">{detail}</p>
     </div>
   );
 }
@@ -151,10 +155,10 @@ function DataTable({ columns, children }: { columns: string[]; children: ReactNo
   return (
     <div className="overflow-hidden">
       <table className="w-full table-fixed text-xs">
-        <thead className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50 text-[10px] uppercase tracking-wide text-slate-500">
           <tr>
             {columns.map((column) => (
-              <th key={column} className="px-2 py-2 text-left font-bold truncate">{column}</th>
+              <th key={column} className="px-3 py-2 text-left font-semibold truncate">{column}</th>
             ))}
           </tr>
         </thead>
@@ -205,7 +209,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
           {Array.from({ length: 4 }).map((_, index) => <WidgetSkeleton key={index} lines={2} />)}
         </div>
         <TableSkeleton rows={4} cols={7} />
-        <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
           <TableSkeleton rows={4} cols={4} />
           <TableSkeleton rows={4} cols={4} />
         </div>
@@ -213,89 +217,124 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
     );
   }
 
+  const batchActivity: any[] = td.batchActivity ?? [];
+  // A batch is "quiet" when it hasn't recorded a lecture for longer than its
+  // rhythm allows: 2 days for full-time/online batches, 8 for weekend batches.
+  const quietBatches = batchActivity.filter((row) => {
+    const limit = /weekend/i.test(String(row.category ?? '')) ? 8 : 2;
+    return row.last_lecture_date == null || toNumber(row.days_since) > limit;
+  });
   const totalStudents = ongoing.reduce((sum: number, row: any) => sum + toNumber(row.total_students), 0);
-  const avgCompletion = ongoing.length ? ongoing.reduce((sum: number, row: any) => sum + toNumber(row.percentage_complete), 0) / ongoing.length : 0;
   const avgAttendance = ongoing.length ? ongoing.reduce((sum: number, row: any) => sum + toNumber(row.avg_attendance_pct), 0) / ongoing.length : 0;
-  const avgMarks = ongoing.length ? ongoing.reduce((sum: number, row: any) => sum + toNumber(row.avg_marks_pct), 0) / ongoing.length : 0;
+  const atRisk = new Set([...lowAttendance, ...lowPerformance].map((row: any) => `${row.batch_no}|${row.name}`)).size;
+  const weekAhead = Date.now() + 7 * 86400000;
+  const examsThisWeek = upcomingExams.filter((row: any) => {
+    const t = new Date(String(row.exam_date ?? '')).getTime();
+    return Number.isFinite(t) && t <= weekAhead;
+  }).length;
+  const resultsToShow = finishedExams.filter((row: any) => String(row.paper_status ?? 'Pending') !== 'Shown').length;
+
   return (
-    <div className="space-y-3 pb-4">
-      <DashboardBand title="Overview" description="Key indicators">
-        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-          <MetricCard label="Batches" value={ongoing.length.toLocaleString('en-IN')} detail={`${totalStudents.toLocaleString('en-IN')} participants`} icon={School} tone="border-[#2A6BB5]/20 bg-[#2A6BB5]/8 text-[#2E3093]" />
-          <MetricCard label="Completion" value={pct(avgCompletion)} detail="Average progress" icon={TrendingUp} tone="border-cyan-200 bg-cyan-50 text-cyan-700" />
-          <MetricCard label="Attendance" value={pct(avgAttendance)} detail={`${lowAttendance.length.toLocaleString('en-IN')} exceptions`} icon={Users} tone="border-amber-200 bg-amber-50 text-amber-700" />
-          <MetricCard label="Performance" value={pct(avgMarks)} detail={`${lowPerformance.length.toLocaleString('en-IN')} exceptions`} icon={BookOpenCheck} tone="border-emerald-200 bg-emerald-50 text-emerald-700" />
+    <div className="space-y-6 pb-6">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <MetricCard label="Running batches" value={ongoing.length.toLocaleString('en-IN')} detail={`${totalStudents.toLocaleString('en-IN')} students · ${pct(avgAttendance)} avg. attendance`} icon={School} />
+        <MetricCard label="Lectures today" value={todaysLectures.length.toLocaleString('en-IN')} detail="Recorded so far today" icon={CalendarCheck} />
+        <MetricCard label="Quiet batches" value={quietBatches.length.toLocaleString('en-IN')} detail="No lecture recorded recently" icon={Clock} alert={quietBatches.length > 0} />
+        <MetricCard label="Students at risk" value={atRisk.toLocaleString('en-IN')} detail="Low attendance or low marks" icon={AlertTriangle} alert={atRisk > 0} />
+        <MetricCard label="Exams this week" value={examsThisWeek.toLocaleString('en-IN')} detail={`${resultsToShow.toLocaleString('en-IN')} results still to show`} icon={BookOpenCheck} />
+      </div>
+
+      <DashboardBand title="Today" description="Is every batch being taught and recorded?">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          <Section title="Today's lectures" hint="Sessions recorded today, with attendance count" href="/dashboard/daily-activities/lecture-taken" linkLabel="Lecture taken" icon={CalendarCheck} count={todaysLectures.length}>
+            <DataTable columns={['Batch', 'Topic / trainer', 'Time', 'Present']}>
+              {todaysLectures.length === 0 ? (
+                <tr><td colSpan={4}><EmptyState>No lectures recorded yet today</EmptyState></td></tr>
+              ) : todaysLectures.map((row: any, index: number) => (
+                <tr key={`lecture-${row.take_id ?? row.batch_no ?? 'row'}-${index}`} className="hover:bg-slate-50/70">
+                  <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                  <td className="px-3 py-2">
+                    <p className="truncate font-semibold text-slate-900">{row.lecture_topic || 'Session'}</p>
+                    <p className="mt-0.5 truncate text-[10px] text-slate-500">{row.trainer || '-'} · {row.room_no || '-'}</p>
+                  </td>
+                  <td className="px-3 py-2 text-[11px] font-semibold text-slate-600 truncate">{row.timing || '-'}</td>
+                  <td className="px-3 py-2 text-center font-bold text-slate-700">{toNumber(row.attendance_count)}</td>
+                </tr>
+              ))}
+            </DataTable>
+          </Section>
+          <Section title="Batch activity" hint="Last lecture recorded per running batch — quiet batches first" href="/dashboard/daily-activities/lecture-taken" linkLabel="Record lecture" icon={Clock} count={quietBatches.length}>
+            <DataTable columns={['Batch', 'Program', 'Last lecture', 'Last 7 days']}>
+              {batchActivity.length === 0 ? (
+                <tr><td colSpan={4}><EmptyState>No running batches</EmptyState></td></tr>
+              ) : batchActivity.map((row: any, index: number) => {
+                const quiet = quietBatches.includes(row);
+                return (
+                  <tr key={`activity-${row.Batch_Id ?? index}`} className="hover:bg-slate-50/70">
+                    <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                    <td className="px-3 py-2 text-slate-700 truncate">{row.training_program || '-'}<span className="ml-1 text-[10px] text-slate-400">{row.category || ''}</span></td>
+                    <td className="px-3 py-2">
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${quiet ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                        {row.last_lecture_date == null ? 'None in 120 days' : toNumber(row.days_since) === 0 ? 'Today' : `${toNumber(row.days_since)}d ago`}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-center font-semibold text-slate-700">{toNumber(row.lectures_last_7_days)}</td>
+                  </tr>
+                );
+              })}
+            </DataTable>
+          </Section>
         </div>
       </DashboardBand>
 
-      <DashboardBand title="Activity" description="Current work">
-      <div className="grid grid-cols-1 gap-2 xl:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.75fr)]">
-        <Section title="Status" icon={Presentation} count={ongoing.length}>
-          <DataTable columns={['Batch', 'State', 'Program', 'Days', 'Done', 'Count', 'Att.', 'Flag']}>
+      <DashboardBand title="Batch progress" description="Where each running batch stands">
+        <Section title="Running batches" hint="Course progress, class size, attendance and students below 40% marks" href="/dashboard/masters/batch" linkLabel="Batch master" icon={Presentation} count={ongoing.length}>
+          <DataTable columns={['Batch', 'Type', 'Program', 'Day', 'Progress', 'Students', 'Attendance', 'Below 40%']}>
             {ongoing.length === 0 ? (
-              <tr><td colSpan={8}><EmptyState>No current batch records</EmptyState></td></tr>
-            ) : ongoing.slice(0, 4).map((row: any, index: number) => (
+              <tr><td colSpan={8}><EmptyState>No running batches</EmptyState></td></tr>
+            ) : ongoing.map((row: any, index: number) => (
               <tr key={`ongoing-${row.Batch_Id ?? row.batch_no ?? 'row'}-${index}`} className="hover:bg-slate-50/70">
-                <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                <td className="px-2 py-2"><span className="inline-block max-w-full truncate rounded border border-[#2A6BB5]/20 bg-[#2A6BB5]/8 px-1.5 py-0.5 text-[10px] font-bold text-[#2E3093]">{row.batch_status || '-'}</span></td>
-                <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
-                <td className="px-2 py-2 font-semibold text-slate-700 whitespace-nowrap">{toNumber(row.days_completed)}/{toNumber(row.duration_days)}</td>
-                <td className="px-2 py-2"><ProgressBar value={row.percentage_complete} /></td>
-                <td className="px-2 py-2 text-center font-semibold text-slate-700">{toNumber(row.total_students)}</td>
-                <td className="px-2 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.avg_attendance_pct)}`}>{pct(row.avg_attendance_pct)}</span></td>
-                <td className="px-2 py-2 text-center font-bold text-rose-700">{toNumber(row.low_performing_students)}</td>
+                <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                <td className="px-3 py-2 text-[11px] text-slate-600 truncate">{row.batch_status || '-'}</td>
+                <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
+                <td className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">{toNumber(row.days_completed)}/{toNumber(row.duration_days)}</td>
+                <td className="px-3 py-2"><ProgressBar value={row.percentage_complete} /></td>
+                <td className="px-3 py-2 text-center font-semibold text-slate-700">{toNumber(row.total_students)}</td>
+                <td className="px-3 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.avg_attendance_pct)}`}>{pct(row.avg_attendance_pct)}</span></td>
+                <td className="px-3 py-2 text-center font-bold text-rose-700">{toNumber(row.low_performing_students)}</td>
               </tr>
             ))}
           </DataTable>
         </Section>
-
-        <Section title="Schedule" icon={CalendarCheck} count={todaysLectures.length}>
-          <DataTable columns={['Batch', 'Topic', 'Time', 'Att.']}>
-            {todaysLectures.length === 0 ? (
-              <tr><td colSpan={4}><EmptyState>No sessions scheduled today</EmptyState></td></tr>
-            ) : todaysLectures.slice(0, 4).map((row: any, index: number) => (
-              <tr key={`lecture-${row.take_id ?? row.batch_no ?? 'row'}-${index}`} className="hover:bg-slate-50/70">
-                <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                <td className="px-2 py-2">
-                  <p className="truncate font-semibold text-slate-900">{row.lecture_topic || 'Session'}</p>
-                  <p className="mt-0.5 truncate text-[10px] text-slate-500">{row.trainer || '-'} · {row.room_no || '-'}</p>
-                </td>
-                <td className="px-2 py-2 text-[11px] font-semibold text-slate-600 truncate">{row.timing || '-'}</td>
-                <td className="px-2 py-2 text-center font-bold text-slate-700">{toNumber(row.attendance_count)}</td>
-              </tr>
-            ))}
-          </DataTable>
-        </Section>
-      </div>
       </DashboardBand>
 
-      <DashboardBand title="Exceptions" description="Items requiring review">
-      <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-        <Section title="Attendance" icon={AlertTriangle} count={lowAttendance.length}>
+      <DashboardBand title="Students needing attention" description="Follow up before they fall behind">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Section title="Low attendance" hint="Below the attendance threshold — call or counsel" href="/dashboard/reports/attendance" linkLabel="Attendance report" icon={AlertTriangle} count={lowAttendance.length}>
           <DataTable columns={['Name', 'Batch', 'Program', 'Att.']}>
             {lowAttendance.length === 0 ? (
               <tr><td colSpan={4}><EmptyState>No attendance exceptions</EmptyState></td></tr>
-            ) : lowAttendance.slice(0, 4).map((row: any, index: number) => (
+            ) : lowAttendance.map((row: any, index: number) => (
               <tr key={`low-attendance-${row.batch_no || 'batch'}-${row.name || 'student'}-${index}`} className="hover:bg-slate-50/70">
-                <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.name || '-'}</td>
-                <td className="px-2 py-2 font-mono text-[11px] text-slate-600 truncate">{toBatchNumber(row.batch_no)}</td>
-                <td className="px-2 py-2 text-slate-600 truncate">{row.training_program || '-'}</td>
-                <td className="px-2 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.attendance_pct)}`}>{pct(row.attendance_pct)}</span></td>
+                <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.name || '-'}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-slate-600 truncate">{toBatchNumber(row.batch_no)}</td>
+                <td className="px-3 py-2 text-slate-600 truncate">{row.training_program || '-'}</td>
+                <td className="px-3 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.attendance_pct)}`}>{pct(row.attendance_pct)}</span></td>
               </tr>
             ))}
           </DataTable>
         </Section>
 
-        <Section title="Performance" icon={MessageSquareWarning} count={lowPerformance.length}>
+        <Section title="Low marks" hint="Weak scores — plan extra sessions or revision" href="/dashboard/reports/final-exam" linkLabel="Final exam report" icon={MessageSquareWarning} count={lowPerformance.length}>
           <DataTable columns={['Name', 'Batch', 'Program', 'Score']}>
             {lowPerformance.length === 0 ? (
               <tr><td colSpan={4}><EmptyState>No performance exceptions</EmptyState></td></tr>
-            ) : lowPerformance.slice(0, 4).map((row: any, index: number) => (
+            ) : lowPerformance.map((row: any, index: number) => (
               <tr key={`low-performance-${row.batch_no || 'batch'}-${row.name || 'student'}-${index}`} className="hover:bg-slate-50/70">
-                <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.name || '-'}</td>
-                <td className="px-2 py-2 font-mono text-[11px] text-slate-600 truncate">{toBatchNumber(row.batch_no)}</td>
-                <td className="px-2 py-2 text-slate-600 truncate">{row.training_program || '-'}</td>
-                <td className="px-2 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.marks_pct, 60)}`}>{pct(row.marks_pct)}</span></td>
+                <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.name || '-'}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-slate-600 truncate">{toBatchNumber(row.batch_no)}</td>
+                <td className="px-3 py-2 text-slate-600 truncate">{row.training_program || '-'}</td>
+                <td className="px-3 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${riskTone(row.marks_pct, 60)}`}>{pct(row.marks_pct)}</span></td>
               </tr>
             ))}
           </DataTable>
@@ -303,21 +342,21 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
       </div>
       </DashboardBand>
 
-      <DashboardBand title="Assessments" description="Preparation and review status">
-      <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-        <Section title="Upcoming" icon={BookOpenCheck} count={upcomingExams.length}>
+      <DashboardBand title="Assessments" description="Papers ready on time, results shown to students">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Section title="Upcoming exams" hint="Update paper status as it is prepared and approved" href="/dashboard/daily-activities/final-exam-taken" linkLabel="Final exams" icon={BookOpenCheck} count={upcomingExams.length}>
           <DataTable columns={['Batch', 'Program', 'Date', 'Status']}>
             {upcomingExams.length === 0 ? (
               <tr><td colSpan={4}><EmptyState>No upcoming assessment records</EmptyState></td></tr>
-            ) : upcomingExams.slice(0, 4).map((row: any, index: number) => {
+            ) : upcomingExams.map((row: any, index: number) => {
               const key = `upcoming_exam:${row.entity_key}`;
               const status = String(fieldOverrides[key] ?? row.paper_status ?? 'Not Started');
               return (
                 <tr key={`upcoming-exam-${row.entity_key ?? `${row.batch_no || 'batch'}-${row.exam_date || 'date'}`}-${index}`} className="hover:bg-slate-50/70">
-                  <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                  <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
-                  <td className="px-2 py-2 text-slate-600 truncate">{formatDate(row.exam_date)}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                  <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
+                  <td className="px-3 py-2 text-slate-600 truncate">{formatDate(row.exam_date)}</td>
+                  <td className="px-3 py-2">
                     <select
                       value={status}
                       onChange={(event) => {
@@ -337,11 +376,11 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
           </DataTable>
         </Section>
 
-        <Section title="Completed" icon={Award} count={finishedExams.length}>
+        <Section title="Completed exams" hint="Mark papers checked and set the date results are shown" href="/dashboard/daily-activities/generate-final-result" linkLabel="Generate result" icon={Award} count={finishedExams.length}>
           <DataTable columns={['Batch', 'Program', 'Date', 'Status', 'Review', 'Avg.']}>
             {finishedExams.length === 0 ? (
               <tr><td colSpan={6}><EmptyState>No completed assessment records</EmptyState></td></tr>
-            ) : finishedExams.slice(0, 4).map((row: any, index: number) => {
+            ) : finishedExams.map((row: any, index: number) => {
               const statusKey = `finished_exam:${row.entity_key}:status`;
               const dateKey = `finished_exam:${row.entity_key}:date`;
               const saveKey = `finished_exam:${row.entity_key}`;
@@ -349,10 +388,10 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
               const showingDate = String(fieldOverrides[dateKey] ?? dateInputValue(row.paper_showing_date));
               return (
                 <tr key={`finished-exam-${row.entity_key ?? `${row.batch_no || 'batch'}-${row.exam_date || 'date'}`}-${index}`} className="hover:bg-slate-50/70">
-                  <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                  <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
-                  <td className="px-2 py-2 text-slate-600 truncate">{formatDate(row.exam_date)}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                  <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
+                  <td className="px-3 py-2 text-slate-600 truncate">{formatDate(row.exam_date)}</td>
+                  <td className="px-3 py-2">
                     <select
                       value={status}
                       onChange={(event) => {
@@ -366,7 +405,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
                       {FINISHED_EXAM_STATUS_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                     </select>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2">
                     <input
                       type="date"
                       value={showingDate}
@@ -379,7 +418,7 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
                       className="w-full rounded border border-slate-200 px-1.5 py-1 text-[10px] font-semibold text-slate-700 focus:border-[#2E3093] focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15"
                     />
                   </td>
-                  <td className="px-2 py-2 font-bold text-slate-700">{pct(row.average_marks_pct)}</td>
+                  <td className="px-3 py-2 font-bold text-slate-700">{pct(row.average_marks_pct)}</td>
                 </tr>
               );
             })}
@@ -388,21 +427,21 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
       </div>
       </DashboardBand>
 
-      <DashboardBand title="Outcomes" description="Feedback and events">
-      <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-        <Section title="Feedback" icon={Star} count={googleReviews.length}>
+      <DashboardBand title="Course close-out" description="Reviews collected and convocations planned">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <Section title="Google reviews" hint="Reviews received per batch — enter the count as they come in" href="/dashboard/daily-activities/feedback" linkLabel="Feedback" icon={Star} count={googleReviews.length}>
           <DataTable columns={['Batch', 'Program', 'End', 'Responses']}>
             {googleReviews.length === 0 ? (
               <tr><td colSpan={4}><EmptyState>No feedback records in the current window</EmptyState></td></tr>
-            ) : googleReviews.slice(0, 4).map((row: any, index: number) => {
+            ) : googleReviews.map((row: any, index: number) => {
               const key = `google_review:${row.entity_key}`;
               const value = fieldOverrides[key] ?? row.reviews_received ?? 0;
               return (
                 <tr key={`google-review-${row.entity_key ?? row.batch_no ?? 'row'}-${index}`} className="hover:bg-slate-50/70">
-                  <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                  <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
-                  <td className="px-2 py-2 text-slate-600 truncate">{formatDate(row.end_date)}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                  <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
+                  <td className="px-3 py-2 text-slate-600 truncate">{formatDate(row.end_date)}</td>
+                  <td className="px-3 py-2">
                     <input
                       type="number"
                       min={0}
@@ -429,17 +468,17 @@ export default function TrainingDevelopmentDashboard({ data, loading }: Dashboar
           </DataTable>
         </Section>
 
-        <Section title="Events" icon={GraduationCap} count={upcomingConvocations.length}>
+        <Section title="Upcoming convocations" hint="Batches finishing soon and their convocation dates" icon={GraduationCap} count={upcomingConvocations.length}>
           <DataTable columns={['Batch', 'Program', 'End', 'Date', 'Location']}>
             {upcomingConvocations.length === 0 ? (
               <tr><td colSpan={5}><EmptyState>No upcoming event records</EmptyState></td></tr>
-            ) : upcomingConvocations.slice(0, 4).map((row: any, index: number) => (
+            ) : upcomingConvocations.map((row: any, index: number) => (
               <tr key={`convocation-${row.id ?? row.batch_no ?? 'row'}-${row.convocation_date ?? 'date'}-${index}`} className="hover:bg-slate-50/70">
-                <td className="px-2 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
-                <td className="px-2 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
-                <td className="px-2 py-2 text-slate-600 truncate">{formatDate(row.end_date)}</td>
-                <td className="px-2 py-2 text-slate-600 truncate">{formatDate(row.convocation_date)}</td>
-                <td className="px-2 py-2 text-slate-600 truncate">{row.location || '-'}</td>
+                <td className="px-3 py-2 font-mono text-[11px] font-bold text-slate-700 truncate">{toBatchNumber(row.batch_no)}</td>
+                <td className="px-3 py-2 font-semibold text-slate-900 truncate">{row.training_program || '-'}</td>
+                <td className="px-3 py-2 text-slate-600 truncate">{formatDate(row.end_date)}</td>
+                <td className="px-3 py-2 text-slate-600 truncate">{formatDate(row.convocation_date)}</td>
+                <td className="px-3 py-2 text-slate-600 truncate">{row.location || '-'}</td>
               </tr>
             ))}
           </DataTable>

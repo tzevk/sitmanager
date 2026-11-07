@@ -49,6 +49,8 @@ type PlacementData = {
     campusInterviewsPlanned?: Array<{ id?: number; interview_code?: string; interview_date?: string; company_name?: string; role?: string; interview_type?: string }>;
     upcomingMockInterviews?: Array<{ interview_date?: string; company_name?: string; training_name?: string; batch_code?: string }>;
     completedMockInterviews?: Array<{ interview_date?: string; company_name?: string; training_name?: string; batch_code?: string }>;
+    awaitingPlacement?: Array<{ student_id?: number | string; name?: string; batch_no?: string; training_program?: string; batch_end?: string; interviews?: number; last_interview?: string | null }>;
+    monthSummary?: { placed_this_month?: number; interview_drives_this_month?: number; cvs_sent_this_month?: number };
   };
   placementReport?: {
     rows?: Array<{
@@ -103,6 +105,7 @@ function dateInputTime(value: string): number {
 
 function WidgetCard({
   title,
+  hint,
   count,
   headerRight,
   className = '',
@@ -110,6 +113,7 @@ function WidgetCard({
   children,
 }: {
   title: string;
+  hint?: string;
   count?: number;
   headerRight?: React.ReactNode;
   className?: string;
@@ -117,17 +121,20 @@ function WidgetCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-white rounded-3xl border border-[#2E3093]/10 overflow-hidden ${className}`}>
-      <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white font-bold flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm tracking-wide">{title}</h3>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {headerRight}
-          {typeof count === 'number' && (
-            <span className="text-[11px] bg-white/20 px-2 py-1 rounded-md font-semibold whitespace-nowrap">
-              {count.toLocaleString()}
-            </span>
-          )}
+    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col ${className}`}>
+      <div className="px-5 py-3.5 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-[#2E3093]">
+            {title}
+            {typeof count === 'number' && (
+              <span className="text-[11px] font-semibold text-[#2A6BB5] bg-[#2A6BB5]/10 rounded-full px-2 py-0.5 whitespace-nowrap">
+                {count.toLocaleString()}
+              </span>
+            )}
+          </h3>
+          {hint && <p className="mt-0.5 text-[11px] text-slate-500">{hint}</p>}
         </div>
+        {headerRight && <div className="flex flex-wrap items-center justify-end gap-2">{headerRight}</div>}
       </div>
       <div className={`p-0 overflow-auto max-h-[360px] ${contentClassName}`}>{children}</div>
     </div>
@@ -164,9 +171,26 @@ function Table({
 function statusTone(status: string): string {
   const s = status.toLowerCase();
   if (s.includes('open')) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (s.includes('completed')) return 'bg-sky-50 text-sky-700 border-sky-200';
+  if (s.includes('completed')) return 'bg-[#2A6BB5]/10 text-[#2A6BB5] border-[#2A6BB5]/20';
   if (s.includes('closed')) return 'bg-rose-50 text-rose-700 border-rose-200';
   return 'bg-slate-100 text-slate-700 border-slate-200';
+}
+
+function HeadlineCard({ label, value, detail, alert = false }: { label: string; value: number; detail: string; alert?: boolean }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className={`mt-1.5 text-2xl font-bold leading-none tabular-nums ${alert ? 'text-rose-600' : 'text-[#2E3093]'}`}>{Number(value || 0).toLocaleString('en-IN')}</p>
+      <p className="mt-2 truncate text-[11px] text-slate-500">{detail}</p>
+    </div>
+  );
+}
+
+function monthsSince(date?: string) {
+  if (!date) return 0;
+  const t = new Date(`${date}T00:00:00`).getTime();
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / (30.44 * 86400000)));
 }
 
 export default function PlacementDepartmentDashboard({ data, loading }: { data: PlacementData; loading: boolean }) {
@@ -361,31 +385,81 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
   const upcomingMockInterviews = placementData.upcomingMockInterviews ?? [];
   const completedMockInterviews = placementData.completedMockInterviews ?? [];
   const pendingTodos = todos.filter((todo) => todo.status !== 'Done').length;
+  const awaiting = placementData.awaitingPlacement ?? [];
+  const month = placementData.monthSummary ?? {};
+  const neverInterviewed = awaiting.filter((row) => !Number(row.interviews)).length;
+  const openOpenings = jobOpeningTracker.filter((row) => String(row.status ?? 'Open').toLowerCase().includes('open')).length;
+  const weekAhead = Date.now() + 7 * 86400000;
+  const interviewsThisWeek = upcomingInterviews.filter((row) => {
+    const t = new Date(String(row.interview_date ?? '')).getTime();
+    return Number.isFinite(t) && t <= weekAhead;
+  }).length;
 
   return (
     <div className="space-y-6 pb-8">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <HeadlineCard label="Placed this month" value={Number(month.placed_this_month ?? 0)} detail={`${Number(month.cvs_sent_this_month ?? 0).toLocaleString('en-IN')} CVs sent this month`} />
+        <HeadlineCard label="Awaiting placement" value={awaiting.length} detail="Passed out in the last 12 months" alert={awaiting.length > 0} />
+        <HeadlineCard label="Never interviewed" value={neverInterviewed} detail="Awaiting students with no interview yet" alert={neverInterviewed > 0} />
+        <HeadlineCard label="Interviews this week" value={interviewsThisWeek} detail={`${upcomingInterviews.length.toLocaleString('en-IN')} upcoming in total`} />
+        <HeadlineCard label="Open job openings" value={openOpenings} detail={`${companyVisitsPlanned.length.toLocaleString('en-IN')} company visits planned`} />
+      </div>
+
+      <WidgetCard
+        title="Students awaiting placement"
+        hint="Batch finished in the last 12 months, not yet placed — longest waiting first. Line them up for the next drive."
+        count={awaiting.length}
+        headerRight={<a href="/dashboard/cv-shortlisted" className="text-[11px] font-semibold text-[#2A6BB5] hover:text-[#2E3093] hover:underline">CV Shortlisting →</a>}
+      >
+        {awaiting.length === 0 ? (
+          <EmptyState text="Every recent student has been placed or has opted out." />
+        ) : (
+          <Table
+            columns={['Student', 'Batch', 'Program', 'Batch ended', 'Waiting', 'Interviews', 'Last interview']}
+            rows={awaiting.map((row, index) => {
+              const waiting = monthsSince(row.batch_end);
+              return (
+                <tr key={`awaiting-${row.student_id ?? index}-${row.batch_no ?? ''}`} className="hover:bg-slate-50">
+                  <td className="px-4 py-2.5 font-medium text-slate-800">{row.name || '-'}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-600 whitespace-nowrap">{toBatchNumber(row.batch_no)}</td>
+                  <td className="px-4 py-2.5 text-slate-600">{row.training_program || '-'}</td>
+                  <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{formatConvocationDate(row.batch_end)}</td>
+                  <td className="px-4 py-2.5 whitespace-nowrap">
+                    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${waiting >= 6 ? 'border-rose-200 bg-rose-50 text-rose-700' : waiting >= 3 ? 'border-amber-200 bg-amber-50 text-amber-700' : 'border-gray-200 bg-gray-50 text-slate-600'}`}>
+                      {waiting < 1 ? '< 1 month' : `${waiting} mo`}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2.5 text-center font-semibold text-slate-700">{Number(row.interviews ?? 0)}</td>
+                  <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{row.last_interview ? formatConvocationDate(row.last_interview) : 'None yet'}</td>
+                </tr>
+              );
+            })}
+          />
+        )}
+      </WidgetCard>
+
       <WidgetCard
         title="Placement Status Report"
         count={filteredPlacementRows.length}
         headerRight={(
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
             <label className="flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-white/80">From</span>
+              <span className="text-slate-500">From</span>
               <input
                 type="date"
                 value={convocationFromDate}
                 onChange={(event) => setConvocationFromDate(event.target.value)}
-                className="h-8 rounded-lg border border-white/25 bg-white/95 px-2 text-xs font-bold text-slate-800 shadow-sm outline-none focus:border-white focus:ring-2 focus:ring-white/30"
+                className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#2A6BB5] focus:ring-2 focus:ring-[#2A6BB5]/20"
                 aria-label="Filter convocation date from"
               />
             </label>
             <label className="flex items-center gap-1.5 whitespace-nowrap">
-              <span className="text-white/80">To</span>
+              <span className="text-slate-500">To</span>
               <input
                 type="date"
                 value={convocationToDate}
                 onChange={(event) => setConvocationToDate(event.target.value)}
-                className="h-8 rounded-lg border border-white/25 bg-white/95 px-2 text-xs font-bold text-slate-800 shadow-sm outline-none focus:border-white focus:ring-2 focus:ring-white/30"
+                className="h-8 rounded-lg border border-gray-300 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#2A6BB5] focus:ring-2 focus:ring-[#2A6BB5]/20"
                 aria-label="Filter convocation date to"
               />
             </label>
@@ -396,7 +470,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                   setConvocationFromDate('');
                   setConvocationToDate('');
                 }}
-                className="h-8 rounded-lg border border-white/25 bg-white/10 px-2.5 text-[11px] font-bold text-white transition hover:bg-white/20"
+                className="h-8 rounded-lg border border-gray-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 transition hover:bg-gray-50"
               >
                 Clear
               </button>
@@ -442,55 +516,55 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
               <>
                 <div className="border-b border-slate-200 bg-slate-50 px-5 py-3">
                   <div className="grid min-w-[1080px] grid-cols-[minmax(180px,1.4fr)_repeat(10,minmax(86px,1fr))] items-center gap-0 overflow-hidden rounded-xl border border-slate-200 bg-white text-xs shadow-sm">
-                    <div className="bg-slate-100 px-4 py-3 font-black uppercase tracking-wide text-slate-600">
+                    <div className="bg-slate-100 px-4 py-3 font-bold uppercase tracking-wide text-slate-600">
                       Total Summary
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Recent Date</p>
-                      <p className="font-black text-[#2E3093]">{formatConvocationDate(recentConvocationDate)}</p>
+                      <p className="font-bold text-[#2E3093]">{formatConvocationDate(recentConvocationDate)}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Passed</p>
-                      <p className="font-black text-slate-900">{totals.passed.toLocaleString()}</p>
+                      <p className="font-bold text-slate-900">{totals.passed.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">CV Received</p>
-                      <p className="font-black text-[#2A6BB5]">{totals.cvReceived.toLocaleString()}</p>
+                      <p className="font-bold text-[#2A6BB5]">{totals.cvReceived.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Self Placement</p>
-                      <p className="font-black text-[#2E3093]">{totals.selfPlacement.toLocaleString()}</p>
+                      <p className="font-bold text-[#2E3093]">{totals.selfPlacement.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">No Resume</p>
-                      <p className="font-black text-[#2E3093]">{totals.resumesNotReceived.toLocaleString()}</p>
+                      <p className="font-bold text-[#2E3093]">{totals.resumesNotReceived.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Others</p>
-                      <p className="font-black text-slate-600">{totals.others.toLocaleString()}</p>
+                      <p className="font-bold text-slate-600">{totals.others.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Interviewed</p>
-                      <p className="font-black text-[#2E3093]">{totals.interviewed.toLocaleString()}</p>
+                      <p className="font-bold text-[#2E3093]">{totals.interviewed.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Placed</p>
-                      <p className="font-black text-[#2A6BB5]">{totals.placed.toLocaleString()}</p>
+                      <p className="font-bold text-[#2A6BB5]">{totals.placed.toLocaleString()}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Avg Salary</p>
-                      <p className="font-black text-slate-700">{formatSalary(totalAvgSalary)}</p>
+                      <p className="font-bold text-slate-700">{formatSalary(totalAvgSalary)}</p>
                     </div>
                     <div className="px-3 py-3 text-center">
                       <p className="text-[10px] font-bold uppercase text-slate-400">Placed %</p>
-                      <p className="font-black text-[#2E3093]">{totalPct}%</p>
+                      <p className="font-bold text-[#2E3093]">{totalPct}%</p>
                     </div>
                   </div>
                 </div>
 
                 <table className="w-full min-w-[1120px] text-sm border-collapse">
-                <thead className="sticky top-0 z-10 bg-gradient-to-r from-slate-50/95 to-white/95 backdrop-blur-xl shadow-[0_4px_20px_rgb(0,0,0,0.03)]">
-                  <tr className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
+                <thead className="sticky top-0 z-10 bg-gray-50">
+                  <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
                     <th className="py-3 px-5 text-left border-b border-slate-200/50" rowSpan={2}>Training Program Name</th>
                     <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Batch No</th>
                     <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Convocation Date</th>
@@ -501,7 +575,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <th className="py-3 px-4 text-center border-b border-slate-200/50 whitespace-nowrap" rowSpan={2}>Avg Salary</th>
                     <th className="py-3 px-5 text-center border-b border-slate-200/50" rowSpan={2}>Placed(%)</th>
                   </tr>
-                  <tr className="text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-white/60">
+                  <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-white/60">
                     <th className="py-2.5 px-4 text-center border-l border-b border-slate-200/50">Total CV Received</th>
                     <th className="py-2.5 px-4 text-center border-b border-slate-200/50">Self Placement</th>
                     <th className="py-2.5 px-4 text-center whitespace-nowrap border-b border-slate-200/50">Resumes not received</th>
@@ -525,15 +599,15 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                         </td>
                         <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{toBatchNumber(row.batchCode)}</span></td>
                         <td className="py-3.5 px-4 text-center text-slate-500 whitespace-nowrap text-xs font-medium">{formatConvocationDate(row.convocationDate)}</td>
-                        <td className="py-3.5 px-4 text-center font-black text-slate-800 border-r border-slate-100 group-hover:border-transparent drop-shadow-sm">{row.passedStudent ?? 0}</td>
+                        <td className="py-3.5 px-4 text-center font-bold text-slate-800 border-r border-slate-100 group-hover:border-transparent drop-shadow-sm">{row.passedStudent ?? 0}</td>
                         <td className="py-3.5 px-4 text-center text-[#2A6BB5] font-extrabold">{row.totalCvReceived ?? 0}</td>
                         <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{row.selfPlacement ?? 0}</td>
                         <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{row.resumesNotReceived ?? 0}</td>
                         <td className="py-3.5 px-4 text-center text-slate-400 font-semibold">{row.others ?? 0}</td>
-                        <td className="py-3.5 px-4 text-center text-[#2E3093] font-black border-l border-slate-100 group-hover:border-transparent drop-shadow-sm">{row.totalInterviewed ?? 0}</td>
-                        <td className="py-3.5 px-4 text-center font-black text-[#2A6BB5] drop-shadow-sm">{row.totalPlaced ?? 0}</td>
+                        <td className="py-3.5 px-4 text-center text-[#2E3093] font-bold border-l border-slate-100 group-hover:border-transparent drop-shadow-sm">{row.totalInterviewed ?? 0}</td>
+                        <td className="py-3.5 px-4 text-center font-bold text-[#2A6BB5] drop-shadow-sm">{row.totalPlaced ?? 0}</td>
                         <td className="py-3.5 px-4 text-center font-mono text-xs font-bold text-slate-600">{formatSalary(row.avgSalary)}</td>
-                        <td className="py-3.5 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[48px] px-2.5 py-1.5 rounded-xl text-[12px] font-black shadow-sm ring-1 ring-inset ${pctColor}`}>{placedPct}%</span></td>
+                        <td className="py-3.5 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[48px] px-2.5 py-1.5 rounded-xl text-[12px] font-bold shadow-sm ring-1 ring-inset ${pctColor}`}>{placedPct}%</span></td>
                       </tr>
                     );
                   })}
@@ -553,7 +627,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
           contentClassName="max-h-none h-[calc(100%-56px)]"
         >
           <div className="p-5 space-y-4 h-[calc(100%-56px)] flex flex-col">
-            <div className="rounded-2xl border border-[#2E3093]/10 bg-white p-4">
+            <div className="rounded-lg border border-[#2E3093]/10 bg-white p-4">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.28em] text-[#2E3093] font-bold">Task Manager</p>
@@ -568,7 +642,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                 <div>
                   <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Task Name</label>
                   <input
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 shadow-sm outline-none transition focus:border-[#2A6BB5] focus:ring-4 focus:ring-[#2A6BB5]/10"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 placeholder:text-slate-400 shadow-sm outline-none transition focus:border-[#2A6BB5] focus:ring-4 focus:ring-[#2A6BB5]/10"
                     placeholder="Add a placement task..."
                     value={newTaskName}
                     onChange={(e) => setNewTaskName(e.target.value)}
@@ -581,14 +655,14 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Due Date</label>
                     <input
                       type="date"
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-[#2A6BB5] focus:ring-4 focus:ring-[#2A6BB5]/10"
+                      className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-[#2A6BB5] focus:ring-4 focus:ring-[#2A6BB5]/10"
                       value={newDueDate}
                       onChange={(e) => setNewDueDate(e.target.value)}
                     />
                   </div>
                   <div className="flex items-end">
                     <button
-                      className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(46,48,147,0.22)] transition hover:shadow-[0_14px_26px_rgba(46,48,147,0.28)] hover:-translate-y-0.5 active:translate-y-0"
+                      className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-[#2E3093] hover:bg-[#23257A] px-4 py-3 text-sm font-semibold text-white transition active:translate-y-0"
                       onClick={addTodo}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24">
@@ -604,11 +678,11 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
             <div className="overflow-auto flex-1 pr-1">
               <div className="space-y-3">
                 {todos.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 py-12 text-center text-slate-400">
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 py-12 text-center text-slate-400">
                     No tasks available
                   </div>
                 ) : todos.map((todo) => (
-                  <div key={todo.id} className="group rounded-2xl border border-[#2E3093]/10 bg-white p-4 transition hover:-translate-y-0.5">
+                  <div key={todo.id} className="group rounded-lg border border-[#2E3093]/10 bg-white p-4 transition">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-slate-800 leading-6 break-words">{todo.taskName}</p>
@@ -727,7 +801,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                   type="button"
                   onClick={addJobOpening}
                   disabled={openingSaving || !openingCompanyName.trim() || !openingRole.trim()}
-                  className="rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#252780] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#23257A] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {openingSaving ? 'Saving' : 'Add'}
                 </button>
@@ -799,7 +873,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                   type="button"
                   onClick={addCompanyVisit}
                   disabled={visitSaving || !visitDate || !visitCompanyName.trim() || !visitPersonToMeet.trim() || !visitPlace.trim()}
-                  className="rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#252780] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-[#2E3093] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#23257A] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {visitSaving ? 'Saving' : 'Add'}
                 </button>
@@ -844,7 +918,7 @@ export default function PlacementDepartmentDashboard({ data, loading }: { data: 
                 columns={['Code', 'Date', 'Company Name', 'Role', 'On Campus / Company']}
                 rows={campusInterviewsPlanned.map((r, idx) => (
                   <tr key={r.interview_code || `interview-${r.id || idx}`} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-black text-[#2E3093] whitespace-nowrap">{r.interview_code || '-'}</td>
+                    <td className="px-4 py-3 font-bold text-[#2E3093] whitespace-nowrap">{r.interview_code || '-'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-gray-600">{r.interview_date || '-'}</td>
                     <td className="px-4 py-3 font-medium text-gray-800">{r.company_name || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{r.role || '-'}</td>

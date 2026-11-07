@@ -324,6 +324,9 @@ async function fetchDashboardData(dept?: string) {
     activeCoursesRows,
     activeBatchesRows,
     totalFacultyRows,
+    tdBatchActivityRows,
+    placementAwaitingRows,
+    placementMonthRows,
   ] = await Promise.all([
 
     // 1a. awt_annual
@@ -1554,6 +1557,79 @@ async function fetchDashboardData(dept?: string) {
     needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM course_mst WHERE IsActive = 1 AND (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
     needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM batch_mst WHERE (IsDelete IS NULL OR IsDelete = 0) AND (Cancel IS NULL OR Cancel = 0) AND SDate <= CURDATE() AND EDate >= CURDATE()", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
     needsQuickStats ? safeQuery(pool, "SELECT COUNT(*) as cnt FROM faculty_master WHERE (IsDelete IS NULL OR IsDelete = 0)", [{ cnt: 0 }]) : Promise.resolve([{cnt: 0}]),
+
+    // T&D-10 Batch activity — when each running batch last recorded a lecture.
+    // (Taken lectures don't link to the lecture plan, so recency is the reliable
+    // signal for a batch going quiet.)
+    needsTdDashboard ? safeQuery(pool, `
+      SELECT b.Batch_Id, b.Batch_code AS batch_no, COALESCE(co.Course_Name, b.CourseName, 'N/A') AS training_program,
+        b.Category AS category,
+        DATE_FORMAT(MAX(DATE(lt.Take_Dt)), '%Y-%m-%d') AS last_lecture_date,
+        DATEDIFF(CURDATE(), MAX(DATE(lt.Take_Dt))) AS days_since,
+        COALESCE(SUM(DATE(lt.Take_Dt) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)), 0) AS lectures_last_7_days
+      FROM batch_mst b
+      LEFT JOIN course_mst co ON co.Course_Id = b.Course_Id
+      LEFT JOIN lecture_taken_master lt ON lt.Batch_Id = b.Batch_Id
+        AND (lt.IsDelete = 0 OR lt.IsDelete IS NULL)
+        AND lt.Take_Dt >= DATE_SUB(CURDATE(), INTERVAL 120 DAY)
+      WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(b.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_SDATE_EXPR} <= CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= CURDATE()
+      GROUP BY b.Batch_Id, b.Batch_code, co.Course_Name, b.CourseName, b.Category
+      ORDER BY (MAX(lt.Take_Dt) IS NULL) DESC, days_since DESC
+      LIMIT 50
+    `, []) : Promise.resolve([]),
+
+    // P-10 Students awaiting placement — batch ended in the last 12 months,
+    // admission active, and no placement / "assistance not required" / "placement closed" entry.
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT am.Student_Id AS student_id, MAX(TRIM(s.Student_Name)) AS name, b.Batch_code AS batch_no,
+        COALESCE(co.Course_Name, b.CourseName, 'N/A') AS training_program,
+        DATE_FORMAT(MAX(${BATCH_EDATE_EXPR}), '%Y-%m-%d') AS batch_end,
+        COALESCE(MAX(iv.interviews), 0) AS interviews,
+        MAX(iv.last_interview) AS last_interview
+      FROM admission_master am
+      JOIN batch_mst b ON b.Batch_Id = am.Batch_Id
+      JOIN student_master s ON s.Student_Id = am.Student_Id
+      LEFT JOIN course_mst co ON co.Course_Id = b.Course_Id
+      LEFT JOIN (
+        SELECT DISTINCT ch.Student_Id FROM cvchild ch JOIN cv_shortlisted cv ON cv.id = ch.CV_Id
+        WHERE (ch.IsDelete = 0 OR ch.IsDelete IS NULL) AND (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+          AND (LOWER(TRIM(ch.Placement)) = 'yes'
+            OR cv.CompanyName LIKE 'Placement Assistance not required%'
+            OR cv.CompanyName LIKE 'Placement closed%')
+      ) done ON done.Student_Id = am.Student_Id
+      LEFT JOIN (
+        SELECT ch.Student_Id, COUNT(*) AS interviews, DATE_FORMAT(MAX(cv.TDate), '%Y-%m-%d') AS last_interview
+        FROM cvchild ch JOIN cv_shortlisted cv ON cv.id = ch.CV_Id
+        WHERE (ch.IsDelete = 0 OR ch.IsDelete IS NULL) AND (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        GROUP BY ch.Student_Id
+      ) iv ON iv.Student_Id = am.Student_Id
+      WHERE (am.IsDelete = 0 OR am.IsDelete IS NULL)
+        AND LOWER(TRIM(CAST(COALESCE(am.Cancel, '') AS CHAR))) NOT IN ('yes', 'y', '1', 'true', 'cancelled', 'canceled')
+        AND ${BATCH_EDATE_EXPR} < CURDATE()
+        AND ${BATCH_EDATE_EXPR} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+        AND done.Student_Id IS NULL
+      GROUP BY am.Student_Id, b.Batch_code, co.Course_Name, b.CourseName
+      ORDER BY batch_end ASC, name ASC
+      LIMIT 500
+    `, []) : Promise.resolve([]),
+
+    // P-11 Placement headline numbers for this month
+    needsPlacementDepartment ? safeQuery(pool, `
+      SELECT
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(ch.Placement)) = 'yes'
+          AND cv.CompanyName NOT LIKE 'Placement Assistance%' AND cv.CompanyName NOT LIKE 'Placement closed%'
+          THEN ch.Student_Id END) AS placed_this_month,
+        COUNT(DISTINCT CASE WHEN cv.CompanyName NOT LIKE 'Placement%' THEN cv.id END) AS interview_drives_this_month,
+        COUNT(DISTINCT CASE WHEN LOWER(TRIM(ch.Sended)) = 'yes' THEN ch.Student_Id END) AS cvs_sent_this_month
+      FROM cv_shortlisted cv
+      JOIN cvchild ch ON ch.CV_Id = cv.id AND (ch.IsDelete = 0 OR ch.IsDelete IS NULL)
+      WHERE (cv.IsDelete = 0 OR cv.IsDelete IS NULL)
+        AND cv.TDate >= DATE_FORMAT(CURDATE(), '%Y-%m-01')
+        AND cv.TDate <= CURDATE()
+    `, [{ placed_this_month: 0, interview_drives_this_month: 0, cvs_sent_this_month: 0 }]) : Promise.resolve([{ placed_this_month: 0, interview_drives_this_month: 0, cvs_sent_this_month: 0 }]),
   ]);
 
   // ── Shape the response ──────────────────────────────────────────
@@ -1712,6 +1788,7 @@ async function fetchDashboardData(dept?: string) {
     upcomingConvocations: tdUpcomingConvocationsRows,
     siteVisits: tdSiteVisitsRows,
     admissionCancelled: tdAdmissionCancelledRows,
+    batchActivity: tdBatchActivityRows,
   };
 
   const adminDashboard = {
@@ -1761,6 +1838,8 @@ async function fetchDashboardData(dept?: string) {
       campusInterviewsPlanned: campusInterviewsPlannedRows,
       upcomingMockInterviews: upcomingMockInterviewsRows,
       completedMockInterviews: completedMockInterviewsRows,
+      awaitingPlacement: placementAwaitingRows,
+      monthSummary: (placementMonthRows as any[])[0] ?? { placed_this_month: 0, interview_drives_this_month: 0, cvs_sent_this_month: 0 },
     },
     quickStats: {
       totalStudents: (totalStudentsRows as Record<string, number>[])[0]?.cnt || 0,

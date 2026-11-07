@@ -401,6 +401,8 @@ export default function DashboardPage() {
 
   const isMayur = String(session?.firstName ?? '').trim().toLowerCase() === 'mayur';
   const changelogWidget = <ChangelogWidget />;
+  // Sales tracker + weekly work report (monitoring) appear only on the CBD and
+  // Administration dashboards.
   const monitoringWidget = <MonitoringWidget />;
   const salesTrackerWidget = <SalesTrackerWidget />;
   const mySalesTrackerWidget = <IndividualSalesTrackerWidget mode="mine" />;
@@ -563,9 +565,6 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
-        {monitoringWidget}
-        {salesTrackerWidget}
-        {mySalesTrackerWidget}
         <FinanceFullDashboard />
       </div>
     );
@@ -576,9 +575,6 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
-        {monitoringWidget}
-        {salesTrackerWidget}
-        {mySalesTrackerWidget}
         <TrainingDevelopmentDashboard data={data} loading={loading} />
       </div>
     );
@@ -610,9 +606,6 @@ export default function DashboardPage() {
       <div className="space-y-4">
         {profileHeader}
         {changelogWidget}
-        {monitoringWidget}
-        {salesTrackerWidget}
-        {mySalesTrackerWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
         {followupPopup}
       </div>
@@ -622,10 +615,7 @@ export default function DashboardPage() {
   return (
     <div className="relative space-y-6 pb-8">
       {profileHeader}
-        {changelogWidget}
-        {monitoringWidget}
-        {salesTrackerWidget}
-        {mySalesTrackerWidget}
+      {changelogWidget}
       {/* ── Quick Stats Row ── */}
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />
