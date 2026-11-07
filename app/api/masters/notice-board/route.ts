@@ -41,11 +41,12 @@ function idList(v: unknown): string | null {
   return ids.length ? ids.join(',') : null;
 }
 
-// Current batches = running today: started, not yet ended (inverse of the
+// Current batches = running today: started (SDate), not yet ended (inverse of the
 // Closed Batches cut-off), not deleted/cancelled.
 async function getOptions(pool: any) {
   const [batches] = await pool.query(
-    `SELECT b.Batch_Id, b.Batch_code, b.Course_Id, b.SDate, b.EDate, c.Course_Name
+    `SELECT b.Batch_Id, b.Batch_code, b.Course_Id,
+            b.SDate, b.EDate, c.Course_Name
      FROM batch_mst b
      LEFT JOIN course_mst c ON c.Course_Id = b.Course_Id
      WHERE (b.IsDelete = 0 OR b.IsDelete IS NULL)
