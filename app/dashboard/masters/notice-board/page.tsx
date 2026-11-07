@@ -11,7 +11,16 @@ interface Notice {
   startdate: string | null;
   enddate: string | null;
   created_date: string | null;
+  course_ids?: string | null;
+  batch_ids?: string | null;
+  course_names?: string | null;
+  batch_codes?: string | null;
 }
+
+interface CourseOpt { id: number; name: string }
+interface BatchOpt { Batch_Id: number; Batch_code: string; Course_Id: number; Course_Name: string | null; SDate: string | null; EDate: string | null }
+
+const splitIds = (v?: string | null) => (v ? v.split(',').map(Number).filter((n) => n > 0) : []);
 
 interface Pagination {
   page: number;
@@ -55,11 +64,41 @@ function isCurrentlyActive(n: Notice): boolean {
 export default function NoticeBoardMasterPage() {
   const { canView, canCreate, canUpdate, canDelete, loading: permLoading } = useResourcePermissions('notice_board');
 
-  const emptyForm = { title: '', specification: '', startdate: '', enddate: '' };
+  const emptyForm = { title: '', specification: '', startdate: '', enddate: '', course_ids: [] as number[], batch_ids: [] as number[] };
   const [formData, setFormData] = useState(emptyForm);
   const [editId, setEditId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [courseOpts, setCourseOpts] = useState<CourseOpt[]>([]);
+  const [batchOpts, setBatchOpts] = useState<BatchOpt[]>([]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    fetch('/api/masters/notice-board?options=1')
+      .then((r) => r.json())
+      .then((d) => {
+        setCourseOpts(Array.isArray(d?.courses) ? d.courses : []);
+        setBatchOpts(Array.isArray(d?.batches) ? d.batches : []);
+      })
+      .catch(() => {});
+  }, [modalOpen]);
+
+  const toggleCourse = (id: number) =>
+    setFormData((p) => {
+      const on = p.course_ids.includes(id);
+      const course_ids = on ? p.course_ids.filter((x) => x !== id) : [...p.course_ids, id];
+      // Dropping a programme also drops its batches.
+      const batch_ids = on
+        ? p.batch_ids.filter((bid) => batchOpts.find((b) => b.Batch_Id === bid)?.Course_Id !== id)
+        : p.batch_ids;
+      return { ...p, course_ids, batch_ids };
+    });
+  const toggleBatch = (id: number) =>
+    setFormData((p) => ({
+      ...p,
+      batch_ids: p.batch_ids.includes(id) ? p.batch_ids.filter((x) => x !== id) : [...p.batch_ids, id],
+    }));
+  const visibleBatches = batchOpts.filter((b) => formData.course_ids.includes(Number(b.Course_Id)));
 
   const [rows, setRows] = useState<Notice[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 25, total: 0, totalPages: 0 });
@@ -142,6 +181,8 @@ export default function NoticeBoardMasterPage() {
       specification: row.specification || '',
       startdate: row.startdate ? String(row.startdate).slice(0, 10) : '',
       enddate: row.enddate ? String(row.enddate).slice(0, 10) : '',
+      course_ids: splitIds(row.course_ids),
+      batch_ids: splitIds(row.batch_ids),
     });
     setModalOpen(true);
   };
@@ -182,7 +223,7 @@ export default function NoticeBoardMasterPage() {
           <span className="text-[#2E3093] font-medium">Notice Board</span>
         </div>
         <h1 className="text-2xl font-bold text-gray-800">Notice Board</h1>
-        <p className="text-xs text-gray-500 mt-1">Announcements shown here (within their date range) also appear on the student portal.</p>
+        <p className="text-xs text-gray-500 mt-1">Announcements appear on the student portal within their date range, only for the selected training programme / batches (or everyone if none selected).</p>
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
@@ -260,6 +301,7 @@ export default function NoticeBoardMasterPage() {
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Id</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Title</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Specification</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Sent To</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Start</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">End</th>
                   <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Status</th>
@@ -269,11 +311,11 @@ export default function NoticeBoardMasterPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-4 text-center text-gray-400">Loading...</td>
+                    <td colSpan={8} className="px-4 py-4 text-center text-gray-400">Loading...</td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-4 text-center text-gray-400">No notices found</td>
+                    <td colSpan={8} className="px-4 py-4 text-center text-gray-400">No notices found</td>
                   </tr>
                 ) : (
                   rows.map((row) => {
@@ -283,6 +325,15 @@ export default function NoticeBoardMasterPage() {
                         <td className="px-4 py-2 text-gray-700">{row.id}</td>
                         <td className="px-4 py-2 text-gray-700 font-medium">{row.title || ''}</td>
                         <td className="px-4 py-2 text-gray-600 max-w-[320px] truncate">{row.specification || ''}</td>
+                        <td className="px-4 py-2 text-xs text-gray-600 max-w-[240px]">
+                          {row.batch_codes ? (
+                            <><div className="font-medium text-gray-700 truncate">{row.course_names}</div><div className="truncate">Batch: {row.batch_codes}</div></>
+                          ) : row.course_names ? (
+                            <div className="truncate">{row.course_names} <span className="text-gray-400">(all batches)</span></div>
+                          ) : (
+                            <span className="text-gray-400">All students</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{row.startdate || '—'}</td>
                         <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{row.enddate || '—'}</td>
                         <td className="px-4 py-2">
@@ -417,6 +468,45 @@ export default function NoticeBoardMasterPage() {
                 </div>
               </div>
               <p className="text-[10px] text-gray-400">Leave dates blank to show the notice indefinitely.</p>
+
+              <div>
+                <label className={labelCls}>Training Programme</label>
+                <div className="max-h-32 overflow-auto border-2 border-gray-300 rounded p-2 space-y-1">
+                  {courseOpts.length === 0 ? (
+                    <div className="text-[11px] text-gray-400">Loading…</div>
+                  ) : courseOpts.map((c) => (
+                    <label key={c.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={formData.course_ids.includes(c.id)} onChange={() => toggleCourse(c.id)}
+                        disabled={!(editId ? canUpdate : canCreate) || submitting} />
+                      {c.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {formData.course_ids.length > 0 && (
+                <div>
+                  <label className={labelCls}>Batch Code (current batches)</label>
+                  <div className="max-h-32 overflow-auto border-2 border-gray-300 rounded p-2 space-y-1">
+                    {visibleBatches.length === 0 ? (
+                      <div className="text-[11px] text-gray-400">No running batches for the selected programme(s).</div>
+                    ) : visibleBatches.map((b) => (
+                      <label key={b.Batch_Id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                        <input type="checkbox" checked={formData.batch_ids.includes(b.Batch_Id)} onChange={() => toggleBatch(b.Batch_Id)}
+                          disabled={!(editId ? canUpdate : canCreate) || submitting} />
+                        <span className="font-medium">{b.Batch_code}</span>
+                        <span className="text-gray-400">{b.Course_Name} · {b.SDate} → {b.EDate || '—'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400">
+                {formData.batch_ids.length > 0
+                  ? 'Only students of the selected batches will see this notice.'
+                  : formData.course_ids.length > 0
+                    ? 'All students of the selected programme(s) will see this notice. Pick batches to narrow it.'
+                    : 'No programme selected — every student will see this notice.'}
+              </p>
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
