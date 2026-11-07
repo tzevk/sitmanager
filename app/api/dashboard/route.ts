@@ -876,10 +876,16 @@ async function fetchDashboardData(dept?: string) {
 
     // 6. Notices
     needsNotices ? safeQuery(pool, `
-      SELECT id, startdate, enddate, specification, created_date
-      FROM awt_noticeboard
-      WHERE (deleted = 0 OR deleted IS NULL) AND specification IS NOT NULL AND specification != ''
-      ORDER BY id DESC LIMIT 5
+      SELECT n.id, n.title, n.startdate, n.enddate, n.specification, n.created_date,
+             (SELECT GROUP_CONCAT(c.Course_Name SEPARATOR ', ') FROM course_mst c
+               WHERE n.course_ids IS NOT NULL AND n.course_ids <> '' AND FIND_IN_SET(c.Course_Id, n.course_ids)) AS course_names,
+             (SELECT GROUP_CONCAT(b.Batch_code SEPARATOR ', ') FROM batch_mst b
+               WHERE n.batch_ids IS NOT NULL AND n.batch_ids <> '' AND FIND_IN_SET(b.Batch_Id, n.batch_ids)) AS batch_codes
+      FROM awt_noticeboard n
+      WHERE (n.deleted = 0 OR n.deleted IS NULL) AND n.specification IS NOT NULL AND n.specification != ''
+        AND (n.startdate IS NULL OR n.startdate = '' OR n.startdate <= CURDATE())
+        AND (n.enddate IS NULL OR n.enddate = '' OR n.enddate >= CURDATE())
+      ORDER BY n.id DESC LIMIT 5
     `, []) : Promise.resolve([]),
 
     // 7. Source wise performance (from student enquiry source funnel)

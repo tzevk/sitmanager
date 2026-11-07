@@ -268,7 +268,7 @@ export default function StudentDashboardPage() {
     lecturesP.then((d) => { setToday(localToday()); setLectures({ state: 'ready', data: Array.isArray(d.lectures) ? d.lectures : [] }); }).catch(() => setLectures({ state: 'error' }));
     testsP.then((d) => setTests({ state: 'ready', data: dashboardTests(d.records) })).catch(() => setTests({ state: 'error' }));
     // Notices are secondary — a failure just hides them.
-    fetchJson('/api/student-portal/notices').then((d) => setNotices(Array.isArray(d.notices) ? d.notices.slice(0, 2) : [])).catch(() => {});
+    fetchJson('/api/student-portal/notices').then((d) => setNotices(Array.isArray(d.notices) ? d.notices.slice(0, 3) : [])).catch(() => {});
   }, [fetchJson]);
 
   const closeFees = useCallback(() => setFeesOpen(false), []);
@@ -330,6 +330,20 @@ export default function StudentDashboardPage() {
           </>
         )}
       </section>
+
+      {/* Notices for this student's programme / batch — shown up top */}
+      {notices.length > 0 && (
+        <Card title="Notice Board" accent="#B45309" action={<Link href="/student-portal/dashboard/notices" className={linkCls}>View all</Link>}>
+          <ul className="divide-y divide-[#F4F4F5]">
+            {notices.map((n) => (
+              <li key={n.id} className="py-2.5 first:pt-0">
+                <p className="text-sm font-semibold text-[#18181B]">{n.title || 'Notice'}</p>
+                {n.specification && <p className="mt-0.5 line-clamp-3 whitespace-pre-line text-xs text-[#52525B]">{n.specification}</p>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* 2. Attendance · Fees · Tests */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -486,7 +500,7 @@ export default function StudentDashboardPage() {
       </Card>
 
       {/* Existing sections kept from the previous dashboard: exam schedule and notices */}
-      {(a?.final_exams.length || notices.length > 0) ? (
+      {a?.final_exams.length ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {a && a.final_exams.length > 0 && (
             <Card title="Final Examinations">
@@ -511,18 +525,6 @@ export default function StudentDashboardPage() {
                 ))}
               </ul>
               <p className="mt-2 text-xs text-[#71717A]">Results will appear once they are published.</p>
-            </Card>
-          )}
-          {notices.length > 0 && (
-            <Card title="Notices" action={<Link href="/student-portal/dashboard/notices" className={linkCls}>View all</Link>}>
-              <ul className="divide-y divide-[#F4F4F5]">
-                {notices.map((n) => (
-                  <li key={n.id} className="py-2.5 first:pt-0">
-                    <p className="text-sm font-medium text-[#18181B]">{n.title || 'Notice'}</p>
-                    {n.specification && <p className="mt-0.5 line-clamp-2 text-xs text-[#71717A]">{n.specification}</p>}
-                  </li>
-                ))}
-              </ul>
             </Card>
           )}
         </div>

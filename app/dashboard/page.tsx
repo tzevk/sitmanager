@@ -945,7 +945,11 @@ export default function DashboardPage() {
                 {(data?.notices ?? []).map((n: any) => (
                   <div key={n.id} className="p-4 rounded-2xl bg-gradient-to-br from-[#2A6BB5]/5 to-white border border-[#2A6BB5]/12 hover:shadow-md hover:border-[#2A6BB5]/25 transition-all duration-300 relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-1 h-full bg-[#2A6BB5]/50 group-hover:bg-[#2A6BB5] transition-colors"></div>
+                    {n.title && <div className="text-[13px] font-bold text-slate-800 mb-1">{n.title}</div>}
                     <div className="text-[13px] text-slate-700 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: n.specification }} />
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      Sent to: {n.batch_codes ? `${n.course_names ?? ''} · Batch ${n.batch_codes}` : n.course_names ? `${n.course_names} (all batches)` : 'All students'}
+                    </div>
                     <div className="flex items-center gap-3 mt-3 text-[10px] text-[#2A6BB5]/80 font-semibold uppercase tracking-wider">
                       {n.startdate && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> {n.startdate}</span>}
                       {n.enddate && <span className="flex items-center gap-1">To: {n.enddate}</span>}
