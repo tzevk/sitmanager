@@ -12,6 +12,7 @@ import {
 import { usePermissions } from '@/lib/permissions-context';
 import { toBatchNumber } from '@/lib/batch-display';
 import { DashboardDepartment, getDashboardWidgetConfig, resolveDashboardDepartment } from './widget-config';
+import CollapsibleWidget from './components/CollapsibleWidget';
 import AdmissionClosureWidget from './components/AdmissionClosureWidget';
 import CbdDashboard from './components/CbdDashboard';
 import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
@@ -404,9 +405,15 @@ export default function DashboardPage() {
   const changelogWidget = <ChangelogWidget />;
   // Sales tracker + weekly work report (monitoring) appear only on the CBD and
   // Administration dashboards.
-  const monitoringWidget = <MonitoringWidget />;
-  const salesTrackerWidget = <SalesTrackerWidget />;
-  const mySalesTrackerWidget = <IndividualSalesTrackerWidget mode="mine" />;
+  const monitoringWidget = (
+    <CollapsibleWidget id="monitoring" title="Employee Monitoring"><MonitoringWidget /></CollapsibleWidget>
+  );
+  const salesTrackerWidget = (
+    <CollapsibleWidget id="sales-tracker" title="Sales Tracker"><SalesTrackerWidget /></CollapsibleWidget>
+  );
+  const individualTrackerWidget = (
+    <CollapsibleWidget id="individual-sales-tracker" title="Individual Sales Tracker"><IndividualSalesTrackerWidget /></CollapsibleWidget>
+  );
 
   // Fetch dashboard data live from the API and refresh on an interval.
   useEffect(() => {
@@ -552,9 +559,8 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
-        {mySalesTrackerWidget}
         {/* Individual Sales Tracker · All employees — on the CBD dashboard for the Mayur account only */}
-        {isMayur && hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
+        {isMayur && hasPermission('individual_sales_tracker.view') && individualTrackerWidget}
         <AdmissionClosureWidget />
         <CbdDashboard data={data} loading={loading} />
         {followupPopup}
@@ -589,8 +595,7 @@ export default function DashboardPage() {
         {changelogWidget}
         {monitoringWidget}
         {salesTrackerWidget}
-        {mySalesTrackerWidget}
-        {hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
+        {hasPermission('individual_sales_tracker.view') && individualTrackerWidget}
         <AdmissionClosureWidget />
         <AdministrationDashboard
           data={data}

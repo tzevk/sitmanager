@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, requirePermission } from '@/lib/api-auth';
-import { getScoreboard, parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+import { parseScoreboardWorkbook, saveScoreboard } from '@/lib/services/sales-scoreboard.service';
+import { getLiveTracker } from '@/lib/services/sales-tracker-live.service';
 import { getInquiryIndividuals } from '@/lib/services/individual-tracker.service';
 import { cached } from '@/lib/db';
 
@@ -42,9 +43,9 @@ export async function GET(req: NextRequest) {
       const individuals = await cached('inquiry-individual-tracker:all', 300, () => getInquiryIndividuals());
       return NextResponse.json({ ...INQUIRY_SOURCE, individuals });
     }
-    const board = await getScoreboard();
-    const meta = { source: board.source, dataThrough: board.dataThrough, uploadedAt: board.uploadedAt ?? null, uploadedBy: board.uploadedBy ?? null };
-    return NextResponse.json({ ...meta, rows: board.tracker });
+    // Weekly tracker from live CRM data (inquiries, discussions, admission forms, admissions).
+    const live = await cached('sales-tracker-live-v1', 300, getLiveTracker);
+    return NextResponse.json({ ...INQUIRY_SOURCE, source: 'Live CRM data', dataThrough: live.dataThrough, rows: live.rows });
   } catch (error) {
     console.error('Sales scoreboard GET error:', error);
     return NextResponse.json({ error: 'Could not load the sales scoreboard' }, { status: 500 });
