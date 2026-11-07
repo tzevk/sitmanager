@@ -68,19 +68,15 @@ function Sparkline({ data, color = '#2E3093' }: { data: number[]; color?: string
 }
 
 // --- Stat Card ---
-function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; label: string; value: number | string; color: string; glow: string }) {
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number | string; color?: string; glow?: string }) {
   return (
-    <div className="relative overflow-hidden rounded-3xl p-6 flex flex-col justify-center gap-3 bg-white border border-[#2E3093]/10 transition-all duration-300 hover:-translate-y-1 group">
-      {/* Background soft glow */ }
-      <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full blur-3xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 ${glow} pointer-events-none`}></div>
-      <div className="flex items-center gap-4 relative z-10">
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${color}`}>
-          {icon}
-        </div>
-        <div className="min-w-0">
-          <p className="text-3xl font-semibold text-[#2E3093] leading-none tracking-tight">{typeof value === 'number' ? value.toLocaleString() : value}</p>
-          <p className="text-[11px] text-[#2A6BB5]/70 mt-1.5 font-semibold uppercase tracking-widest">{label}</p>
-        </div>
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm flex items-center gap-4">
+      <div className="w-11 h-11 rounded-lg bg-[#2E3093]/[0.07] text-[#2E3093] flex items-center justify-center shrink-0 [&>svg]:w-5 [&>svg]:h-5">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-2xl font-bold text-[#2E3093] leading-none tabular-nums">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+        <p className="text-xs text-slate-500 mt-1.5 font-medium">{label}</p>
       </div>
     </div>
   );
@@ -89,21 +85,19 @@ function StatCard({ icon, label, value, color, glow }: { icon: React.ReactNode; 
 // --- Widget Card Wrapper ---
 function Widget({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-3xl border border-[#2E3093]/10 overflow-hidden flex flex-col ${className}`}>
+    <div className={`bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col ${className}`}>
       {children}
     </div>
   );
 }
 
-function WidgetHeader({ title, icon, badge, accent = 'from-[#2E3093] to-[#2A6BB5]' }: { title: string; icon: React.ReactNode; badge?: string | number; accent?: string }) {
+function WidgetHeader({ title, icon, badge }: { title: string; icon: React.ReactNode; badge?: string | number; accent?: string }) {
   return (
-    <div className={`bg-gradient-to-r ${accent} px-6 py-4 flex items-center gap-3 relative overflow-hidden`}>
-      <div className="absolute inset-0 bg-white/5 mix-blend-overlay"></div>
-      <div className="absolute left-0 right-0 bottom-0 h-px bg-white/30"></div>
-      <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white shadow-inner relative z-10 border border-white/20">{icon}</div>
-      <h2 className="text-white font-bold text-[15px] tracking-wide flex-1 relative z-10">{title}</h2>
+    <div className="px-5 py-3.5 flex items-center gap-3 border-b border-gray-100">
+      <div className="w-8 h-8 rounded-lg bg-[#2E3093]/[0.07] text-[#2E3093] flex items-center justify-center shrink-0">{icon}</div>
+      <h2 className="text-sm font-semibold text-[#2E3093] flex-1">{title}</h2>
       {badge !== undefined && (
-        <span className="text-[11px] bg-white/25 backdrop-blur-md text-white border border-white/20 rounded-full px-3 py-1 font-bold relative z-10 shadow-sm">{badge}</span>
+        <span className="text-[11px] font-semibold text-[#2A6BB5] bg-[#2A6BB5]/10 rounded-full px-2.5 py-0.5">{badge}</span>
       )}
     </div>
   );
@@ -303,8 +297,59 @@ export default function DashboardPage() {
   const profileName = session?.firstName?.trim() || session?.email?.split('@')[0] || 'User';
   const clockText = now ? now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '--:--';
 
+  // One follow-up popup shared by the CBD and Placement dashboards (was duplicated).
+  const followupPopup = showFollowupPopup ? (
+          <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden">
+              <div className="px-5 py-4 bg-[#2E3093] text-white flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold tracking-wide">{followupPopupTitle}</h3>
+                  <p className="text-[11px] text-white/80 mt-1">{followupPopupSubtitle}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowFollowupPopup(false)}
+                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 hover:bg-white/20"
+                  aria-label="Close follow-up popup"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-auto p-5 bg-slate-50">
+                {recentFollowupsLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
+                ) : recentFollowups.length === 0 ? (
+                  <div className="py-10 text-center text-sm text-slate-500">{followupPopupEmptyText}</div>
+                ) : (
+                  <div className="space-y-3">
+                    {recentFollowups.map((item) => (
+                      <button
+                        key={`${item.module}-${item.popupId}`}
+                        type="button"
+                        onClick={() => goToFollowupDetails(item)}
+                        className={`w-full text-left rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-[#2A6BB5]/40 hover:bg-[#2A6BB5]/5 ${item.recordId ? 'cursor-pointer' : 'cursor-default'}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">{item.primaryText || 'Follow-up'}</p>
+                            <p className="text-xs text-slate-500 mt-1 truncate">{item.secondaryText || 'Follow-up'}</p>
+                          </div>
+                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.followupDate || ''}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+  ) : null;
+
   const profileHeader = (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div className="min-w-0 flex-1 w-full">
         <div className="flex min-w-0 flex-wrap items-start sm:items-center gap-2">
           <span className="text-sm sm:text-[15px] font-semibold text-gray-800 truncate">{greeting}, {profileName}</span>
@@ -334,13 +379,13 @@ export default function DashboardPage() {
           <button
             type="button"
             onClick={openFollowupPopup}
-            className="group inline-flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 rounded-2xl border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#2E3093] shadow-[0_8px_22px_rgba(42,107,181,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(42,107,181,0.2)]"
+            className="group inline-flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 rounded-lg border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-3.5 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold text-[#2E3093] transition"
           >
             <span className="relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
               <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
               </svg>
-              <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
+              <span className={`absolute -right-1.5 -top-1.5 min-w-[18px] h-[18px] px-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
                 {showFollowupReminder ? newFollowupCount : recentFollowups.length}
               </span>
             </span>
@@ -485,13 +530,13 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={openFollowupPopup}
-                  className="group inline-flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 rounded-lg border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-[#2E3093] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="group inline-flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 rounded-lg border border-[#2A6BB5]/25 bg-gradient-to-r from-white to-[#2A6BB5]/5 px-3.5 py-2 text-xs sm:text-sm font-semibold text-[#2E3093] shadow-sm transition hover:shadow-md"
                 >
                   <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] text-white shadow-sm">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.083 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                     </svg>
-                    <span className={`absolute -right-1.5 -top-1.5 min-w-[16px] h-4 px-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-black border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
+                    <span className={`absolute -right-1.5 -top-1.5 min-w-[16px] h-4 px-0.5 inline-flex items-center justify-center rounded-full text-[9px] font-bold border border-white ${showFollowupReminder ? 'bg-rose-500 text-white animate-pulse' : 'bg-[#2E3093] text-white'}`}>
                       {showFollowupReminder ? newFollowupCount : recentFollowups.length}
                     </span>
                   </span>
@@ -508,55 +553,7 @@ export default function DashboardPage() {
         {/* Individual Sales Tracker · All employees — on the CBD dashboard for the Mayur account only */}
         {isMayur && hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
         <CbdDashboard data={data} loading={loading} />
-        {showFollowupPopup && (
-          <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
-              <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold tracking-wide">{followupPopupTitle}</h3>
-                  <p className="text-[11px] text-white/80 mt-1">{followupPopupSubtitle}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowFollowupPopup(false)}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 hover:bg-white/20"
-                  aria-label="Close follow-up popup"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="max-h-[70vh] overflow-auto p-5 bg-gradient-to-b from-slate-50/60 to-white">
-                {recentFollowupsLoading ? (
-                  <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
-                ) : recentFollowups.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-slate-500">{followupPopupEmptyText}</div>
-                ) : (
-                  <div className="space-y-3">
-                    {recentFollowups.map((item) => (
-                      <button
-                        key={`${item.module}-${item.popupId}`}
-                        type="button"
-                        onClick={() => goToFollowupDetails(item)}
-                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.recordId ? 'cursor-pointer' : 'cursor-default'}`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-800 truncate">{item.primaryText || 'Follow-up'}</p>
-                            <p className="text-xs text-slate-500 mt-1 truncate">{item.secondaryText || 'Follow-up'}</p>
-                          </div>
-                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.followupDate || ''}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {followupPopup}
       </div>
     );
   }
@@ -617,65 +614,13 @@ export default function DashboardPage() {
         {salesTrackerWidget}
         {mySalesTrackerWidget}
         <PlacementDepartmentDashboard data={data} loading={loading} />
-        {showFollowupPopup && (
-          <div className="fixed inset-0 z-[70] bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.3)] overflow-hidden">
-              <div className="px-5 py-4 bg-gradient-to-r from-[#2E3093] via-[#2E3093] to-[#2A6BB5] text-white flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-bold tracking-wide">{followupPopupTitle}</h3>
-                  <p className="text-[11px] text-white/80 mt-1">{followupPopupSubtitle}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowFollowupPopup(false)}
-                  className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-white/30 bg-white/10 hover:bg-white/20"
-                  aria-label="Close follow-up popup"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="max-h-[70vh] overflow-auto p-5 bg-gradient-to-b from-slate-50/60 to-white">
-                {recentFollowupsLoading ? (
-                  <div className="py-10 text-center text-sm text-slate-500">Loading recent follow-ups...</div>
-                ) : recentFollowups.length === 0 ? (
-                  <div className="py-10 text-center text-sm text-slate-500">{followupPopupEmptyText}</div>
-                ) : (
-                  <div className="space-y-3">
-                    {recentFollowups.map((item) => (
-                      <button
-                        key={`${item.module}-${item.popupId}`}
-                        type="button"
-                        onClick={() => goToFollowupDetails(item)}
-                        className={`w-full text-left rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_26px_rgba(15,23,42,0.1)] ${item.recordId ? 'cursor-pointer' : 'cursor-default'}`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold text-slate-800 truncate">{item.primaryText || 'Follow-up'}</p>
-                            <p className="text-xs text-slate-500 mt-1 truncate">{item.secondaryText || 'Follow-up'}</p>
-                          </div>
-                          <span className="text-[11px] font-semibold text-[#2E3093] whitespace-nowrap">{item.followupDate || ''}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        {followupPopup}
       </div>
     );
   }
 
   return (
     <div className="relative space-y-6 pb-8">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(46,48,147,0.08),_transparent_55%),radial-gradient(ellipse_at_top_right,_rgba(42,107,181,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(250,228,82,0.10),_transparent_50%)]"
-      />
       {profileHeader}
         {changelogWidget}
         {monitoringWidget}
@@ -685,7 +630,7 @@ export default function DashboardPage() {
       {widgetConfig.quickStats && (loading ? (
         <QuickStatsSkeleton />
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
           label="Total Students" value={qs.totalStudents}
@@ -790,8 +735,8 @@ export default function DashboardPage() {
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-50/90 backdrop-blur-md border-t-2 border-slate-200 font-bold text-[12px] sticky bottom-0 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.02)]">
-                      <td className="py-3 px-4" colSpan={4}><span className="text-slate-500 uppercase tracking-widest">Totals</span></td>
+                    <tr className="bg-slate-50/90 backdrop-blur-md border-t-2 border-slate-200 font-bold text-[12px] sticky bottom-0 z-10">
+                      <td className="py-3 px-4" colSpan={4}><span className="text-slate-500 uppercase tracking-wider">Totals</span></td>
                       <td className="py-3 px-4 text-center text-slate-800">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.frequency_conducted) || 0), 0)}</td>
                       <td className="py-3 px-4 text-center text-[#2E3093]">{(data?.annualTargets?.batchTargets ?? []).reduce((s: number, t: any) => s + (Number(t.target_frequency) || 1), 0)}</td>
                       <td className="py-3 px-4"></td>
@@ -831,8 +776,7 @@ export default function DashboardPage() {
               {(data?.upcomingBatches ?? []).length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-x-2 gap-y-1.5">
                   {(data?.upcomingBatches ?? []).map((b: any) => (
-                    <div key={b.Batch_Id} className="relative overflow-hidden rounded-2xl border border-[#2A6BB5]/15 bg-white p-4 hover:border-[#2A6BB5]/35 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-[#2A6BB5]/10 to-transparent rounded-bl-full opacity-60 group-hover:opacity-100 transition-opacity"></div>
+                    <div key={b.Batch_Id} className="relative overflow-hidden rounded-lg border border-[#2A6BB5]/15 bg-white p-4 hover:border-[#2A6BB5]/35 transition-all duration-300 group">
                       <div className="relative z-10">
                         <div className="flex items-start justify-between mb-3">
                           <div className="min-w-0 flex-1">
@@ -843,7 +787,7 @@ export default function DashboardPage() {
                               <span>{b.Category}</span>
                             </p>
                           </div>
-                          <span className="text-[11px] bg-[#FAE452] text-[#2E3093] font-black px-3 py-1.5 rounded-xl whitespace-nowrap shadow-sm border border-[#FAE452]/70 transform group-hover:scale-105 transition-transform">
+                          <span className="text-[11px] bg-[#FAE452] text-[#2E3093] font-bold px-3 py-1.5 rounded-xl whitespace-nowrap shadow-sm border border-[#FAE452]/70 transform group-hover:scale-105 transition-transform">
                             {b.SDate}
                           </span>
                         </div>
@@ -888,7 +832,7 @@ export default function DashboardPage() {
                 />
                 <button
                   onClick={addTodo}
-                  className="bg-gradient-to-br from-[#2E3093] to-[#2A6BB5] hover:to-[#1a4a84] text-white px-4 py-3 rounded-xl transition-all shadow-[0_4px_14px_rgba(46,48,147,0.3)] hover:shadow-[0_6px_20px_rgba(46,48,147,0.4)] hover:-translate-y-0.5 text-sm font-bold flex items-center justify-center min-w-[3.5rem]"
+                  className="bg-[#2E3093] hover:bg-[#23257A] text-white px-4 py-3 rounded-lg transition-colors text-sm font-bold flex items-center justify-center min-w-[3.5rem]"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
                 </button>
@@ -904,7 +848,7 @@ export default function DashboardPage() {
                     <div
                       key={todo.id}
                       className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-                        todo.done ? 'bg-gray-50/50 opacity-60' : 'bg-white border border-gray-100 shadow-[0_2px_10px_rgb(0,0,0,0.02)] hover:border-[#2E3093]/30 hover:shadow-md hover:-translate-y-0.5'
+                        todo.done ? 'bg-gray-50/50 opacity-60' : 'bg-white border border-gray-100 hover:border-[#2E3093]/30 hover:shadow-md'
                       }`}
                     >
                       <button onClick={() => toggleTodo(todo.id)} className="shrink-0 relative">
@@ -943,17 +887,16 @@ export default function DashboardPage() {
             {(data?.notices ?? []).length > 0 ? (
               <div className="space-y-3">
                 {(data?.notices ?? []).map((n: any) => (
-                  <div key={n.id} className="p-4 rounded-2xl bg-gradient-to-br from-[#2A6BB5]/5 to-white border border-[#2A6BB5]/12 hover:shadow-md hover:border-[#2A6BB5]/25 transition-all duration-300 relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-[#2A6BB5]/50 group-hover:bg-[#2A6BB5] transition-colors"></div>
+                  <div key={n.id} className="p-3.5 rounded-lg border border-gray-200 border-l-[3px] border-l-[#2A6BB5]">
                     {n.title && <div className="text-[13px] font-bold text-slate-800 mb-1">{n.title}</div>}
                     <div className="text-[13px] text-slate-700 font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: n.specification }} />
                     <div className="mt-2 text-[10px] text-slate-500">
                       Sent to: {n.batch_codes ? `${n.course_names ?? ''} · Batch ${n.batch_codes}` : n.course_names ? `${n.course_names} (all batches)` : 'All students'}
                     </div>
-                    <div className="flex items-center gap-3 mt-3 text-[10px] text-[#2A6BB5]/80 font-semibold uppercase tracking-wider">
+                    <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
                       {n.startdate && <span className="flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> {n.startdate}</span>}
                       {n.enddate && <span className="flex items-center gap-1">To: {n.enddate}</span>}
-                      {n.created_date && <span className="ml-auto bg-[#2E3093]/8 text-[#2E3093] px-2 py-0.5 rounded-md border border-[#2E3093]/12">{new Date(n.created_date).toLocaleDateString()}</span>}
+                      {n.created_date && <span className="ml-auto text-slate-400">{new Date(n.created_date).toLocaleDateString()}</span>}
                     </div>
                   </div>
                 ))}
@@ -980,30 +923,30 @@ export default function DashboardPage() {
             />
             <div className="p-4 flex-1 overflow-auto max-h-80">
             <div className="grid grid-cols-3 gap-3 mb-5">
-              <div className="bg-gradient-to-br from-[#2A6BB5]/8 to-white rounded-2xl p-4 text-center border border-[#2A6BB5]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-[#2A6BB5]/[0.05] rounded-lg p-4 text-center border border-[#2A6BB5]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.summary?.total_enquiries ?? 0}</p>
-                <p className="text-[10px] text-[#2A6BB5]/80 mt-1 font-bold uppercase tracking-widest relative z-10">Student</p>
+                <p className="text-2xl font-bold text-[#2E3093] relative z-10">{data?.enquiryReport?.summary?.total_enquiries ?? 0}</p>
+                <p className="text-[10px] text-[#2A6BB5]/80 mt-1 font-bold uppercase tracking-wider relative z-10">Student</p>
               </div>
-              <div className="bg-gradient-to-br from-[#2E3093]/6 to-white rounded-2xl p-4 text-center border border-[#2E3093]/12 relative overflow-hidden group hover:border-[#2E3093]/20 transition-all">
+              <div className="bg-[#2E3093]/[0.04] rounded-lg p-4 text-center border border-[#2E3093]/12 relative overflow-hidden group hover:border-[#2E3093]/20 transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-2xl font-black text-[#2E3093] relative z-10">{data?.enquiryReport?.corporateTotal ?? 0}</p>
-                <p className="text-[10px] text-[#2E3093]/75 mt-1 font-bold uppercase tracking-widest relative z-10">Corporate</p>
+                <p className="text-2xl font-bold text-[#2E3093] relative z-10">{data?.enquiryReport?.corporateTotal ?? 0}</p>
+                <p className="text-[10px] text-[#2E3093]/75 mt-1 font-bold uppercase tracking-wider relative z-10">Corporate</p>
               </div>
-              <div className="bg-gradient-to-br from-[#2E3093]/6 to-white rounded-2xl p-4 text-center border border-[#2E3093]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-[#2E3093]/[0.04] rounded-lg p-4 text-center border border-[#2E3093]/12 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="absolute inset-0 bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <p className="text-2xl font-black text-[#2A6BB5] relative z-10">{(data?.enquiryReport?.summary?.total_enquiries ?? 0) + (data?.enquiryReport?.corporateTotal ?? 0)}</p>
-                <p className="text-[10px] text-[#2A6BB5]/75 mt-1 font-bold uppercase tracking-widest relative z-10">Total</p>
+                <p className="text-2xl font-bold text-[#2A6BB5] relative z-10">{(data?.enquiryReport?.summary?.total_enquiries ?? 0) + (data?.enquiryReport?.corporateTotal ?? 0)}</p>
+                <p className="text-[10px] text-[#2A6BB5]/75 mt-1 font-bold uppercase tracking-wider relative z-10">Total</p>
               </div>
             </div>
-            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               Recent Corporate <div className="h-px bg-slate-100 flex-1"></div>
             </h3>
             <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
               {(data?.enquiryReport?.recentCorporate ?? []).length > 0 ? (
                 (data?.enquiryReport?.recentCorporate ?? []).map((e: any) => (
-                  <div key={e.Id} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-white hover:border-[#2A6BB5]/20 hover:shadow-[0_4px_20px_rgb(0,0,0,0.04)] hover:-translate-y-0.5 transition-all duration-300">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#2A6BB5]/15 to-white text-[#2E3093] flex items-center justify-center text-[14px] font-black shrink-0 shadow-inner border border-[#2A6BB5]/15">
+                  <div key={e.Id} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-white hover:border-[#2A6BB5]/20 transition-all duration-300">
+                    <div className="w-10 h-10 rounded-xl bg-[#2A6BB5]/10 text-[#2E3093] flex items-center justify-center text-[14px] font-bold shrink-0 shadow-inner border border-[#2A6BB5]/15">
                       {(e.FullName || '?')[0]}
                     </div>
                     <div className="min-w-0 flex-1">
@@ -1014,7 +957,7 @@ export default function DashboardPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-slate-400 text-sm text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl font-medium flex items-center justify-center gap-2">
+                <p className="text-slate-400 text-sm text-center py-6 border-2 border-dashed border-slate-100 rounded-lg font-medium flex items-center justify-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                   No recent enquiries
                 </p>
@@ -1039,7 +982,7 @@ export default function DashboardPage() {
               {(data?.placementReport?.companyRequirements ?? []).length > 0 ? (
                 <div className="space-y-3 pr-1">
                   {(data?.placementReport?.companyRequirements ?? []).map((r: any) => (
-                    <div key={r.CompReqId} className="p-4 rounded-2xl border border-[#2A6BB5]/15 bg-gradient-to-br from-white to-[#2A6BB5]/5 hover:border-[#2A6BB5]/35 hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 group">
+                    <div key={r.CompReqId} className="p-4 rounded-lg border border-[#2A6BB5]/15 bg-white hover:border-[#2A6BB5]/35 transition-all duration-300 group">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-[14px] font-bold text-slate-800 truncate group-hover:text-[#2A6BB5] transition-colors">{r.Profile || 'Open Position'}</p>
@@ -1092,8 +1035,8 @@ export default function DashboardPage() {
 
               return (
                 <table className="w-full text-sm border-collapse">
-                  <thead className="shadow-[0_4px_20px_rgb(0,0,0,0.03)] bg-gradient-to-r from-slate-50/95 to-white/95 backdrop-blur-xl sticky top-0 z-20 before:content-[''] before:absolute before:inset-0 before:border-b before:border-slate-200/60 before:z-[-1]">
-                    <tr className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
+                  <thead className="bg-gray-50 sticky top-0 z-20 before:content-[''] before:absolute before:inset-0 before:border-b before:border-slate-200/60 before:z-[-1]">
+                    <tr className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
                       <th className="py-3 px-5 text-left border-b border-slate-200/50" rowSpan={2}>Course</th>
                       <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Batch</th>
                       <th className="py-3 px-4 text-center whitespace-nowrap border-b border-slate-200/50" rowSpan={2}>Conv. Date</th>
@@ -1103,7 +1046,7 @@ export default function DashboardPage() {
                       <th className="py-3 px-4 text-center border-b border-slate-200/50" rowSpan={2}>Placed</th>
                       <th className="py-3 px-5 text-center border-b border-slate-200/50" rowSpan={2}>Conv. Rate</th>
                     </tr>
-                    <tr className="text-[10px] font-bold uppercase tracking-widest text-slate-500 bg-white/60">
+                    <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-white/60">
                       <th className="py-2.5 px-4 text-center border-l border-b border-slate-200/50">CV Recv</th>
                       <th className="py-2.5 px-4 text-center border-b border-slate-200/50">Self</th>
                       <th className="py-2.5 px-4 text-center whitespace-nowrap border-b border-slate-200/50">No Resume</th>
@@ -1119,36 +1062,36 @@ export default function DashboardPage() {
                           ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 ring-[#2A6BB5]/20'
                           : 'text-[#2E3093] bg-[#2E3093]/8 ring-[#2E3093]/15';
                       return (
-                        <tr key={r.batchCode ?? i} className="group hover:bg-gradient-to-r hover:from-[#2A6BB5]/5 hover:to-white transition-all duration-300">
+                        <tr key={r.batchCode ?? i} className="group hover:bg-[#2A6BB5]/[0.04] transition-all duration-300">
                           <td className="py-3.5 px-5 font-bold text-slate-800 max-w-[240px] relative">
                             <span className="absolute inset-y-0 left-0 w-1 bg-[#2E3093] opacity-0 group-hover:opacity-100 transition-opacity"></span>
-                            <span className="truncate block group-hover:text-[#2A6BB5] transition-colors drop-shadow-sm pl-1">{r.courseName || 'N/A'}</span>
+                            <span className="truncate block group-hover:text-[#2A6BB5] transition-colors pl-1">{r.courseName || 'N/A'}</span>
                           </td>
                           <td className="py-3.5 px-4 text-center"><span className="font-mono bg-slate-50 border border-slate-200 text-slate-600 shadow-sm rounded-lg px-2.5 py-1 text-[11px] font-semibold">{toBatchNumber(r.batchCode)}</span></td>
                           <td className="py-3.5 px-4 text-center text-slate-500 whitespace-nowrap text-xs font-medium">{r.convocationDate || '—'}</td>
-                          <td className="py-3.5 px-4 text-center font-black text-slate-800 border-r border-slate-100 group-hover:border-transparent drop-shadow-sm">{r.passedStudent}</td>
+                          <td className="py-3.5 px-4 text-center font-bold text-slate-800 border-r border-slate-100 group-hover:border-transparent">{r.passedStudent}</td>
                           <td className="py-3.5 px-4 text-center text-[#2A6BB5] font-extrabold">{r.totalCvReceived}</td>
                           <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{r.selfPlacement}</td>
                           <td className="py-3.5 px-4 text-center text-[#2E3093] font-extrabold">{r.resumesNotReceived}</td>
                           <td className="py-3.5 px-4 text-center text-slate-400 font-semibold">{r.others}</td>
-                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-black border-l border-slate-100 group-hover:border-transparent drop-shadow-sm">{r.totalInterviewed}</td>
-                          <td className="py-3.5 px-4 text-center font-black text-[#2A6BB5] drop-shadow-sm">{r.totalPlaced}</td>
-                          <td className="py-3.5 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[48px] px-2.5 py-1.5 rounded-xl text-[12px] font-black shadow-sm ring-1 ring-inset ${pctColor}`}>{pct}%</span></td>
+                          <td className="py-3.5 px-4 text-center text-[#2E3093] font-bold border-l border-slate-100 group-hover:border-transparent">{r.totalInterviewed}</td>
+                          <td className="py-3.5 px-4 text-center font-bold text-[#2A6BB5]">{r.totalPlaced}</td>
+                          <td className="py-3.5 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[48px] px-2.5 py-1.5 rounded-xl text-[12px] font-bold shadow-sm ring-1 ring-inset ${pctColor}`}>{pct}%</span></td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-gradient-to-r from-slate-50/95 to-white/95 backdrop-blur-xl border-t-2 border-slate-200/60 font-black text-[12px] sticky bottom-0 z-20 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
-                      <td className="py-4 px-5 text-slate-600 uppercase tracking-widest drop-shadow-sm" colSpan={3}>Totals</td>
+                    <tr className="bg-gray-50 border-t-2 border-slate-200/60 font-bold text-[12px] sticky bottom-0 z-20">
+                      <td className="py-4 px-5 text-slate-600 uppercase tracking-wider" colSpan={3}>Totals</td>
                       <td className="py-4 px-4 text-center text-slate-900 border-r border-slate-200/60 text-[13px]">{totals.passed}</td>
                       <td className="py-4 px-4 text-center text-[#2A6BB5] text-[13px]">{totals.cvReceived}</td>
                       <td className="py-4 px-4 text-center text-[#2E3093] text-[13px]">{totals.selfPlacement}</td>
                       <td className="py-4 px-4 text-center text-[#2E3093] text-[13px]">{totals.resumesNotReceived}</td>
                       <td className="py-4 px-4 text-center text-slate-500 text-[13px]">{totals.others}</td>
                       <td className="py-4 px-4 text-center text-[#2E3093] border-l border-slate-200/60 text-[13px]">{totals.interviewed}</td>
-                      <td className="py-4 px-4 text-center text-[#2A6BB5] text-[15px] drop-shadow-sm">{totals.placed}</td>
-                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-black shadow-md border border-white/60 ${totalPct >= 70 ? 'text-[#2A6BB5] bg-[#2A6BB5]/12 border-[#2A6BB5]/20' : totalPct >= 40 ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 border-[#2A6BB5]/15' : 'text-[#2E3093] bg-[#2E3093]/8 border-[#2E3093]/12'}`}>{totalPct}%</span></td>
+                      <td className="py-4 px-4 text-center text-[#2A6BB5] text-[15px]">{totals.placed}</td>
+                      <td className="py-4 px-5 text-center"><span className={`inline-flex items-center justify-center min-w-[52px] px-3 py-1.5 rounded-xl text-[13px] font-bold shadow-md border border-white/60 ${totalPct >= 70 ? 'text-[#2A6BB5] bg-[#2A6BB5]/12 border-[#2A6BB5]/20' : totalPct >= 40 ? 'text-[#2A6BB5] bg-[#2A6BB5]/10 border-[#2A6BB5]/15' : 'text-[#2E3093] bg-[#2E3093]/8 border-[#2E3093]/12'}`}>{totalPct}%</span></td>
                     </tr>
                   </tfoot>
                 </table>
