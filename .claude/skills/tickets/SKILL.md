@@ -33,7 +33,18 @@ Write message text to a file in the session scratchpad and pass the path.
    - **Unclear ticket** → public `reply` asking a specific clarifying question (which student/batch/page, what they expected). Leave it `in_progress`.
 4. Report a short summary table at the end: ticket, finding, action taken, what awaits approval.
 
-Never change data or code without the user's go-ahead in this session. When running unattended in a loop, only post replies/notes/status; leave fixes listed in the summary for the user. Replies, notes and status changes are allowed automatically.
+Never change data or code without the user's go-ahead in this session — except legacy-database imports, which are pre-approved (see below). When running unattended in a loop, only post replies/notes/status; leave fixes listed in the summary for the user. Replies, notes and status changes are allowed automatically.
+
+## Missing data → check the legacy database (pre-approved)
+
+If a ticket is about data that isn't in the current database (student, admission, marks, fees, attendance, company…), check the **legacy database** (`OLD_DB_*` in `.env.local`) read-only before concluding it doesn't exist. Look for existing importers first and reuse them: `scripts/run-legacy-student-sync.mjs`, `scripts/run-legacy-fees-sync.mjs`, `scripts/import-legacy-inquiries.mjs`, `scripts/db/migrate-from-legacy.mjs` (has `--dry-run`).
+
+If the data is found there, **import it without asking** — the user has given standing approval for this. Rules for the import:
+- Insert-only: never overwrite or delete existing rows in the current DB; skip rows that already exist (match on the legacy id / natural key, respect unique keys — e.g. `uq_attendance`).
+- Import only what the ticket needs (that student / batch / record set), not whole tables.
+- Dry-run or count first, then import, then re-query to verify the ticket's screen now has the data.
+- Add an internal `note` with what was imported (tables, legacy ids, row counts), log it with `node scripts/log-change.mjs`, then reply to the user in plain words and resolve.
+- If the legacy data conflicts with current data (same record, different values), don't import — note it and ask the user.
 
 ## Reply rules (public replies — mandatory)
 
