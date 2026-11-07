@@ -13,27 +13,27 @@ import { ensureAllocationTables } from '@/lib/services/lead-allocation.service';
 export type ClosureRow = {
   userId: number | null;
   name: string;
-  total: number;
-  thisMonth: number;
-  lastMonth: number;
-  thisYear: number;
+  leadsHandled: number;
+  closures: number;
+  conversionPct: number;
 };
 
 const CLOSED = `('8','52')`;
 
-export async function getAdmissionClosureByEmployee(): Promise<ClosureRow[]> {
+/**
+ * For a date range (inclusive, YYYY-MM-DD):
+ *   closures      = closed leads whose closure date falls in the range, credited as above
+ *   leads handled = distinct leads the employee logged a discussion on, or was assigned, in the range
+ *   conversion    = closures / leads handled
+ */
+export async function getAdmissionClosureByEmployee(from: string, to: string): Promise<ClosureRow[]> {
   await ensureAllocationTables();
-  const [rows] = await getPool().query(
+  const pool = getPool();
+  const [closedRows] = await pool.query(
     `SET STATEMENT max_statement_time=30 FOR
-     SELECT x.owner_id,
-            COALESCE(NULLIF(TRIM(CONCAT(IFNULL(u.firstname,''),' ',IFNULL(u.lastname,''))),''), u.username, 'Not assigned') AS name,
-            COUNT(*) AS total,
-            SUM(x.cd >= DATE_FORMAT(CURDATE(),'%Y-%m-01')) AS this_month,
-            SUM(x.cd >= DATE_FORMAT(CURDATE() - INTERVAL 1 MONTH,'%Y-%m-01') AND x.cd < DATE_FORMAT(CURDATE(),'%Y-%m-01')) AS last_month,
-            SUM(YEAR(x.cd) = YEAR(CURDATE())) AS this_year
+     SELECT x.owner_id, COUNT(*) AS closures
        FROM (
-         SELECT c.Inquiry_Id,
-                COALESCE(ia.Assigned_User_Id, top.created_by) AS owner_id,
+         SELECT COALESCE(ia.Assigned_User_Id, top.created_by) AS owner_id,
                 COALESCE(c.Admission_Dt, STR_TO_DATE(NULLIF(c.Inquiry_Dt,''),'%Y-%m-%d')) AS cd
            FROM (SELECT Inquiry_Id, Admission_Dt, Inquiry_Dt FROM student_inquiry
                   WHERE OnlineState IN ${CLOSED} AND IFNULL(IsDelete,0) = 0) c
@@ -50,18 +50,53 @@ export async function getAdmissionClosureByEmployee(): Promise<ClosureRow[]> {
              ) r WHERE rn = 1
            ) top ON top.inq = c.Inquiry_Id
        ) x
-       LEFT JOIN awt_adminuser u ON u.id = x.owner_id
-      GROUP BY x.owner_id
-      ORDER BY this_month DESC, total DESC`
+      WHERE DATE(x.cd) BETWEEN ? AND ?
+      GROUP BY x.owner_id`,
+    [from, to]
   );
-  return (rows as any[]).map((r) => ({
-    userId: r.owner_id == null ? null : Number(r.owner_id),
-    name: String(r.name),
-    total: Number(r.total) || 0,
-    thisMonth: Number(r.this_month) || 0,
-    lastMonth: Number(r.last_month) || 0,
-    thisYear: Number(r.this_year) || 0,
-  }));
+  const [handledRows] = await pool.query(
+    `SET STATEMENT max_statement_time=30 FOR
+     SELECT h.user_id, COUNT(DISTINCT h.inq) AS handled FROM (
+       SELECT d.created_by AS user_id, d.Inquiry_Id_Int AS inq
+         FROM awt_inquirydiscussion d
+         JOIN student_inquiry s ON s.Inquiry_Id = d.Inquiry_Id_Int AND IFNULL(s.IsDelete,0) = 0
+        WHERE IFNULL(d.deleted,0) = 0 AND d.created_by > 0
+          AND d.created_date >= ? AND d.created_date < ? + INTERVAL 1 DAY
+       UNION ALL
+       SELECT ia.Assigned_User_Id, ia.Inquiry_Id
+         FROM inquiry_assignments ia
+         JOIN student_inquiry s ON s.Inquiry_Id = ia.Inquiry_Id AND IFNULL(s.IsDelete,0) = 0
+        WHERE ia.Assigned_At >= ? AND ia.Assigned_At < ? + INTERVAL 1 DAY
+     ) h GROUP BY h.user_id`,
+    [from, to, from, to]
+  );
+  const byUser = new Map<string, { userId: number | null; leadsHandled: number; closures: number }>();
+  const get = (id: unknown) => {
+    const userId = id == null ? null : Number(id);
+    const k = String(userId);
+    if (!byUser.has(k)) byUser.set(k, { userId, leadsHandled: 0, closures: 0 });
+    return byUser.get(k)!;
+  };
+  for (const r of closedRows as any[]) get(r.owner_id).closures = Number(r.closures) || 0;
+  for (const r of handledRows as any[]) get(r.user_id).leadsHandled = Number(r.handled) || 0;
+
+  const ids = [...byUser.values()].map((r) => r.userId).filter((x): x is number => x != null);
+  const names = new Map<number, string>();
+  if (ids.length) {
+    const [u] = await pool.query(
+      `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(IFNULL(firstname,''),' ',IFNULL(lastname,''))),''), username) AS name
+         FROM awt_adminuser WHERE id IN (?)`,
+      [ids]
+    );
+    for (const r of u as any[]) names.set(Number(r.id), String(r.name));
+  }
+  return [...byUser.values()]
+    .map((r) => ({
+      ...r,
+      name: r.userId == null ? 'Not assigned' : names.get(r.userId) ?? `User #${r.userId}`,
+      conversionPct: r.leadsHandled ? Math.round((r.closures / r.leadsHandled) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.closures - a.closures || b.leadsHandled - a.leadsHandled);
 }
 
 /** Set (or clear, with null) the Assigned Counsellor of a lead from the inquiry form. */

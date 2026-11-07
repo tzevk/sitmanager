@@ -247,6 +247,7 @@ export default function AddInquiryPage() {
   // editId, so a stale/slow load can never write one lead's details onto another.
   const [loadedEditId, setLoadedEditId] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [sameLead, setSameLead] = useState<{ inquiryId: number; counsellor: string | null; courseName: string | null } | null>(null);
   const [duplicateCheck, setDuplicateCheck] = useState<{
     personName: string | null;
     matches: { Inquiry_Id: number; CourseName: string | null; Inquiry_Dt: string | null; StatusLabel: string | null }[];
@@ -429,6 +430,21 @@ export default function AddInquiryPage() {
       }
     }
     setError('');
+
+    // Hard rule: one lead per person (phone/e-mail) per training programme — new or edited.
+    if ((mobile.trim() || email.trim()) && courseId) {
+      try {
+        const p = new URLSearchParams({ courseId });
+        if (mobile.trim()) p.set('mobile', mobile.trim());
+        if (email.trim()) p.set('email', email.trim());
+        if (editId) p.set('excludeId', String(editId));
+        const res = await fetch(`/api/inquiry/check-person?${p}`);
+        const data = await res.json();
+        if (res.ok && data.sameLead) { setSameLead(data.sameLead); return; }
+      } catch {
+        // The server still refuses a duplicate; this check only gives the early warning.
+      }
+    }
 
     if (!editId && !skipDuplicateCheck && (mobile.trim() || email.trim())) {
       setCheckingDuplicate(true);
@@ -1250,6 +1266,37 @@ export default function AddInquiryPage() {
       </div>
 
       {/* Duplicate-person confirmation */}
+      {sameLead && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div role="alertdialog" aria-labelledby="same-lead-title" className="w-full max-w-md rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">
+            <div className="px-5 py-3 bg-gradient-to-r from-[#2E3093] to-[#2A6BB5]">
+              <h3 id="same-lead-title" className="text-sm font-bold text-white">Already a Lead</h3>
+            </div>
+            <div className="p-4 space-y-2 text-sm text-slate-700">
+              <p>
+                This person already has a lead for <span className="font-semibold">{sameLead.courseName || 'this training programme'}</span>
+                {' '}(Inq #{sameLead.inquiryId}{sameLead.counsellor ? `, counsellor ${sameLead.counsellor}` : ''}).
+              </p>
+              <p className="text-xs text-slate-500">A person can have only one lead per training programme. Open the existing lead and add your discussion there.</p>
+            </div>
+            <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setSameLead(null)}
+                className="px-3 py-1.5 text-xs font-bold border border-slate-200 rounded-lg text-slate-600 hover:bg-white transition-colors"
+              >
+                Cancel
+              </button>
+              <a
+                href={`/dashboard/inquiry/add?editId=${sameLead.inquiryId}`}
+                className="px-3 py-1.5 text-xs font-bold bg-[#2E3093] hover:bg-[#23257A] text-white rounded-lg transition-colors"
+              >
+                Open Lead #{sameLead.inquiryId}
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {duplicateCheck && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md rounded-xl bg-white border border-slate-200 shadow-2xl overflow-hidden">

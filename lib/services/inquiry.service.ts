@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { findSameLead, recordReEnquiry, isDuplicateKeyError } from '@/lib/services/inquiry-dedupe.service';
 import { cached, getPool, invalidateCache } from '@/lib/db';
 import { getSlowRequestThresholdMs } from '@/lib/perf-log';
 import {
@@ -1166,10 +1167,26 @@ async function loadInquiryFilterOptions(
 
 // ── Public service functions ──────────────────────────────────────────────────
 
-export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Promise<number> {
+/**
+ * Creates a lead — or, when this person (phone/e-mail) already has a live lead for the same
+ * training programme, records a re-enquiry on that lead and returns its id instead
+ * (out.reEnquiryOf is set). One person may still have leads for different programmes.
+ */
+export async function createInquiry(data: CreateInquiryInput, createdBy = 1, out?: { reEnquiryOf?: number }): Promise<number> {
   const studentName = normalizeInquiryText(data.Student_Name);
   if (!studentName) throw new Error('Name is required');
   const statusId = await requireKnownInquiryStatus(data.Status_id);
+
+  const sameLead = { mobile: data.Present_Mobile, email: data.Email, courseId: data.Course_Id };
+  const reuse = async (): Promise<number | null> => {
+    const lead = await findSameLead(sameLead);
+    if (!lead) return null;
+    await recordReEnquiry(lead, { source: data.Inquiry_From ?? null, note: data.Discussion ?? null, by: createdBy });
+    if (out) out.reEnquiryOf = lead.inquiryId;
+    return lead.inquiryId;
+  };
+  const existing = await reuse();
+  if (existing) return existing;
 
   const pool = getPool();
   const inquiryTable = await resolveInquiryTableName(pool);
@@ -1186,7 +1203,9 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
     ? await detectReEnquiry(resolved.personId, data.Course_Id ?? null)
     : false;
 
-  const [result] = await pool.query(
+  let result: any;
+  try {
+  [result] = await pool.query(
     `INSERT INTO \`${inquiryTable}\` (
        Student_Name, Sex, DOB, Present_Mobile, Present_Mobile2,
        Email, Nationality, Present_Country, Discussion,
@@ -1222,6 +1241,11 @@ export async function createInquiry(data: CreateInquiryInput, createdBy = 1): Pr
       createdBy,
     ]
   );
+  } catch (err) {
+    // Another request created the same person's lead a moment ago — treat as a re-enquiry.
+    if (isDuplicateKeyError(err)) { const id = await reuse(); if (id) return id; }
+    throw err;
+  }
   const insertId = (result as any).insertId as number;
   if (data.lead_temperature) await setLeadTemperature(pool, insertId, data.lead_temperature);
 

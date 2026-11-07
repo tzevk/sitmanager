@@ -1,4 +1,5 @@
 import type mysql from 'mysql2/promise';
+import { findSameLead, recordReEnquiry, isDuplicateKeyError } from '@/lib/services/inquiry-dedupe.service';
 import { cached, getPool } from '@/lib/db';
 import { resolveInquiryTableName } from '@/lib/services/inquiry.service';
 import {
@@ -360,12 +361,24 @@ async function insertInquiry(
   // resolved and linked automatically — never a blocking popup. A conflicting match
   // (mobile -> one person, email -> another) leaves Person_Id unlinked and is flagged
   // in person_identity_conflicts for manual review, rather than guessing which is right.
+  // Same person + same programme already a lead → note the re-enquiry there, no new lead.
+  const reuse = async (): Promise<number | null> => {
+    const lead = await findSameLead({ mobile, email, courseId: payload.courseId }, connection);
+    if (!lead) return null;
+    await recordReEnquiry(lead, { source: inquiryFrom || 'Website', note: discussion, by: 1 }, connection);
+    return lead.inquiryId;
+  };
+  const existingLead = await reuse();
+  if (existingLead) return existingLead;
+
   const resolved = await resolvePersonForEnquiry({ name: studentName, mobile, email });
   const isReEnquiry = resolved.personId
     ? await detectReEnquiry(resolved.personId, payload.courseId)
     : false;
 
-  const [result] = await connection.query(
+  let result: unknown;
+  try {
+  [result] = await connection.query(
     `INSERT INTO \`${inquiryTable}\` (
       Student_Name,
       Present_Mobile,
@@ -398,6 +411,10 @@ async function insertInquiry(
       isReEnquiry ? 1 : 0,
     ]
   );
+  } catch (err) {
+    if (isDuplicateKeyError(err)) { const id = await reuse(); if (id) return id; }
+    throw err;
+  }
 
   const insertId = Number((result as { insertId?: unknown }).insertId || 0);
   if (!Number.isFinite(insertId) || insertId <= 0) {

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { findSameLead } from '@/lib/services/inquiry-dedupe.service';
 import { getLegacyPool, getPool } from '@/lib/db';
 
 /**
@@ -322,6 +323,13 @@ export async function importMissingLegacyInquiries(
       const insertSql = `INSERT INTO ${NEW_INQ} (${inqCols.map((c) => `\`${c}\``).join(', ')}) VALUES (${inqCols.map(() => '?').join(', ')})`;
       for (const d of toImport) {
         try {
+          // Same person + same programme already a lead here → link to it, don't add a second lead.
+          const same = await findSameLead({ mobile: d.row.Present_Mobile, email: d.row.Email, courseId: d.row.Course_Id }, conn);
+          if (same) {
+            await conn.query(`INSERT IGNORE INTO ${MAP} (Old_Inquiry_Id, New_Inquiry_Id, Match_Type) VALUES (?, ?, 'contact')`, [d.oldId, same.inquiryId]);
+            s.personAlreadyInCrm++;
+            continue;
+          }
           await conn.beginTransaction();
           const values = inqCols.map((c) => {
             const k = c.toLowerCase();

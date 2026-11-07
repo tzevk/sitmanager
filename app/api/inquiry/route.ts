@@ -12,6 +12,7 @@ import {
 } from '@/lib/services/inquiry.service';
 import { allocateNewInquiry, notifyManualAssignment } from '@/lib/services/lead-allocation.service';
 import { setAssignedCounsellor } from '@/lib/services/admission-closure.service';
+import { isDuplicateKeyError } from '@/lib/services/inquiry-dedupe.service';
 
 /** Assigned_Counsellor_Id from the form: number → assign, '' / null → clear, absent → leave as is. */
 function counsellorFromBody(body: Record<string, unknown>): number | null | undefined {
@@ -44,7 +45,13 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    const insertId = await createInquiry(body, auth.session.userId);
+    const out: { reEnquiryOf?: number } = {};
+    const insertId = await createInquiry(body, auth.session.userId, out);
+    if (out.reEnquiryOf) {
+      // Same person, same programme: the existing lead was updated, nothing new created.
+      invalidateCache('api:inquiry');
+      return NextResponse.json({ success: true, Student_Id: insertId, reEnquiry: true });
+    }
 
     await logTableActivity(req, {
       tableName: 'Student_Inquiry',
@@ -235,6 +242,10 @@ export async function PUT(req: NextRequest) {
     const status = (error as { status?: number }).status ?? 500;
     perfCode = status;
     if (status === 400) return NextResponse.json({ error: message }, { status: 400 });
+    if (isDuplicateKeyError(error)) {
+      perfCode = 409;
+      return NextResponse.json({ error: 'This person already has a lead for this training programme. Open that lead instead.' }, { status: 409 });
+    }
     console.error('Update inquiry error:', error);
     return NextResponse.json({ error: 'Failed to update inquiry', details: message }, { status: 500 });
   } finally {
