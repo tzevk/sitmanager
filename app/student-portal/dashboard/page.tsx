@@ -333,7 +333,7 @@ export default function StudentDashboardPage() {
 
       {/* Notices for this student's programme / batch — shown up top */}
       {notices.length > 0 && (
-        <Card title="Notice Board" accent="#B45309" action={<Link href="/student-portal/dashboard/notices" className={linkCls}>View all</Link>}>
+        <Card title="Notice Board" accent="#FAE452" action={<Link href="/student-portal/dashboard/notices" className={linkCls}>View all</Link>}>
           <ul className="divide-y divide-[#F4F4F5]">
             {notices.map((n) => (
               <li key={n.id} className="py-2.5 first:pt-0">

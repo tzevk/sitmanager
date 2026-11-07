@@ -40,7 +40,7 @@ interface Reply {
 interface Stats { open: number; in_progress: number; resolved: number; closed: number; total: number; }
 
 const STATUS_META: Record<TicketStatus, { label: string; dot: string; chip: string }> = {
-  open: { label: 'Open', dot: 'text-blue-500', chip: 'bg-blue-100 text-blue-700' },
+  open: { label: 'Open', dot: 'text-[#2A6BB5]', chip: 'bg-[#2A6BB5]/10 text-[#2A6BB5]' },
   in_progress: { label: 'In Progress', dot: 'text-amber-500', chip: 'bg-amber-100 text-amber-700' },
   resolved: { label: 'Resolved', dot: 'text-emerald-500', chip: 'bg-emerald-100 text-emerald-700' },
   closed: { label: 'Closed', dot: 'text-slate-400', chip: 'bg-slate-100 text-slate-600' },
@@ -48,8 +48,8 @@ const STATUS_META: Record<TicketStatus, { label: string; dot: string; chip: stri
 
 const PRIORITY_CHIP: Record<TicketPriority, string> = {
   low: 'bg-slate-100 text-slate-600',
-  normal: 'bg-sky-100 text-sky-700',
-  high: 'bg-orange-100 text-orange-700',
+  normal: 'bg-[#2A6BB5]/10 text-[#2A6BB5]',
+  high: 'bg-amber-100 text-amber-700',
   urgent: 'bg-red-100 text-red-700',
 };
 
@@ -204,7 +204,7 @@ export default function SupportPage() {
         </div>
         <button
           onClick={() => setShowNew(true)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-[#2E3093] hover:bg-[#23257A] text-white text-sm font-semibold transition-colors"
         >
           <FaPlus className="w-3.5 h-3.5" /> New Ticket
         </button>
@@ -215,7 +215,7 @@ export default function SupportPage() {
         <div className="px-5 py-3 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-5 gap-2">
           {([
             ['all', 'Total', stats.total, 'text-slate-700'],
-            ['open', 'Open', stats.open, 'text-blue-600'],
+            ['open', 'Open', stats.open, 'text-[#2A6BB5]'],
             ['in_progress', 'In Progress', stats.in_progress, 'text-amber-600'],
             ['resolved', 'Resolved', stats.resolved, 'text-emerald-600'],
             ['closed', 'Closed', stats.closed, 'text-slate-500'],
@@ -279,7 +279,7 @@ export default function SupportPage() {
                       {canManage && t.user_name && (
                         <span className="font-medium text-slate-500 truncate max-w-[120px]">{t.user_name}</span>
                       )}
-                      <span className={`px-1.5 py-0.5 rounded ${PRIORITY_CHIP[t.priority]}`}>{t.priority}</span>
+                      <span className={`px-1.5 py-0.5 rounded capitalize ${PRIORITY_CHIP[t.priority]}`}>{t.priority}</span>
                       {t.reply_count > 0 && <span>{t.reply_count} repl{t.reply_count === 1 ? 'y' : 'ies'}</span>}
                       <span className="ml-auto">{fmtDate(t.last_reply_at || t.created_at)}</span>
                     </div>
@@ -307,7 +307,7 @@ export default function SupportPage() {
                   <div className="min-w-0">
                     <h2 className="text-sm font-bold text-slate-800">{detail.ticket.subject}</h2>
                     <div className="flex flex-wrap items-center gap-2 mt-1 text-[11px] text-slate-400">
-                      <span className={`px-1.5 py-0.5 rounded ${PRIORITY_CHIP[detail.ticket.priority]}`}>{detail.ticket.priority}</span>
+                      <span className={`px-1.5 py-0.5 rounded capitalize ${PRIORITY_CHIP[detail.ticket.priority]}`}>{detail.ticket.priority}</span>
                       {detail.ticket.category && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{detail.ticket.category}</span>}
                       <span>#{detail.ticket.id}</span>
                       {canManage && detail.ticket.user_name && (
@@ -373,7 +373,7 @@ export default function SupportPage() {
                     <button
                       onClick={sendReply}
                       disabled={sending || !replyText.trim()}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#23257A] text-white text-sm font-semibold transition-colors disabled:opacity-50"
                     >
                       <FaPaperPlane className="w-3.5 h-3.5" /> Send
                     </button>
@@ -441,7 +441,7 @@ function ThreadBubble({ admin, name, when, text, internal = false }: { admin: bo
           <span className="font-semibold text-slate-600">{name}</span>
           {admin && <FaCircle className="w-1 h-1 text-[#2E3093]" />}
           {admin && !internal && <span className="text-[#2E3093] font-medium">Support</span>}
-          {internal && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">Internal note · only admins see this</span>}
+          {internal && <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold" title="Only admins see this">Internal note</span>}
           <span>· {fmtDate(when)}</span>
         </div>
         <div className={`px-3.5 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words text-left ${
@@ -548,7 +548,7 @@ function NewTicketModal({ onClose, onCreated }: { onClose: () => void; onCreated
               Cancel
             </button>
             <button onClick={submit} disabled={submitting || !subject.trim() || !message.trim()}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#252780] text-white text-sm font-semibold transition-colors disabled:opacity-60">
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#2E3093] hover:bg-[#23257A] text-white text-sm font-semibold transition-colors disabled:opacity-60">
               {submitting ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Submitting…</> : <><FaPaperPlane className="w-3.5 h-3.5" /> Submit Ticket</>}
             </button>
           </div>
