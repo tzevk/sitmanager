@@ -105,7 +105,7 @@ export default function InquiryForm({ open, onClose, onSaved, editId }: InquiryF
     if (!open) return;
     fetch('/api/inquiry/options')
       .then((r) => r.json())
-      .then(setOpts)
+      .then((d) => { if (Array.isArray(d?.statuses)) setOpts(d); })
       .catch(console.error);
   }, [open]);
 

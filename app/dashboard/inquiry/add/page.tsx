@@ -176,6 +176,7 @@ export default function AddInquiryPage() {
   }, [router, returnToParam]);
 
   const [opts, setOpts] = useState<FormOptions | null>(null);
+  const [optsError, setOptsError] = useState(false);
   const [batches, setBatches] = useState<Batch[]>([]);
 
   const [name, setName] = useState('');
@@ -269,8 +270,29 @@ export default function AddInquiryPage() {
     : '';
   const activeAdmissionFormUrl = regeneratedAdmissionFormUrl || admissionFormUrl;
 
+  // The options endpoint answers { error } with a 500 when one of its lookups times out. That must
+  // never be stored as the form options (opts.statuses would be undefined), so check the answer and
+  // retry a couple of times before asking the user to retry.
+  const loadOptions = async (attempt = 0): Promise<void> => {
+    try {
+      const res = await fetch('/api/inquiry/options', { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || !Array.isArray(data.statuses)) throw new Error('Options unavailable');
+      setOpts(data as FormOptions);
+      setOptsError(false);
+    } catch (err) {
+      console.error(err);
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        return loadOptions(attempt + 1);
+      }
+      setOptsError(true);
+    }
+  };
+
   useEffect(() => {
-    fetch('/api/inquiry/options').then(r => r.json()).then(setOpts).catch(console.error);
+    loadOptions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pre-populate form from Calendly (only for new inquiries)
@@ -364,11 +386,11 @@ export default function AddInquiryPage() {
   // For these statuses the inquiry is effectively closed out — only the status itself
   // needs to be saved, so Name/Mode/How They Know/Batch are not required.
   const isStatusOnlySave = STATUS_ONLY_SAVE_LABELS.includes(
-    opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
+    opts?.statuses?.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
   );
 
   const isFirstContact = FIRST_CONTACT_LABELS.includes(
-    opts?.statuses.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
+    opts?.statuses?.find(s => s.id === statusId)?.label?.toLowerCase() ?? ''
   );
   // True when a field is compulsory on the edit page; false for first-contact statuses.
   const laterDetail = editId != null && !isFirstContact;
@@ -756,6 +778,11 @@ export default function AddInquiryPage() {
         </div>
         <div className="relative z-10 flex items-center gap-1.5 shrink-0">
           {error && <span title={error} className="text-[10px] text-red-300 font-semibold max-w-[260px] truncate">{error}</span>}
+          {optsError && !opts && (
+            <button type="button" onClick={() => { setOptsError(false); loadOptions(); }} className="rounded-md bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 hover:bg-amber-300">
+              Dropdown options did not load — Retry
+            </button>
+          )}
           {editId && contactActionButtons.map((action) => {
             const selected = inquiryMode === action.mode;
             return (
