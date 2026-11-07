@@ -198,6 +198,7 @@ export default function AddInquiryPage() {
   const [inquiryMode, setInquiryMode] = useState('');
   const [inquiryType, setInquiryType] = useState('');
   const [preferredLocation, setPreferredLocation] = useState('');
+  const [assignedCounsellor, setAssignedCounsellor] = useState('');
   const [courseId, setCourseId] = useState('');
   const [category, setCategory] = useState('');
   const [batchCode, setBatchCode] = useState('');
@@ -341,6 +342,7 @@ export default function AddInquiryPage() {
       setInquiryMode(d.Inquiry_From || '');
       setInquiryType(d.Inquiry_Type || '');
       setPreferredLocation(d.Preferred_Location || '');
+      setAssignedCounsellor(d.Assigned_Counsellor_Id ? String(d.Assigned_Counsellor_Id) : '');
       setCourseId(d.Course_Id ? String(d.Course_Id) : '');
       setCategory(d.Batch_Category_id || '');
       setBatchCode(d.Batch_Code || '');
@@ -464,6 +466,8 @@ export default function AddInquiryPage() {
           Qualification: qualification || null, Discipline: discipline || null,
           Percentage: percentage ? parseFloat(percentage) : null,
           lead_temperature: leadTemp || null,
+          // New lead with no pick → left out so auto-allocation can assign it.
+          ...(editId || assignedCounsellor ? { Assigned_Counsellor_Id: assignedCounsellor ? Number(assignedCounsellor) : null } : {}),
         }),
       });
       const data = await res.json();
@@ -949,7 +953,7 @@ export default function AddInquiryPage() {
                 <option value="ONLINE">ONLINE</option>
               </select>
             </div>
-            <div className={editId ? 'col-span-1' : 'col-span-3'}>
+            <div className={editId ? 'col-span-1' : 'col-span-2'}>
               <label className={lbl}>
                 How They Know About SIT
                 {!isStatusOnlySave && <span className="text-red-400 normal-case"> *</span>}
@@ -957,6 +961,16 @@ export default function AddInquiryPage() {
               <select value={inquiryType} onChange={e => setInquiryType(e.target.value)} className={ctrl}>
                 <option value="">— Select —</option>
                 {opts?.inquiryTypes?.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className={editId ? 'col-span-2' : 'col-span-1'}>
+              <label className={lbl}>Assigned Counsellor</label>
+              <select value={assignedCounsellor} onChange={e => setAssignedCounsellor(e.target.value)} className={ctrl}>
+                <option value="">— Not assigned —</option>
+                {staff.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                {assignedCounsellor && staff.length > 0 && !staff.some(u => String(u.id) === assignedCounsellor) && (
+                  <option value={assignedCounsellor}>User #{assignedCounsellor}</option>
+                )}
               </select>
             </div>
 

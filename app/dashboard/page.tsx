@@ -12,6 +12,7 @@ import {
 import { usePermissions } from '@/lib/permissions-context';
 import { toBatchNumber } from '@/lib/batch-display';
 import { DashboardDepartment, getDashboardWidgetConfig, resolveDashboardDepartment } from './widget-config';
+import AdmissionClosureWidget from './components/AdmissionClosureWidget';
 import CbdDashboard from './components/CbdDashboard';
 import TrainingDevelopmentDashboard from './components/TrainingDevelopmentDashboard';
 import AdministrationDashboard from './components/AdministrationDashboard';
@@ -554,6 +555,7 @@ export default function DashboardPage() {
         {mySalesTrackerWidget}
         {/* Individual Sales Tracker · All employees — on the CBD dashboard for the Mayur account only */}
         {isMayur && hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
+        <AdmissionClosureWidget />
         <CbdDashboard data={data} loading={loading} />
         {followupPopup}
       </div>
@@ -589,6 +591,7 @@ export default function DashboardPage() {
         {salesTrackerWidget}
         {mySalesTrackerWidget}
         {hasPermission('individual_sales_tracker.view') && <IndividualSalesTrackerWidget />}
+        <AdmissionClosureWidget />
         <AdministrationDashboard
           data={data}
           loading={loading}

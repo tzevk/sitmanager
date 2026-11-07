@@ -1271,10 +1271,11 @@ export async function getInquiryById(id: number): Promise<any | null> {
        si.Course_Id, si.Batch_Category_id, si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
        si.Preferred_Location, si.Reminder_At, ilt.Temperature as lead_temperature,
-       c.Course_Name as CourseName
+       c.Course_Name as CourseName, ia.Assigned_User_Id as Assigned_Counsellor_Id
     FROM \`${inquiryTable}\` si
      LEFT JOIN course_mst c ON si.Course_Id = c.Course_Id
      LEFT JOIN inquiry_lead_temperature ilt ON ilt.Inquiry_Id = si.Inquiry_Id
+     LEFT JOIN inquiry_assignments ia ON ia.Inquiry_Id = si.Inquiry_Id
      ${disciplineJoin}
      WHERE si.Inquiry_Id = ? AND (si.IsDelete = 0 OR si.IsDelete IS NULL)`,
     [id]

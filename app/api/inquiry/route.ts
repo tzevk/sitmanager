@@ -10,7 +10,23 @@ import {
   updateInquiry,
   updateInquiryStatus,
 } from '@/lib/services/inquiry.service';
-import { allocateNewInquiry } from '@/lib/services/lead-allocation.service';
+import { allocateNewInquiry, notifyManualAssignment } from '@/lib/services/lead-allocation.service';
+import { setAssignedCounsellor } from '@/lib/services/admission-closure.service';
+
+/** Assigned_Counsellor_Id from the form: number → assign, '' / null → clear, absent → leave as is. */
+function counsellorFromBody(body: Record<string, unknown>): number | null | undefined {
+  if (!('Assigned_Counsellor_Id' in body)) return undefined;
+  const n = Number(body.Assigned_Counsellor_Id);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+async function applyCounsellor(inquiryId: number, body: Record<string, unknown>, by: number) {
+  const counsellor = counsellorFromBody(body);
+  if (counsellor === undefined) return;
+  const changed = await setAssignedCounsellor(inquiryId, counsellor, by);
+  if (changed && counsellor) await notifyManualAssignment([inquiryId], counsellor);
+  if (changed) invalidateCache('dashboard-admission-closure');
+}
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -37,6 +53,8 @@ export async function POST(req: NextRequest) {
       details: { studentName: body.Student_Name?.trim() ?? null, courseId: body.Course_Id ?? null },
     });
 
+    // A counsellor picked on the form wins; auto-allocation then leaves the lead alone.
+    await applyCounsellor(insertId, body, auth.session.userId);
     await allocateNewInquiry(insertId, auth.session.userId);
     invalidateCache('api:inquiry');
 
@@ -199,6 +217,7 @@ export async function PUT(req: NextRequest) {
     }
 
     await updateInquiry(Number(Student_Id), body, auth.session.userId);
+    await applyCounsellor(Number(Student_Id), body, auth.session.userId);
 
     await logTableActivity(req, {
       tableName: 'Student_Inquiry',
