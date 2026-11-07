@@ -18,6 +18,10 @@ const MAIN_INQUIRY_STATUS_LABELS = [
 
 let supportsStatementTimeout: boolean | null = null;
 
+// The last options that loaded completely. If a lookup times out later, serve these instead of
+// an error so the inquiry form keeps working.
+let lastGoodOptions: unknown = null;
+
 function withStatementTimeout(sql: string, seconds: number): string {
   const safeSeconds = Math.max(1, Math.min(30, Math.trunc(seconds)));
   return `SET STATEMENT max_statement_time=${safeSeconds} FOR ${sql}`;
@@ -56,7 +60,7 @@ export async function GET() {
   try {
     const pool = getPool();
 
-    const options = await cached('inquiry-form-options-v6', 300, async () => {
+    const options = await cached('inquiry-form-options-v6', 5 * 60 * 1000, async () => {
       const [
         coursesRes,
         categoriesRes,
@@ -142,15 +146,19 @@ export async function GET() {
       };
     });
 
+    lastGoodOptions = options;
     return NextResponse.json(options, {
       headers: {
         'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
       },
     });
   } catch (error: any) {
+    console.error('Inquiry options API error:', error);
+    if (lastGoodOptions) {
+      return NextResponse.json(lastGoodOptions, { headers: { 'Cache-Control': 'no-store' } });
+    }
     perfStatus = 'error';
     perfCode = 500;
-    console.error('Inquiry options API error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch options', details: error.message },
       { status: 500 }
