@@ -16,9 +16,9 @@ import { ensureAdmissionFormSentLogTable } from '@/lib/services/admissionFormSen
 
 const DASHBOARD_CACHE_TTL = cacheTTL.short;
 // How long the last fully loaded dashboard is kept to fall back on when a later load is incomplete.
-const LAST_GOOD_TTL = 60 * 60 * 1000;
+const LAST_GOOD_TTL = 15 * 60 * 1000;
 // An incomplete load is kept only briefly, so the next refresh tries again without hammering a slow database.
-const PARTIAL_CACHE_TTL = 5_000;
+const PARTIAL_CACHE_TTL = 20_000;
 
 // ── concurrency limiter ──
 // The dashboard fans out ~50 sub-queries in one Promise.all. Without a cap, a
@@ -64,6 +64,18 @@ const QUERY_TIMEOUT_SECONDS = Number(process.env.DASHBOARD_QUERY_TIMEOUT_SECONDS
 // fallback, so a load with failures must not replace (or be cached over) good figures.
 const loadFailures = new AsyncLocalStorage<string[]>();
 
+// Errors that come and go with database load (timeouts, lock waits, dropped or refused
+// connections). Anything else — an unknown column, a missing table, bad SQL — fails the same way
+// on every load, so it must not mark the whole load incomplete or defeat the cache.
+const TRANSIENT_DB_ERRNOS = new Set([1969, 1205, 1213, 1040, 1041, 2006, 2013, 2003]);
+function isTransientDbError(err: unknown): boolean {
+  const e = err as { errno?: number; code?: string; message?: string };
+  if (e?.errno != null && TRANSIENT_DB_ERRNOS.has(Number(e.errno))) return true;
+  return /max_statement_time|timed out|timeout|ETIMEDOUT|ECONNRESET|ECONNREFUSED|PROTOCOL_CONNECTION_LOST|too many connections|lock wait|deadlock|pool is closed/i
+    .test(`${e?.code ?? ''} ${e?.message ?? ''}`);
+}
+const loggedPermanentFailures = new Set<string>();
+
 // ── helper: safe query that never throws (and never hangs the DB) ──
 async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallback: T): Promise<T> {
   await acquireQuerySlot();
@@ -76,8 +88,14 @@ async function safeQuery<T>(pool: ReturnType<typeof getPool>, sql: string, fallb
   } catch (err) {
     const what = sql.replace(/\s+/g, ' ').trim().slice(0, 90);
     const why = err instanceof Error ? err.message.slice(0, 120) : String(err);
-    loadFailures.getStore()?.push(what);
-    console.error(`[dashboard] query failed (${why}): ${what}`);
+    if (isTransientDbError(err)) {
+      loadFailures.getStore()?.push(what);
+      console.error(`[dashboard] query failed (${why}): ${what}`);
+    } else if (!loggedPermanentFailures.has(what)) {
+      // Permanent (schema) failure: report it once per server instance, not on every load.
+      loggedPermanentFailures.add(what);
+      console.error(`[dashboard] query is broken and always returns its fallback (${why}): ${what}`);
+    }
     return fallback;
   } finally {
     releaseQuerySlot();
