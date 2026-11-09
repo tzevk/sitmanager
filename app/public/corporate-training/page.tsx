@@ -52,7 +52,7 @@ const STEPS = [
   ['Pre-Test', 'Checks each participant’s starting level before training begins.'],
   ['Assessment', 'Regular checks of understanding during the programme.'],
   ['Assignments', 'Practical work based on real project activities.'],
-  ['Training Material', 'Recorded as part of each participant’s evaluation.'],
+  ['Training Material', 'Training material is provided as per your syllabus.'],
   ['Attendance', 'Recorded for every session.'],
   ['Final Exam', 'A closing test of what each participant has learned.'],
   ['Feedback', 'Collected from participants and from the client.'],
