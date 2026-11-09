@@ -182,6 +182,12 @@ export default function CorporateTrainingPage() {
       const max = scrollMax();
       root.style.setProperty('--p', String(max > 0 ? Math.min(scrollY() / max, 1) : 0));
       if (reduce) return;
+      // depth: each section knows where it sits in the viewport (-1 above … 1 below) for parallax light layers
+      root.querySelectorAll<HTMLElement>('.ct-section').forEach((sec) => {
+        const r = sec.getBoundingClientRect();
+        if (r.bottom < -200 || r.top > window.innerHeight + 200) return;
+        sec.style.setProperty('--rel', ((r.top + r.height / 2 - window.innerHeight / 2) / window.innerHeight).toFixed(3));
+      });
       root.querySelectorAll<HTMLElement>('.ct-banner img, .ct-csr-pics img').forEach((img) => {
         const r = img.parentElement!.getBoundingClientRect();
         if (r.bottom < 0 || r.top > window.innerHeight) return;
