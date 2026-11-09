@@ -162,25 +162,6 @@ function Donut({ data, label, centre, sub }: { data: { l: string; v: number; c: 
   );
 }
 
-/* Signature piece: an isometric plant blueprint that draws itself on scroll,
-   with process flow running through the lines. Each station opens that
-   programme area below. */
-const PLANT: { id: string; cat: string; label: string; x: number; y: number; lx: number; ly: number; a?: 'start' | 'middle' | 'end' }[] = [
-  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120, lx: 214, ly: 250 },
-  { id: 'rack', cat: 'Design & Drafting', label: 'Design & Drafting', x: 420, y: 92, lx: 434, ly: 100 },
-  { id: 'pump', cat: 'Operation & Maintenance', label: 'Operation & Maintenance', x: 560, y: 300, lx: 574, ly: 292 },
-  { id: 'tank', cat: 'Others', label: 'Fire, NDT & Offshore', x: 770, y: 150, lx: 770, ly: 124, a: 'middle' },
-  { id: 'cr', cat: 'Software', label: 'E3D · PDMS · CAESAR II', x: 910, y: 265, lx: 960, ly: 214, a: 'end' },
-];
-const PIPES = [
-  'M200 300 V350 H520',
-  'M210 90 H300 V60 H560 V200',
-  'M600 330 H700 V250',
-  'M560 200 H700',
-  'M820 320 V350 H880 V300',
-  'M140 300 V370 H860',
-];
-
 function CountUp({ to }: { to: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [v, setV] = useState(to);
@@ -200,75 +181,6 @@ function CountUp({ to }: { to: number }) {
     return () => { io.disconnect(); cancelAnimationFrame(raf); };
   }, [to]);
   return <span ref={ref} className="ct-countup">{v}</span>;
-}
-
-function PlantBlueprint({ cat, onPick }: { cat: string; onPick: (c: string) => void }) {
-  const ref = useRef<SVGSVGElement>(null);
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || !('IntersectionObserver' in window)) { setOn(true); return; }
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.25 });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div className={`ct-plant${on ? ' is-on' : ''}`} data-fade>
-      <div className="ct-plant-head">
-        <span className="ct-plant-kicker">Explore by plant area</span>
-        <span className="ct-plant-hint">Tap a station to see its programmes</span>
-      </div>
-      <svg ref={ref} viewBox="0 0 1000 420" role="group" aria-label="Interactive plant blueprint: choose a plant area to filter programmes">
-        <defs>
-          <pattern id="ct-bp-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="rgba(169,196,234,.12)" strokeWidth="1" /></pattern>
-          <pattern id="ct-bp-grid-l" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M100 0H0V100" fill="none" stroke="rgba(169,196,234,.2)" strokeWidth="1" /></pattern>
-        </defs>
-        <rect width="1000" height="420" fill="url(#ct-bp-grid)" />
-        <rect width="1000" height="420" fill="url(#ct-bp-grid-l)" />
-        {/* equipment outlines */}
-        <g className="ct-bp-eq">
-          {/* distillation column */}
-          <path pathLength={1} d="M140 300 V90 Q140 60 170 60 Q200 60 200 90 V300 Z" />
-          <path pathLength={1} d="M140 130 H200 M140 170 H200 M140 210 H200 M140 250 H200" />
-          {/* pipe rack */}
-          <path pathLength={1} d="M330 60 V230 M480 60 V230 M630 60 V230 M310 120 H650 M310 160 H650" />
-          {/* heat exchanger */}
-          <path pathLength={1} d="M470 200 H650 Q680 200 680 220 Q680 240 650 240 H470 Q440 240 440 220 Q440 200 470 200 Z" />
-          {/* pump */}
-          <path pathLength={1} d="M530 330 m-26 0 a26 26 0 1 0 52 0 a26 26 0 1 0 -52 0 M504 356 H600 V370 H504 Z" />
-          {/* storage tank */}
-          <path pathLength={1} d="M700 150 Q770 125 840 150 V320 Q770 345 700 320 Z M700 150 Q770 175 840 150" />
-          {/* control room */}
-          <path pathLength={1} d="M860 230 H960 V300 H860 Z M875 245 H945 V280 H875 Z" />
-        </g>
-        {/* process lines */}
-        <g className="ct-bp-pipes">{PIPES.map((d) => <path key={d} pathLength={1} d={d} />)}</g>
-        <g className="ct-bp-flow">{PIPES.map((d) => <path key={d} d={d} />)}</g>
-        {/* dimension callouts */}
-        <g className="ct-bp-dim">
-          <path d="M120 60 V300 M115 60 H125 M115 300 H125" /><text x="108" y="185" transform="rotate(-90 108 185)">EL +24.0 m</text>
-          <text x="330" y="52">PIPE RACK · 6&quot; / 8&quot;</text>
-          
-        </g>
-        {/* stations */}
-        {PLANT.map((p) => {
-          const sel = cat === p.cat;
-          return (
-            <g key={p.id} className={`ct-bp-st${sel ? ' is-sel' : ''}`} role="button" tabIndex={0} aria-pressed={sel} aria-label={`Show ${p.cat} programmes`}
-              onClick={() => onPick(sel ? 'All' : p.cat)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(sel ? 'All' : p.cat); } }}>
-              <circle className="ct-bp-ring" cx={p.x} cy={p.y} r="16" />
-              <circle className="ct-bp-dot" cx={p.x} cy={p.y} r="7" />
-              <text className="ct-bp-tag" x={p.lx} y={p.ly} textAnchor={p.a || 'start'}>{p.label}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="ct-plant-chips" role="group" aria-label="Plant areas">
-        {PLANT.map((p) => <button key={p.id} type="button" aria-pressed={cat === p.cat} onClick={() => onPick(cat === p.cat ? 'All' : p.cat)}><i />{p.label}</button>)}
-      </div>
-      <div className="ct-plant-legend"><span><i className="is-eq" />Equipment</span><span><i className="is-flow" />Process flow</span><span><i className="is-st" />Training area</span></div>
-    </div>
-  );
 }
 
 function SampleReport() {
@@ -511,6 +423,16 @@ export default function CorporateTrainingPage() {
     return () => { root.removeEventListener('click', onClick); cancelAnimationFrame(anim); };
   }, []);
 
+  // Hide the mobile contact bar while the enquiry form or footer is on screen.
+  const [formInView, setFormInView] = useState(false);
+  useEffect(() => {
+    const el = document.getElementById('enquiry');
+    if (!el || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver(([e]) => setFormInView(e.isIntersecting || e.boundingClientRect.top < 0), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   // Scrollspy: highlight the nav link for the section in view.
   useEffect(() => {
     if (!('IntersectionObserver' in window)) return;
@@ -543,13 +465,32 @@ export default function CorporateTrainingPage() {
     return () => root.removeEventListener('pointermove', onMove);
   }, [cat]);
 
-  const set = (k: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const [fieldErr, setFieldErr] = useState<Partial<Record<keyof typeof EMPTY_FORM, string>>>({});
+  const set = (k: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    if (fieldErr[k]) setFieldErr((fe) => ({ ...fe, [k]: undefined }));
+  };
+  const errProps = (k: keyof typeof EMPTY_FORM) => ({ 'aria-invalid': fieldErr[k] ? true : undefined, 'aria-describedby': fieldErr[k] ? `ct-${k}-err` : undefined });
+  const ErrMsg = ({ k }: { k: keyof typeof EMPTY_FORM }) => (fieldErr[k] ? <small className="ct-ferr" id={`ct-${k}-err`}>{fieldErr[k]}</small> : null);
+  const AREA_FOR: Record<string, string> = { Engineering: 'Engineering', 'Design & Drafting': 'Design & Drafting', Software: 'Software', 'Operation & Maintenance': 'Operation & Maintenance', Others: 'Specialised / Other' };
+  const enquireAbout = (p: { cat: string; title: string }) => {
+    setSent(false);
+    setForm((f) => ({ ...f, area: AREA_FOR[p.cat] || f.area, message: f.message.trim() ? f.message : `Interested in: ${p.title}` }));
+    window.setTimeout(() => document.getElementById('ct-company')?.focus({ preventScroll: true }), 1100);
+  };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const missing = ([['company', 'company name'], ['name', 'your name'], ['email', 'email'], ['phone', 'phone number']] as const).find(([k]) => !form[k].trim());
-    if (missing) { setError(`Please enter ${missing[1]}.`); document.getElementById(`ct-${missing[0]}`)?.focus(); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) { setError('Please enter a valid email address, like name@company.com.'); document.getElementById('ct-email')?.focus(); return; }
+    const errs: Partial<Record<keyof typeof EMPTY_FORM, string>> = {};
+    if (!form.company.trim()) errs.company = 'Please enter your company name.';
+    if (!form.name.trim()) errs.name = 'Please enter your name.';
+    if (!form.email.trim()) errs.email = 'Please enter your email.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errs.email = 'Please enter a valid email, like name@company.com.';
+    if (!form.phone.trim()) errs.phone = 'Please enter your phone number.';
+    else if (form.phone.replace(/\D/g, '').length < 8) errs.phone = 'Please enter a complete phone number.';
+    setFieldErr(errs);
+    const first = (['company', 'name', 'email', 'phone'] as const).find((k) => errs[k]);
+    if (first) { setError(''); document.getElementById(`ct-${first}`)?.focus(); return; }
     setError(''); setSending(true);
     try {
       const res = await fetch('/api/public/corporate-inquiry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
@@ -786,7 +727,6 @@ export default function CorporateTrainingPage() {
               <h2>Programmes for <em>Every Engineering Team</em></h2>
               <p>From engineering and drafting to software and plant operation, pick a ready programme or combine topics into one tailored course. Software is always taught with the engineering concepts, codes and standards behind it.</p>
             </div>
-            <PlantBlueprint cat={cat} onPick={setCat} />
             <div className="ct-tabs" role="tablist" aria-label="Programme area">
               {CATEGORIES.map((c) => (
                 <button key={c} type="button" role="tab" className="ct-tab" aria-selected={cat === c} onClick={() => setCat(c)}>{c}</button>
@@ -802,6 +742,7 @@ export default function CorporateTrainingPage() {
                   <div className="ct-prog-body">
                     <h3>{p.title}</h3>
                     <ul>{p.items.map((i) => <li key={i}>{i}</li>)}</ul>
+                    <a className="ct-prog-cta" href="#enquiry" onClick={() => enquireAbout(p)}>Enquire about this programme <span aria-hidden="true">→</span></a>
                   </div>
                 </article>
               ))}
@@ -947,12 +888,12 @@ export default function CorporateTrainingPage() {
                     <h3>Corporate Training Enquiry</h3>
                     <p className="ct-sub">Fields marked <span style={{ color: '#C0392B' }}>*</span> are required.</p>
                     <div className="ct-fgrid">
-                      <label>Company name <i>*</i><input id="ct-company" value={form.company} onChange={set('company')} autoComplete="organization" /></label>
-                      <label>Your name <i>*</i><input id="ct-name" value={form.name} onChange={set('name')} autoComplete="name" /></label>
+                      <label>Company name <i>*</i><input id="ct-company" {...errProps('company')} value={form.company} onChange={set('company')} autoComplete="organization" /><ErrMsg k="company" /></label>
+                      <label>Your name <i>*</i><input id="ct-name" {...errProps('name')} value={form.name} onChange={set('name')} autoComplete="name" /><ErrMsg k="name" /></label>
                       <label>Designation<input id="ct-designation" value={form.designation} onChange={set('designation')} autoComplete="organization-title" /></label>
                       <label>City<input id="ct-city" value={form.city} onChange={set('city')} autoComplete="address-level2" /></label>
-                      <label>Email <i>*</i><input id="ct-email" type="email" value={form.email} onChange={set('email')} autoComplete="email" /></label>
-                      <label>Phone <i>*</i><input id="ct-phone" type="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" /></label>
+                      <label>Email <i>*</i><input id="ct-email" {...errProps('email')} type="email" value={form.email} onChange={set('email')} autoComplete="email" /><ErrMsg k="email" /></label>
+                      <label>Phone <i>*</i><input id="ct-phone" {...errProps('phone')} type="tel" value={form.phone} onChange={set('phone')} autoComplete="tel" /><ErrMsg k="phone" /></label>
                       <label>Training area<select id="ct-area" value={form.area} onChange={set('area')}>
                         <option>Engineering</option><option>Design &amp; Drafting</option><option>Software</option><option>Operation &amp; Maintenance</option><option>Specialised / Other</option>
                       </select></label>
@@ -975,6 +916,11 @@ export default function CorporateTrainingPage() {
           </div>
         </section>
       </main>
+      <nav className={`ct-mbar${pastHero && !formInView ? ' is-on' : ''}`} aria-label="Quick contact">
+        <a href="tel:+919167219401">{Icon.phone}<span>Call</span></a>
+        <a href="https://wa.me/919167219401?text=Hello%20SIT%2C%20I%20would%20like%20to%20know%20about%20corporate%20training." target="_blank" rel="noopener noreferrer"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.8-1.2s.2-1.1.1-1.2l-.4-.2z" /></svg><span>WhatsApp</span></a>
+        <a href="#enquiry" className="is-main">Enquire Now</a>
+      </nav>
 
       <footer className="ct-foot">
         <div className="ct-wrap">
