@@ -1483,8 +1483,15 @@ export async function listInquiries(params: InquiryListParams): Promise<InquiryL
     queryParams.push(training);
   }
   if (batchCategory) {
-    conditions.push('si.Batch_Category_id = ?');
-    queryParams.push(batchCategory);
+    // Older inquiries store the mst_batchcategory id; the Add/Edit form stores the category
+    // name (and the legacy site wrote 'Weekend Batches'). Match all of them.
+    conditions.push(
+      `(si.Batch_Category_id = ? OR si.Batch_Category_id IN (
+         SELECT bc.BatchCategory FROM mst_batchcategory bc WHERE bc.id = ?
+         UNION ALL SELECT 'Weekend Batches' FROM DUAL
+           WHERE (SELECT bc2.BatchCategory FROM mst_batchcategory bc2 WHERE bc2.id = ?) = 'Weekend'))`
+    );
+    queryParams.push(batchCategory, batchCategory, batchCategory);
   }
   if (duplicatesOnly) {
     conditions.push(
@@ -2017,8 +2024,15 @@ export async function listInquiryPersons(params: InquiryPersonListParams): Promi
     queryParams.push(training);
   }
   if (batchCategory) {
-    conditions.push('si.Batch_Category_id = ?');
-    queryParams.push(batchCategory);
+    // Older inquiries store the mst_batchcategory id; the Add/Edit form stores the category
+    // name (and the legacy site wrote 'Weekend Batches'). Match all of them.
+    conditions.push(
+      `(si.Batch_Category_id = ? OR si.Batch_Category_id IN (
+         SELECT bc.BatchCategory FROM mst_batchcategory bc WHERE bc.id = ?
+         UNION ALL SELECT 'Weekend Batches' FROM DUAL
+           WHERE (SELECT bc2.BatchCategory FROM mst_batchcategory bc2 WHERE bc2.id = ?) = 'Weekend'))`
+    );
+    queryParams.push(batchCategory, batchCategory, batchCategory);
   }
   if (dateFrom || dateTo) {
     const dateExpr = (await hasInquiryDateColumn(pool, inquiryTable)) ? 'si._inquiry_date' : FALLBACK_INQUIRY_DATE_EXPR;
