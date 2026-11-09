@@ -162,6 +162,93 @@ function Donut({ data, label, centre, sub }: { data: { l: string; v: number; c: 
   );
 }
 
+/* Signature piece: an isometric plant blueprint that draws itself on scroll,
+   with process flow running through the lines. Each station opens that
+   programme area below. */
+const PLANT: { id: string; cat: string; label: string; x: number; y: number }[] = [
+  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120 },
+  { id: 'rack', cat: 'Design & Drafting', label: 'Design & Drafting', x: 420, y: 92 },
+  { id: 'pump', cat: 'Operation & Maintenance', label: 'Operation & Maintenance', x: 560, y: 300 },
+  { id: 'tank', cat: 'Others', label: 'Fire, NDT & Offshore', x: 770, y: 150 },
+  { id: 'cr', cat: 'Software', label: 'E3D · PDMS · CAESAR II', x: 905, y: 268 },
+];
+const PIPES = [
+  'M200 300 V350 H520',
+  'M210 90 H300 V60 H560 V200',
+  'M600 330 H700 V250',
+  'M560 200 H700',
+  'M820 320 V350 H880 V300',
+  'M140 300 V370 H860',
+];
+
+function PlantBlueprint({ cat, onPick }: { cat: string; onPick: (c: string) => void }) {
+  const ref = useRef<SVGSVGElement>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !('IntersectionObserver' in window)) { setOn(true); return; }
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOn(true); io.disconnect(); } }, { threshold: 0.25 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <div className={`ct-plant${on ? ' is-on' : ''}`} data-fade>
+      <div className="ct-plant-head">
+        <span className="ct-plant-kicker">Explore by plant area</span>
+        <span className="ct-plant-hint">Tap a station to see its programmes</span>
+      </div>
+      <svg ref={ref} viewBox="0 0 1000 420" role="group" aria-label="Interactive plant blueprint: choose a plant area to filter programmes">
+        <defs>
+          <pattern id="ct-bp-grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="rgba(169,196,234,.12)" strokeWidth="1" /></pattern>
+          <pattern id="ct-bp-grid-l" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M100 0H0V100" fill="none" stroke="rgba(169,196,234,.2)" strokeWidth="1" /></pattern>
+        </defs>
+        <rect width="1000" height="420" fill="url(#ct-bp-grid)" />
+        <rect width="1000" height="420" fill="url(#ct-bp-grid-l)" />
+        {/* equipment outlines */}
+        <g className="ct-bp-eq">
+          {/* distillation column */}
+          <path pathLength={1} d="M140 300 V90 Q140 60 170 60 Q200 60 200 90 V300 Z" />
+          <path pathLength={1} d="M140 130 H200 M140 170 H200 M140 210 H200 M140 250 H200" />
+          {/* pipe rack */}
+          <path pathLength={1} d="M330 60 V230 M480 60 V230 M630 60 V230 M310 120 H650 M310 160 H650" />
+          {/* heat exchanger */}
+          <path pathLength={1} d="M470 200 H650 Q680 200 680 220 Q680 240 650 240 H470 Q440 240 440 220 Q440 200 470 200 Z" />
+          {/* pump */}
+          <path pathLength={1} d="M530 330 m-26 0 a26 26 0 1 0 52 0 a26 26 0 1 0 -52 0 M504 356 H600 V370 H504 Z" />
+          {/* storage tank */}
+          <path pathLength={1} d="M700 150 Q770 125 840 150 V320 Q770 345 700 320 Z M700 150 Q770 175 840 150" />
+          {/* control room */}
+          <path pathLength={1} d="M860 230 H960 V300 H860 Z M875 245 H945 V280 H875 Z" />
+        </g>
+        {/* process lines */}
+        <g className="ct-bp-pipes">{PIPES.map((d) => <path key={d} pathLength={1} d={d} />)}</g>
+        <g className="ct-bp-flow">{PIPES.map((d) => <path key={d} d={d} />)}</g>
+        {/* dimension callouts */}
+        <g className="ct-bp-dim">
+          <path d="M120 60 V300 M115 60 H125 M115 300 H125" /><text x="108" y="185" transform="rotate(-90 108 185)">EL +24.0 m</text>
+          <text x="330" y="52">PIPE RACK · 6&quot; / 8&quot;</text>
+          <text x="866" y="222">DCS</text>
+        </g>
+        {/* stations */}
+        {PLANT.map((p) => {
+          const sel = cat === p.cat;
+          return (
+            <g key={p.id} className={`ct-bp-st${sel ? ' is-sel' : ''}`} role="button" tabIndex={0} aria-pressed={sel} aria-label={`Show ${p.cat} programmes`}
+              onClick={() => onPick(sel ? 'All' : p.cat)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(sel ? 'All' : p.cat); } }}>
+              <circle className="ct-bp-ring" cx={p.x} cy={p.y} r="16" />
+              <circle className="ct-bp-dot" cx={p.x} cy={p.y} r="7" />
+              <g className="ct-bp-tag" transform={`translate(${p.x + (p.x > 800 ? -14 : 14)} ${p.y - 22})`}>
+                <text textAnchor={p.x > 800 ? 'end' : 'start'}>{p.label}</text>
+              </g>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="ct-plant-legend"><span><i className="is-eq" />Equipment</span><span><i className="is-flow" />Process flow</span><span><i className="is-st" />Training area</span></div>
+    </div>
+  );
+}
+
 function SampleReport() {
   const preAvg = STUDENTS.reduce((a, s) => a + s.pre, 0) / STUDENTS.length, postAvg = STUDENTS.reduce((a, s) => a + s.post, 0) / STUDENTS.length;
   const lift = Math.round(((postAvg - preAvg) / preAvg) * 100);
@@ -175,9 +262,9 @@ function SampleReport() {
         <p>Scores, attendance, participant mix, assessment results and feedback, all in one report, so the impact of the training is clear and measurable.</p>
       </div>
       <div className="ct-kpis">
-        <div className="is-lift"><b>+{lift}%</b><span>Rise in average score, Pre-Test to Post-Test</span></div>
-        <div><b>{att}%</b><span>Average weekly attendance</span></div>
-        <div><b>{passed}/{all}</b><span>Participants cleared the final assessment</span></div>
+        <div className="is-lift"><b>+<span data-count={lift}>{lift}</span>%</b><span>Rise in average score, Pre-Test to Post-Test</span></div>
+        <div><b><span data-count={att}>{att}</span>%</b><span>Average weekly attendance</span></div>
+        <div><b><span data-count={passed}>{passed}</span>/{all}</b><span>Participants cleared the final assessment</span></div>
         <div><b>4.6/5</b><span>Average feedback rating</span></div>
       </div>
       <div className="ct-charts ct-charts-2">
@@ -262,6 +349,12 @@ export default function CorporateTrainingPage() {
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const lettersRef = useRef<HTMLDivElement>(null);
+  const slideLetters = (d: number) => {
+    const el = lettersRef.current; if (!el) return;
+    const card = el.querySelector<HTMLElement>('.ct-letter');
+    el.scrollBy({ left: d * ((card?.offsetWidth || 260) + 18) * 2, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  };
 
   useEffect(() => {
     const onScroll = () => { const y = scrollY(); setScrolled(y > 8); setPastHero(y > window.innerHeight * 0.6); };
@@ -671,6 +764,7 @@ export default function CorporateTrainingPage() {
               <h2>Programmes for <em>Every Engineering Team</em></h2>
               <p>From engineering and drafting to software and plant operation, pick a ready programme or combine topics into one tailored course. Software is always taught with the engineering concepts, codes and standards behind it.</p>
             </div>
+            <PlantBlueprint cat={cat} onPick={setCat} />
             <div className="ct-tabs" role="tablist" aria-label="Programme area">
               {CATEGORIES.map((c) => (
                 <button key={c} type="button" role="tab" className="ct-tab" aria-selected={cat === c} onClick={() => setCat(c)}>{c}</button>
@@ -783,7 +877,11 @@ export default function CorporateTrainingPage() {
               <h2>What Our Corporate Clients <em>Wrote to Us</em></h2>
               <p>Real letters and certificates from the companies we have trained. Tap any letter to read it in full.</p>
             </div>
-            <div className="ct-letters">
+            <div className="ct-carousel-nav">
+              <button type="button" aria-label="Previous letters" onClick={() => slideLetters(-1)}>←</button>
+              <button type="button" aria-label="Next letters" onClick={() => slideLetters(1)}>→</button>
+            </div>
+            <div className="ct-letters ct-carousel" ref={lettersRef} tabIndex={0} aria-label="Client feedback letters, scroll sideways">
               {LETTERS.map(([f, n, d]) => (
                 <button key={f} type="button" className="ct-letter" aria-label={`Read feedback from ${n}`} onClick={() => openSet(LETTERS.map(([lf, ln, ld]) => ({ src: IMG(`${lf}.jpg`), caption: `${ln} · ${ld}` })), LETTERS.findIndex(([lf]) => lf === f))} data-fade>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
