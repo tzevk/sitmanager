@@ -756,3 +756,42 @@
   .ct-head h2 { font-size: clamp(26px, 7vw, 32px); }
   .ct-stat b { font-size: 28px; }
 }
+
+/* ═══ Beauty pass ═══ */
+/* training-method watermark letters (no longer collide with feedback-letter styles) */
+.ct-track { position: relative; overflow: hidden; }
+.ct-mark { position: absolute; right: 20px; top: -8px; font: 800 120px/1 var(--display); color: rgba(250,228,82,.08); pointer-events: none; }
+
+/* programme cards: line icons on a soft indigo plate instead of repeated photos */
+.ct-prog { padding: 0; }
+.ct-prog-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 22px 0; }
+.ct-prog-icon { width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; color: var(--yellow); background: linear-gradient(145deg, rgba(46,48,147,.9), rgba(42,107,181,.55)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 12px 24px -14px rgba(0,0,0,.8); transition: transform .8s var(--ease); }
+.ct-prog:hover .ct-prog-icon { transform: translateY(-3px) rotate(-4deg); }
+.ct-prog-cat { font: 500 10.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #8FB6E8; border: 1px solid rgba(143,182,232,.3); padding: 7px 10px; border-radius: 999px; }
+.ct-prog-body { padding: 18px 22px 24px; }
+
+/* light "paper" section for client feedback: breaks the dark run, letters read naturally */
+.ct-light { position: relative; isolation: isolate; background: #F4F5FB; color: #1A1F3C; }
+.ct-light::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image:
+    linear-gradient(rgba(46,48,147,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(46,48,147,.05) 1px, transparent 1px);
+  background-size: 32px 32px; mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 100%); }
+.ct-light::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: var(--grain); opacity: .25; mix-blend-mode: multiply; }
+.ct-light .ct-head h2 { color: #12143F; }
+.ct-light .ct-head h2 em { color: var(--indigo); background: linear-gradient(transparent 64%, rgba(250,228,82,.9) 64%); }
+.ct-light .ct-head p { color: #5A6278; }
+.ct-light .ct-eyebrow { color: var(--blue); }
+.ct-light .ct-eyebrow b { color: var(--indigo); border-color: rgba(46,48,147,.35); }
+.ct-light .ct-letter { background: #fff; border-color: #E2E5F0; box-shadow: 0 1px 0 #E2E5F0, 0 22px 36px -28px rgba(18,20,63,.45); backdrop-filter: none; }
+.ct-light .ct-letter b { color: #12143F; }
+.ct-light .ct-letter span { color: #5A6278; }
+.ct-light .ct-spot::after { background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), rgba(46,48,147,.08), transparent 45%); }
+
+/* soft seams between dark sections instead of repeated hazard stripes */
+.ct-section.ct-paper + .ct-section.ct-paper, .ct-dark + .ct-section { box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+
+/* form labels: required star sits beside the label text */
+.ct-form label { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 4px; row-gap: 7px; }
+.ct-form label > input, .ct-form label > select, .ct-form label > textarea { flex: 1 1 100%; }
+
+/* stats: numbers keep width while counting */
+.ct-stat b span { font-variant-numeric: tabular-nums; }

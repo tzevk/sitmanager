@@ -9,7 +9,8 @@ export const maxDuration = 300;
  * GET /api/cron/lead-allocation — every minute (vercel.json).
  *   1. auto-assigns new, unassigned inquiries (lib/services/lead-allocation.service.ts)
  *   2. alerts owner + managers about assigned leads with no first call in time
- *   3. every 30 minutes (or ?statusSync=1): reconciles OnlineState / Status_id for admitted students
+ *   3. once an hour at :07 (or ?statusSync=1): reconciles OnlineState / Status_id for admitted students;
+ *      skipped while an earlier run is still executing (see lead-status-sync.service.ts)
  */
 
 function isAuthorizedCronRequest(req: NextRequest): boolean {
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
   try { out.assign = await autoAssignPending({ limit: 300 }); } catch (e) { console.error('lead-allocation assign', e); out.assignError = String(e); }
   try { out.uncontacted = await escalateUncontactedLeads(); } catch (e) { console.error('lead-allocation watchdog', e); out.uncontactedError = String(e); }
   const minute = new Date().getUTCMinutes();
-  if (minute % 30 === 7 || req.nextUrl.searchParams.get('statusSync') === '1') {
+  if (minute === 7 || req.nextUrl.searchParams.get('statusSync') === '1') {
     try { out.statusSync = await reconcileAdmissionStatuses({ dryRun: req.nextUrl.searchParams.get('dryRun') === '1' }); }
     catch (e) { console.error('lead-allocation status sync', e); out.statusSyncError = String(e); }
   }
