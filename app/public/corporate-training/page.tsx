@@ -572,7 +572,7 @@ export default function CorporateTrainingPage() {
               </li>
               <li data-fade>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <span className="ct-cert-logo"><img src={IMG('cert-msme.png')} alt="MSME, Ministry of Micro, Small and Medium Enterprises logo" loading="lazy" /></span>
+                <span className="ct-cert-logo"><img src={IMG('cert-msme-wide.png')} alt="MSME, Ministry of Micro, Small and Medium Enterprises logo" loading="lazy" /></span>
                 <b>MSME Registered</b><span>Ministry of Micro, Small and Medium Enterprises</span>
               </li>
               <li data-fade>
@@ -794,7 +794,7 @@ export default function CorporateTrainingPage() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <span><img src={IMG('cert-cii.png')} alt="CII member" loading="lazy" /></span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <span><img src={IMG('cert-msme.png')} alt="MSME registered" loading="lazy" /></span>
+                <span><img src={IMG('cert-msme-wide.png')} alt="MSME registered" loading="lazy" /></span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <span><img src={IMG('cert-giz.png')} alt="Fit for Partnership with Germany (GIZ)" loading="lazy" /></span>
               </div>
