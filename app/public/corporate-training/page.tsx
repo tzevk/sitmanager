@@ -49,13 +49,13 @@ const PROG_ICON: Record<string, React.ReactNode> = {
 const CATEGORIES = ['All', 'Engineering', 'Design & Drafting', 'Software', 'Operation & Maintenance', 'Others'];
 
 const STEPS = [
-  ['Pre-test', 'Checks each participant’s starting level before training begins.'],
+  ['Pre-Test', 'Checks each participant’s starting level before training begins.'],
   ['Assessment', 'Regular checks of understanding during the programme.'],
   ['Assignments', 'Practical work based on real project activities.'],
-  ['Training material', 'Recorded as part of each participant’s evaluation.'],
+  ['Training Material', 'Recorded as part of each participant’s evaluation.'],
   ['Attendance', 'Recorded for every session.'],
   ['Feedback', 'Collected from participants and from the client.'],
-  ['Final exam', 'A closing test of what each participant has learned.'],
+  ['Final Exam', 'A closing test of what each participant has learned.'],
   ['SIT Certificate', 'Issued on the basis of performance and attendance.'],
 ];
 
@@ -98,7 +98,7 @@ const REEL = [
   { file: 'tcejam2', tag: 'CSR · Diploma holders', client: 'Tata Consulting Engineers, Jamshedpur', seconds: 6 },
 ];
 
-const HEADLINE = 'Training that is a|rehearsal of actual working|for your engineering teams.'
+const HEADLINE = 'Training That Is a|Rehearsal of Actual Working|for Your Engineering Teams.'
   .split('|')
   .flatMap((part, i) => part.split(' ').map((t) => ({ t, hi: i === 1 })));
 
@@ -212,6 +212,54 @@ export default function CorporateTrainingPage() {
     return () => io.disconnect();
   }, []);
 
+  // Cinematic interaction: eased glide for in-page links and a soft light ripple on every click.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let anim = 0;
+    const scroller = () => (document.body.scrollHeight > document.body.clientHeight && getComputedStyle(document.body).overflowY !== 'visible' ? document.body : document.scrollingElement || document.documentElement) as HTMLElement;
+    const ease = (t: number) => (t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2);
+    const glideTo = (el: HTMLElement) => {
+      const sc = scroller();
+      const start = sc.scrollTop;
+      const target = start + el.getBoundingClientRect().top - 84;
+      const dist = target - start;
+      const dur = Math.min(1600, 700 + Math.abs(dist) * 0.25);
+      const t0 = performance.now();
+      cancelAnimationFrame(anim);
+      root.classList.add('is-gliding');
+      const frame = (t: number) => {
+        const k = Math.min((t - t0) / dur, 1);
+        sc.scrollTop = start + dist * ease(k);
+        if (k < 1) anim = requestAnimationFrame(frame);
+        else { root.classList.remove('is-gliding'); el.classList.add('is-arrived'); window.setTimeout(() => el.classList.remove('is-arrived'), 1400); }
+      };
+      anim = requestAnimationFrame(frame);
+    };
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      const link = t.closest<HTMLAnchorElement>('a[href^="#"]');
+      if (link && link.getAttribute('href')!.length > 1) {
+        const dest = document.querySelector<HTMLElement>(link.getAttribute('href')!);
+        if (dest && !reduce) { e.preventDefault(); glideTo(dest); history.replaceState(null, '', link.getAttribute('href')!); }
+      }
+      const host = t.closest<HTMLElement>('.ct-btn, .ct-tab, .ct-film, .ct-prog, .ct-letter, .ct-zoom, .ct-strip-item, .ct-certs li, .ct-ledger-list li');
+      if (host && !reduce) {
+        const r = host.getBoundingClientRect();
+        const dot = document.createElement('span');
+        dot.className = 'ct-ripple';
+        const size = Math.max(r.width, r.height) * 2.2;
+        dot.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
+        if (getComputedStyle(host).position === 'static') host.style.position = 'relative';
+        host.appendChild(dot);
+        window.setTimeout(() => dot.remove(), 900);
+      }
+    };
+    root.addEventListener('click', onClick);
+    return () => { root.removeEventListener('click', onClick); cancelAnimationFrame(anim); };
+  }, []);
+
   // Cursor spotlight on cards.
   useEffect(() => {
     const root = rootRef.current;
@@ -256,9 +304,9 @@ export default function CorporateTrainingPage() {
       {/* ── Nav ── */}
       <header className={`ct-nav${scrolled ? ' is-scrolled' : ''}${pastHero ? ' is-past' : ''}`}>
         <div className="ct-wrap">
-          <a className="ct-brand" href="#top" aria-label="SIT Corporate Training – top of page">
+          <a className="ct-brand" href="#top" aria-label="SIT Corporate Training, top of page">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={IMG('sit-logo.png')} alt="SIT – Suvidya Institute of Technology" />
+            <img src={IMG('sit-logo.png')} alt="SIT, Suvidya Institute of Technology" />
             <span className="ct-brand-text"><b>Suvidya Institute of Technology Pvt. Ltd.</b><span>Corporate Training</span></span>
           </a>
           <ul className="ct-links">{NAV.map(([h, l]) => <li key={h}><a href={h}>{l}</a></li>)}</ul>
@@ -290,7 +338,7 @@ export default function CorporateTrainingPage() {
             <div className="ct-hero-grid">
               <div>
                 <div className="ct-since"><b>24+ Years</b> of corporate training across India &amp; abroad</div>
-                <h1 aria-label="Training that is a rehearsal of actual working for your engineering teams.">
+                <h1 aria-label="Training That Is a Rehearsal of Actual Working for Your Engineering Teams.">
                   {HEADLINE.map((w, i) => (
                     <span key={i} aria-hidden="true">
                       <span className={`ct-word${w.hi ? ' is-hi' : ''}`} style={{ animationDelay: `${0.15 + i * 0.07}s` }}>{w.t}</span>{' '}
@@ -307,8 +355,8 @@ export default function CorporateTrainingPage() {
             <div className="ct-stats">
               <div className="ct-stat"><b><span data-count="250">250</span><i>+</i></b><span>Corporate trainings for EPC companies, refineries, chemical plants and government bodies</span></div>
               <div className="ct-stat"><b><span data-count="21000">21,000</span><i>+</i></b><span>Engineers and draughtsmen trained</span></div>
-              <div className="ct-stat"><b><span data-count="39">39</span></b><span>Nationalities trained</span></div>
-              <div className="ct-stat"><b><span data-count="20">20</span><i>+ yrs</i></b><span>Industry experience of our trainers</span></div>
+              <div className="ct-stat"><b><span data-count="39">39</span><i>+</i></b><span>Nationalities trained</span></div>
+              <div className="ct-stat"><b><span data-count="20">20</span><i>+</i></b><span>Years of industry experience of our trainers</span></div>
             </div>
           </div>
         </section>
@@ -328,7 +376,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>01</b>Trainings conducted</span>
-              <h2>Corporate trainings <em>we have delivered</em></h2>
+              <h2>Corporate Trainings <em>We Have Delivered</em></h2>
               <p>Over two decades, clients have come back to us for repeat training. Each programme below was delivered on site or at SIT, with a syllabus built for that team.</p>
             </div>
             <div className="ct-films">
@@ -338,8 +386,8 @@ export default function CorporateTrainingPage() {
                   className="ct-film"
                   key={ev.client}
                   data-fade
-                  aria-label={`View photos: ${ev.client} – ${ev.title}`}
-                  onClick={() => openSet(ev.pics.map((p) => ({ src: IMG(`${p}.jpg`), caption: `${ev.client} – ${ev.title}` })))}
+                  aria-label={`View photos: ${ev.client}: ${ev.title}`}
+                  onClick={() => openSet(ev.pics.map((p) => ({ src: IMG(`${p}.jpg`), caption: `${ev.client}: ${ev.title}` })))}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={IMG(`${ev.pics[0]}.jpg`)} alt="" loading="lazy" />
@@ -378,14 +426,14 @@ export default function CorporateTrainingPage() {
             <div className="ct-tailor" data-fade>
               <div className="ct-tailor-main">
                 <span className="ct-eyebrow">Built around your team</span>
-                <p className="ct-tailor-line"><mark>Training will be provided as per your syllabus and training level.</mark></p>
+                <p className="ct-tailor-line"><mark>Training Will Be Provided as per Your Syllabus and Training Level.</mark></p>
                 <p className="ct-tailor-sub">Share the topics your engineers work on. We shape the syllabus, depth and pace to match, whether they are new graduates or senior professionals.</p>
                 <a className="ct-btn ct-btn-indigo" href="#enquiry">Request a sample syllabus →</a>
               </div>
               <ol className="ct-tailor-steps">
-                <li><span>1</span><b>Share your topics</b><em>From your working team and current projects</em></li>
-                <li><span>2</span><b>We set syllabus &amp; level</b><em>Fresher, intermediate or advanced</em></li>
-                <li><span>3</span><b>Your team is trained</b><em>On site, at SIT or online</em></li>
+                <li><span>1</span><b>Share Your Requirements</b><em>Tell us the topics, tools and project activities your team works on.</em></li>
+                <li><span>2</span><b>Tailored Syllabus and Level</b><em>We design the syllabus and set the depth: foundation, intermediate or advanced.</em></li>
+                <li><span>3</span><b>Training Delivered</b><em>At your site, at SIT or online, with progress measured throughout.</em></li>
               </ol>
             </div>
           </div>
@@ -396,7 +444,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow">Accreditation &amp; association</span>
-              <h2>Certified, affiliated and <em>trusted by industry</em></h2>
+              <h2>Certified, Affiliated and <em>Trusted by Industry</em></h2>
               <p>SIT was formed to make engineers and draughtsmen eligible for working in global industry. Our corporate programmes carry the same accreditation as our professional courses.</p>
             </div>
             <ul className="ct-certs">
@@ -436,7 +484,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>02</b>New training programmes</span>
-              <h2>Programmes for <em>every engineering team</em></h2>
+              <h2>Programmes for <em>Every Engineering Team</em></h2>
               <p>Engineering, drafting, software, operation &amp; maintenance and more. Choose a programme or ask us to combine topics. Software is taught alongside the engineering concepts, codes and standards.</p>
             </div>
             <div className="ct-tabs" role="tablist" aria-label="Programme area">
@@ -466,12 +514,12 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>03</b>Training method</span>
-              <h2>A holistic training method that makes employees <em>productive from day one</em></h2>
+              <h2>A Holistic Training Method That Makes Employees <em>Productive from Day One</em></h2>
               <p>The Employability Skill Enhancing Training Program covers concepts, codes, software and hands-on project work, shaped for where your people are in their careers.</p>
             </div>
             <div className="ct-tracks">
-              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span><h3>Case-study training from concept to commissioning</h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
-              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">B</span><span className="ct-tag">For experienced professionals</span><h3>Custom-made training based on your projects</h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
+              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span><h3>Case-Study Training from Concept to Commissioning</h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
+              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">B</span><span className="ct-tag">For experienced professionals</span><h3>Custom-Made Training Based on Your Projects</h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
             </div>
             <div className="ct-principles">
               <div className="ct-pr" data-fade><b>Rehearsal of actual working</b><span>Training mirrors the activities your team performs on projects.</span></div>
@@ -496,7 +544,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>04</b>Evaluation</span>
-              <h2>Progress and effectiveness of training is <em>measured</em>, not just conducted</h2>
+              <h2>Progress and Effectiveness of Training Is <em>Measured</em>, Not Just Conducted</h2>
               <p>Each corporate training is tracked through the same evaluation stages, and the results are shared with your team.</p>
             </div>
             <ol className="ct-line">
@@ -517,7 +565,7 @@ export default function CorporateTrainingPage() {
               <div data-fade>
                 <div className="ct-head" style={{ marginBottom: 0 }}>
                   <span className="ct-eyebrow"><b>05</b>Sample progress reports · Tata Consulting Engineers</span>
-                  <h2>Skilling diploma holders with <em>Tata Consulting Engineers</em></h2>
+                  <h2>Skilling Diploma Holders with <em>Tata Consulting Engineers</em></h2>
                   <p>SIT delivers TCE’s training programme for diploma holders, building job-ready skills in piping, electrical and civil engineering. The programme has run at TCE’s Jamshedpur, Pune and Mumbai locations.</p>
                 </div>
                 <div className="ct-csr-nums">
@@ -528,9 +576,9 @@ export default function CorporateTrainingPage() {
                 <div className="ct-chips"><span>Piping</span><span>Electrical</span><span>Civil</span><span>Diploma holders</span></div>
               </div>
               <div className="ct-csr-pics" data-fade>
-                <Zoom file="tcejam3" caption="TCE Jamshedpur – piping session" onOpen={setShot} />
-                <Zoom file="tcejam1" caption="TCE Jamshedpur – batch completion" onOpen={setShot} />
-                <Zoom file="tcemum2" caption="TCE Mumbai – diploma holder training" onOpen={setShot} />
+                <Zoom file="tcejam3" caption="TCE Jamshedpur: piping session" onOpen={setShot} />
+                <Zoom file="tcejam1" caption="TCE Jamshedpur: batch completion" onOpen={setShot} />
+                <Zoom file="tcemum2" caption="TCE Mumbai: diploma holder training" onOpen={setShot} />
               </div>
             </div>
           </div>
@@ -541,12 +589,12 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>06</b>Client feedback</span>
-              <h2>What our corporate clients <em>wrote to us</em></h2>
+              <h2>What Our Corporate Clients <em>Wrote to Us</em></h2>
               <p>Feedback letters and certificates received after training. Tap a letter to read it.</p>
             </div>
             <div className="ct-letters">
               {LETTERS.map(([f, n, d]) => (
-                <button key={f} type="button" className="ct-letter" aria-label={`Read feedback from ${n}`} onClick={() => openSet(LETTERS.map(([lf, ln, ld]) => ({ src: IMG(`${lf}.jpg`), caption: `${ln} – ${ld}` })), LETTERS.findIndex(([lf]) => lf === f))} data-fade>
+                <button key={f} type="button" className="ct-letter" aria-label={`Read feedback from ${n}`} onClick={() => openSet(LETTERS.map(([lf, ln, ld]) => ({ src: IMG(`${lf}.jpg`), caption: `${ln} · ${ld}` })), LETTERS.findIndex(([lf]) => lf === f))} data-fade>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <div className="ct-pg"><img src={IMG(`${f}.jpg`)} alt={`Feedback letter from ${n}`} loading="lazy" /></div>
                   <b>{n}</b><span>{d}</span>
@@ -564,14 +612,14 @@ export default function CorporateTrainingPage() {
               <div>
                 <div className="ct-head" data-fade>
                   <span className="ct-eyebrow">Corporate enquiry</span>
-                  <h2>Tell us what your <em>team needs</em></h2>
+                  <h2>Tell Us What Your <em>Team Needs</em></h2>
                   <p>Share a few details and our corporate training team will contact you with a proposal: syllabus, schedule and mode to fit your project.</p>
                 </div>
                 <div className="ct-contacts">
                   <div className="ct-contact"><span className="ct-ic">{Icon.phone}</span><div><b>Call or WhatsApp</b><a href="tel:+919167219401">+91 91672 19401</a></div></div>
                   <div className="ct-contact"><span className="ct-ic">{Icon.mail}</span><div><b>Email</b><a href="mailto:enquiry@suvidya.ac.in">enquiry@suvidya.ac.in</a></div></div>
-                  <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Mumbai Branch</b><span>18/140, Anand Nagar, Nehru Road, Near Vakola Police Station, Vakola, Santacruz (East), Mumbai – 400 055</span></div></div>
-                  <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Pune Branch</b><span>303, Success Square, Karve Road, Paschimanagri, Kothrud, Pune – 411 038</span></div></div>
+                  <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Mumbai Branch</b><span>18/140, Anand Nagar, Nehru Road, Near Vakola Police Station, Vakola, Santacruz (East), Mumbai 400 055</span></div></div>
+                  <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Pune Branch</b><span>303, Success Square, Karve Road, Paschimanagri, Kothrud, Pune 411 038</span></div></div>
                 </div>
               </div>
 
@@ -579,13 +627,13 @@ export default function CorporateTrainingPage() {
                 {sent ? (
                   <div className="ct-done" role="status">
                     <span className="ct-tick">{Icon.tick}</span>
-                    <h3>Thank you, we have your enquiry</h3>
+                    <h3>Thank You, We Have Your Enquiry</h3>
                     <p>Our corporate training team will contact you shortly. For anything urgent, call +91 91672 19401.</p>
                     <button type="button" className="ct-btn ct-btn-indigo" onClick={() => { setForm(EMPTY_FORM); setSent(false); }}>Send another enquiry</button>
                   </div>
                 ) : (
                   <form onSubmit={submit} noValidate>
-                    <h3>Corporate training enquiry</h3>
+                    <h3>Corporate Training Enquiry</h3>
                     <p className="ct-sub">Fields marked <span style={{ color: '#C0392B' }}>*</span> are required.</p>
                     <div className="ct-fgrid">
                       <label>Company name <i>*</i><input id="ct-company" value={form.company} onChange={set('company')} autoComplete="organization" /></label>
@@ -622,7 +670,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-foot-cta">
             <div>
               <p className="ct-foot-kicker">Corporate training</p>
-              <p className="ct-foot-cta-line">Plan a training for your team, built around your syllabus and level.</p>
+              <p className="ct-foot-cta-line">Plan a Training for Your Team, Built Around Your Syllabus and Level.</p>
             </div>
             <div className="ct-foot-cta-actions">
               <a className="ct-btn ct-btn-yellow" href="#enquiry">Enquire Now →</a>
@@ -652,8 +700,8 @@ export default function CorporateTrainingPage() {
               <ul className="ct-foot-contact">
                 <li><span>Phone / WhatsApp</span><a href="tel:+919167219401">+91 91672 19401</a></li>
                 <li><span>Email</span><a href="mailto:enquiry@suvidya.ac.in">enquiry@suvidya.ac.in</a></li>
-                <li><span>Mumbai</span>18/140, Anand Nagar, Nehru Road, Vakola, Santacruz (East), Mumbai – 400 055</li>
-                <li><span>Pune</span>303, Success Square, Karve Road, Kothrud, Pune – 411 038</li>
+                <li><span>Mumbai</span>18/140, Anand Nagar, Nehru Road, Vakola, Santacruz (East), Mumbai 400 055</li>
+                <li><span>Pune</span>303, Success Square, Karve Road, Kothrud, Pune 411 038</li>
               </ul>
             </div>
             <div className="ct-foot-col">

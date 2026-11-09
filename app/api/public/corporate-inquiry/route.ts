@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     }
 
     const where = modeKey === 'site' ? "At company's site" : modeKey === 'sit' ? 'At SIT' : 'Online';
-    const location = modeKey === 'site' && city ? `${where} – ${city}` : where;
+    const location = modeKey === 'site' && city ? `${where}, ${city}` : where;
     // The staff form picks a course; website enquiries use "Others" + the chosen area as free text.
     const [oc] = await getPool().query("SELECT Course_Id FROM course_mst WHERE LOWER(TRIM(Course_Name)) = 'others' AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1");
     const othersCourseId = (oc as Array<{ Course_Id?: unknown }>)[0]?.Course_Id;

@@ -48,6 +48,8 @@ const PUBLIC_ROUTES = [
   '/api/trainer-portal/auth/login',
   '/api/trainer-portal/auth/session',
   '/api/trainer-portal/auth/logout',
+  '/robots.txt',
+  '/sitemap.xml',
 ];
 
 // Prefixes that are always public (static assets, etc.)
