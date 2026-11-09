@@ -84,21 +84,6 @@ const NAV = [
    showing the format of the progress report every corporate client receives. */
 const REPORT = {
   prePost: [{ label: 'Pre-Test', value: 10.5, color: '#5F95D8' }, { label: 'Post-Test', value: 14.2, color: '#1C5DAA' }],
-  topics: [
-    { label: 'Engineering Fundamentals', short: 'Fundamentals', value: 20.5 },
-    { label: 'Codes & Standards', short: 'Codes & Std.', value: 19.0 },
-    { label: 'Design Calculations', short: 'Design Calcs', value: 21.5 },
-    { label: 'Drawings & Documentation', short: 'Drawings', value: 22.0 },
-    { label: 'Engineering Software', short: 'Software', value: 20.0 },
-    { label: 'Project Case Study', short: 'Case Study', value: 21.0 },
-  ],
-  weeks: [
-    { label: 'Week 1', note: 'Common training', value: 36 },
-    { label: 'Week 2', note: 'Discipline training', value: 40 },
-    { label: 'Week 3', note: 'Discipline training', value: 40 },
-    { label: 'Week 4', note: 'Discipline training', value: 40 },
-    { label: 'Week 5', note: 'Case study & final exam', value: 24 },
-  ],
 };
 
 type Bar = { label: string; short?: string; note?: string; value: number; color?: string };
@@ -132,46 +117,23 @@ function BarChart({ data, max, unit, height = 220, ariaLabel }: { data: Bar[]; m
 function SampleReport() {
   const [pre, post] = [REPORT.prePost[0].value, REPORT.prePost[1].value];
   const lift = Math.round(((post - pre) / pre) * 100);
-  const hours = REPORT.weeks.reduce((t, w) => t + w.value, 0);
   return (
-    <div className="ct-report" data-fade>
-      <div className="ct-report-head">
-        <span className="ct-eyebrow">Sample report · Illustrative example</span>
-        <h3>What Your Progress Report Looks Like</h3>
-        <p>Every corporate client receives a report like this at the end of training: before and after scores, topic-wise assessment and the training hours delivered. <em className="ct-sample-note">Figures shown are sample values for illustration.</em></p>
+    <div className="ct-report ct-impact" data-fade>
+      <div className="ct-impact-copy">
+        <span className="ct-eyebrow">Training impact · Sample</span>
+        <h3>Measurable Improvement After Every Programme</h3>
+        <p>Every corporate client receives a progress report comparing each batch before and after training, so the impact is clear and measurable.</p>
+        <div className="ct-impact-stat">
+          <b>+{lift}%</b>
+          <span>Rise in batch average score<br />from Pre-Test to Post-Test</span>
+        </div>
+        <em className="ct-sample-note">Illustrative figures shown for a typical batch.</em>
       </div>
-      <div className="ct-kpis">
-        <div><b>60</b><span>Participants trained</span></div>
-        <div><b>{hours}</b><span>Training hours (common + discipline)</span></div>
-        <div><b>5</b><span>Weeks of structured training</span></div>
-        <div className="is-lift"><b>+{lift}%</b><span>Rise in batch average score, {pre} to {post}</span></div>
-      </div>
-      <div className="ct-charts">
-        <figure className="ct-chart-card">
-          <figcaption><b>Pre-Test vs Post-Test</b><span>Batch average marks</span></figcaption>
-          <BarChart data={REPORT.prePost} max={16} unit=" marks" ariaLabel={`Sample batch average marks: Pre-Test ${pre}, Post-Test ${post}`} />
-          <div className="ct-legend"><span><i style={{ background: '#5F95D8' }} />Pre-Test</span><span><i style={{ background: '#1C5DAA' }} />Post-Test</span></div>
-        </figure>
-        <figure className="ct-chart-card is-wide">
-          <figcaption><b>Assessment by Topic</b><span>Batch average assessment marks</span></figcaption>
-          <BarChart data={REPORT.topics} max={25} unit=" marks" ariaLabel="Sample average assessment marks by topic" />
-        </figure>
-        <figure className="ct-chart-card is-full">
-          <figcaption><b>Training Hours by Week</b><span>{hours} hours delivered in five weeks</span></figcaption>
-          <BarChart data={REPORT.weeks} max={50} unit=" hours" height={200} ariaLabel={`Sample training hours per week: ${REPORT.weeks.map((w) => w.value).join(", ")}`} />
-        </figure>
-      </div>
-      <details className="ct-report-data">
-        <summary>View the sample data</summary>
-        <table>
-          <thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead>
-          <tbody>
-            {REPORT.prePost.map((d) => <tr key={d.label}><td>{d.label} batch average</td><td>{d.value} marks</td></tr>)}
-            {REPORT.topics.map((d) => <tr key={d.label}><td>Assessment: {d.label}</td><td>{d.value} marks</td></tr>)}
-            {REPORT.weeks.map((d) => <tr key={d.label}><td>{d.label} ({d.note})</td><td>{d.value} hours</td></tr>)}
-          </tbody>
-        </table>
-      </details>
+      <figure className="ct-chart-card">
+        <figcaption><b>Pre-Test vs Post-Test</b><span>Batch average marks</span></figcaption>
+        <BarChart data={REPORT.prePost} max={16} unit=" marks" height={240} ariaLabel={`Sample batch average marks: Pre-Test ${pre}, Post-Test ${post}`} />
+        <div className="ct-legend"><span><i style={{ background: '#5F95D8' }} />Pre-Test (before training)</span><span><i style={{ background: '#1C5DAA' }} />Post-Test (after training)</span></div>
+      </figure>
     </div>
   );
 }
