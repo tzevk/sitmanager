@@ -221,6 +221,7 @@ export default function CorporateTrainingPage() {
   const [reel, setReel] = useState(0);
   const [pastHero, setPastHero] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [active, setActive] = useState('');
   const [photoSet, setPhotoSet] = useState<Shot[]>([]);
   const openSet = (list: Shot[], i = 0) => { setPhotoSet(list); setShot(list[i]); };
   const step = (d: number) => { if (!shot || photoSet.length < 2) return; const i = photoSet.findIndex((x) => x.src === shot.src); setShot(photoSet[(i + d + photoSet.length) % photoSet.length]); };
@@ -363,6 +364,21 @@ export default function CorporateTrainingPage() {
     return () => { root.removeEventListener('click', onClick); cancelAnimationFrame(anim); };
   }, []);
 
+  // Scrollspy: highlight the nav link for the section in view.
+  useEffect(() => {
+    if (!('IntersectionObserver' in window)) return;
+    const ids = NAV.map(([h]) => h.slice(1));
+    const seen = new Map<string, number>();
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => seen.set(e.target.id, e.isIntersecting ? e.intersectionRatio : 0));
+      let best = ''; let ratio = 0;
+      ids.forEach((id) => { const r = seen.get(id) || 0; if (r > ratio) { ratio = r; best = id; } });
+      setActive(ratio > 0 ? best : '');
+    }, { rootMargin: '-35% 0px -50% 0px', threshold: [0, 0.01, 0.25, 0.5, 1] });
+    ids.forEach((id) => { const el = document.getElementById(id); if (el) io.observe(el); });
+    return () => io.disconnect();
+  }, []);
+
   // Cursor spotlight on cards.
   useEffect(() => {
     const root = rootRef.current;
@@ -412,14 +428,14 @@ export default function CorporateTrainingPage() {
             <img src={IMG('sit-logo.png')} alt="SIT, Suvidya Institute of Technology" />
             <span className="ct-brand-text"><b>Suvidya Institute of Technology Pvt. Ltd.</b><span>Corporate Training</span></span>
           </a>
-          <ul className="ct-links">{NAV.map(([h, l]) => <li key={h}><a href={h}>{l}</a></li>)}</ul>
+          <ul className="ct-links">{NAV.map(([h, l]) => <li key={h}><a href={h} className={active === h.slice(1) ? 'is-active' : undefined} aria-current={active === h.slice(1) ? 'true' : undefined}>{l}</a></li>)}</ul>
           <a className="ct-btn ct-btn-indigo ct-nav-cta" href="#enquiry">Enquire Now</a>
           <button type="button" className="ct-menu-btn" aria-expanded={menuOpen} aria-controls="ct-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'} onClick={() => setMenuOpen((o) => !o)}>
             <span /><span /><span />
           </button>
         </div>
         <div id="ct-menu" className="ct-menu" hidden={!menuOpen}>
-          <ul>{NAV.map(([h, l]) => <li key={h}><a href={h} onClick={() => setMenuOpen(false)}>{l}</a></li>)}</ul>
+          <ul>{NAV.map(([h, l]) => <li key={h}><a href={h} className={active === h.slice(1) ? 'is-active' : undefined} onClick={() => setMenuOpen(false)}>{l}</a></li>)}</ul>
           <a className="ct-btn ct-btn-yellow" href="#enquiry" onClick={() => setMenuOpen(false)}>Enquire Now</a>
         </div>
       </header>
