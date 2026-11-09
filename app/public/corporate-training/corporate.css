@@ -1461,3 +1461,16 @@
 .ct-impact-stat span { color: rgba(233,238,248,.92); font-size: 15px; line-height: 1.45; }
 .ct-impact .ct-chart-card { max-width: 520px; width: 100%; justify-self: center; }
 @media (max-width: 900px) { .ct-impact { grid-template-columns: 1fr; } }
+
+/* A / B track markers */
+.ct-track-top { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.ct-ab { flex: none; position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; font: 800 26px/1 var(--display); font-stretch: 115%; color: var(--yellow); background: linear-gradient(150deg, #1C5DAA 0%, #123E73 100%); box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 12px 24px -12px rgba(10,35,66,.7); }
+.ct-ab::after { content: ""; position: absolute; inset: -5px; border-radius: 20px; border: 1.5px dashed rgba(28,93,170,.35); }
+.ct-track:hover .ct-ab { transform: rotate(-6deg) scale(1.04); }
+.ct-ab { transition: transform .8s var(--ease); }
+.ct-track-top .ct-tag { font-size: 12px; letter-spacing: .14em; }
+.ct-track { border-top: 4px solid transparent; }
+.ct-track:first-child { box-shadow: inset 0 4px 0 #1C5DAA, var(--rim), var(--e2) !important; }
+.ct-track:last-child { box-shadow: inset 0 4px 0 #FAE452, var(--rim), var(--e2) !important; }
+.ct-track:last-child .ct-ab { background: linear-gradient(150deg, #FAE452, #F2CF1F); color: var(--indigo-ink); }
+.ct-track:last-child .ct-ab::after { border-color: rgba(242,207,31,.6); }
