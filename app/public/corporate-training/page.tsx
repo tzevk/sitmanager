@@ -165,12 +165,12 @@ function Donut({ data, label, centre, sub }: { data: { l: string; v: number; c: 
 /* Signature piece: an isometric plant blueprint that draws itself on scroll,
    with process flow running through the lines. Each station opens that
    programme area below. */
-const PLANT: { id: string; cat: string; label: string; x: number; y: number }[] = [
-  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120 },
-  { id: 'rack', cat: 'Design & Drafting', label: 'Design & Drafting', x: 420, y: 92 },
-  { id: 'pump', cat: 'Operation & Maintenance', label: 'Operation & Maintenance', x: 560, y: 300 },
-  { id: 'tank', cat: 'Others', label: 'Fire, NDT & Offshore', x: 770, y: 150 },
-  { id: 'cr', cat: 'Software', label: 'E3D · PDMS · CAESAR II', x: 905, y: 268 },
+const PLANT: { id: string; cat: string; label: string; x: number; y: number; lx: number; ly: number; a?: 'start' | 'middle' | 'end' }[] = [
+  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120, lx: 214, ly: 274 },
+  { id: 'rack', cat: 'Design & Drafting', label: 'Design & Drafting', x: 420, y: 92, lx: 434, ly: 100 },
+  { id: 'pump', cat: 'Operation & Maintenance', label: 'Operation & Maintenance', x: 560, y: 300, lx: 574, ly: 292 },
+  { id: 'tank', cat: 'Others', label: 'Fire, NDT & Offshore', x: 770, y: 150, lx: 770, ly: 124, a: 'middle' },
+  { id: 'cr', cat: 'Software', label: 'E3D · PDMS · CAESAR II', x: 910, y: 265, lx: 960, ly: 214, a: 'end' },
 ];
 const PIPES = [
   'M200 300 V350 H520',
@@ -180,6 +180,27 @@ const PIPES = [
   'M820 320 V350 H880 V300',
   'M140 300 V370 H860',
 ];
+
+function CountUp({ to }: { to: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [v, setV] = useState(to);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let raf = 0;
+    setV(0);
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      const t0 = performance.now();
+      const tick = (t: number) => { const k = Math.min((t - t0) / 1400, 1); setV(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) raf = requestAnimationFrame(tick); };
+      raf = requestAnimationFrame(tick);
+    }, { threshold: 0.5 });
+    io.observe(el);
+    return () => { io.disconnect(); cancelAnimationFrame(raf); };
+  }, [to]);
+  return <span ref={ref} className="ct-countup">{v}</span>;
+}
 
 function PlantBlueprint({ cat, onPick }: { cat: string; onPick: (c: string) => void }) {
   const ref = useRef<SVGSVGElement>(null);
@@ -227,7 +248,7 @@ function PlantBlueprint({ cat, onPick }: { cat: string; onPick: (c: string) => v
         <g className="ct-bp-dim">
           <path d="M120 60 V300 M115 60 H125 M115 300 H125" /><text x="108" y="185" transform="rotate(-90 108 185)">EL +24.0 m</text>
           <text x="330" y="52">PIPE RACK · 6&quot; / 8&quot;</text>
-          <text x="866" y="222">DCS</text>
+          
         </g>
         {/* stations */}
         {PLANT.map((p) => {
@@ -237,13 +258,14 @@ function PlantBlueprint({ cat, onPick }: { cat: string; onPick: (c: string) => v
               onClick={() => onPick(sel ? 'All' : p.cat)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(sel ? 'All' : p.cat); } }}>
               <circle className="ct-bp-ring" cx={p.x} cy={p.y} r="16" />
               <circle className="ct-bp-dot" cx={p.x} cy={p.y} r="7" />
-              <g className="ct-bp-tag" transform={`translate(${p.x + (p.x > 800 ? -14 : 14)} ${p.y - 22})`}>
-                <text textAnchor={p.x > 800 ? 'end' : 'start'}>{p.label}</text>
-              </g>
+              <text className="ct-bp-tag" x={p.lx} y={p.ly} textAnchor={p.a || 'start'}>{p.label}</text>
             </g>
           );
         })}
       </svg>
+      <div className="ct-plant-chips" role="group" aria-label="Plant areas">
+        {PLANT.map((p) => <button key={p.id} type="button" aria-pressed={cat === p.cat} onClick={() => onPick(cat === p.cat ? 'All' : p.cat)}><i />{p.label}</button>)}
+      </div>
       <div className="ct-plant-legend"><span><i className="is-eq" />Equipment</span><span><i className="is-flow" />Process flow</span><span><i className="is-st" />Training area</span></div>
     </div>
   );
@@ -262,9 +284,9 @@ function SampleReport() {
         <p>Scores, attendance, participant mix, assessment results and feedback, all in one report, so the impact of the training is clear and measurable.</p>
       </div>
       <div className="ct-kpis">
-        <div className="is-lift"><b>+<span data-count={lift}>{lift}</span>%</b><span>Rise in average score, Pre-Test to Post-Test</span></div>
-        <div><b><span data-count={att}>{att}</span>%</b><span>Average weekly attendance</span></div>
-        <div><b><span data-count={passed}>{passed}</span>/{all}</b><span>Participants cleared the final assessment</span></div>
+        <div className="is-lift"><b>+<CountUp to={lift} />%</b><span>Rise in average score, Pre-Test to Post-Test</span></div>
+        <div><b><CountUp to={att} />%</b><span>Average weekly attendance</span></div>
+        <div><b><CountUp to={passed} />/{all}</b><span>Participants cleared the final assessment</span></div>
         <div><b>4.6/5</b><span>Average feedback rating</span></div>
       </div>
       <div className="ct-charts ct-charts-2">
