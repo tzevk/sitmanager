@@ -1163,3 +1163,10 @@
 /* banner copy: undo the older absolutely-positioned banner paragraph rule */
 .ct-banner .ct-banner-copy p { position: static; left: auto; top: auto; right: auto; transform: none; max-width: 46ch; margin: 0; font: 400 clamp(15px, 1.2vw, 17.5px)/1.65 var(--body); color: rgba(233,238,248,.9); }
 .ct-banner .ct-banner-copy p.ct-banner-title { font: 800 clamp(28px, 3vw, 44px)/1.08 var(--display); font-stretch: 112%; letter-spacing: -.025em; color: var(--yellow); max-width: 14ch; }
+
+/* slideshow caption: frosted pill so it reads on any photo */
+.ct-credit { bottom: clamp(200px, 26vh, 250px); background: rgba(255,255,255,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.9); border-radius: 14px; padding: 12px 16px 10px; box-shadow: 0 16px 34px -18px rgba(10,35,66,.55); text-shadow: none; color: var(--head); font-size: 12px; letter-spacing: .1em; }
+.ct-credit b { color: var(--indigo); margin-bottom: 4px; }
+.ct-dots { margin-top: 8px; }
+
+.ct-credit { top: 112px; bottom: auto; }

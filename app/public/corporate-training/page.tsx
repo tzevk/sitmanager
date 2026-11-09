@@ -95,7 +95,7 @@ const REEL = [
   { file: 'man3', tag: 'Instrumentation & Control', client: 'MAN Energy Solutions, Aurangabad', seconds: 6 },
   { file: 'tcemum1', tag: 'Piping · Electrical · Civil', client: 'Tata Consulting Engineers, Mumbai', seconds: 6 },
   { file: 'tcepune1', tag: 'Diploma holder programme', client: 'Tata Consulting Engineers, Pune', seconds: 6 },
-  { file: 'tcejam2', tag: 'CSR · Diploma holders', client: 'Tata Consulting Engineers, Jamshedpur', seconds: 6 },
+  { file: 'tcejam2', tag: 'Diploma Holder Programme', client: 'Tata Consulting Engineers, Jamshedpur', seconds: 6 },
 ];
 
 const HEADLINE = 'Training That Is a|Rehearsal of Actual Working|for Your Engineering Teams.'
