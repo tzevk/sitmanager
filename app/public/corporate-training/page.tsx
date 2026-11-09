@@ -80,24 +80,24 @@ const NAV = [
 ];
 
 
-/* Sample productivity report: TCE Utkarsh, Jamshedpur, Civil Engineering batch, 12 Nov to 9 Dec 2025.
-   Figures from SIT's completion report for that batch (no individual student data shown). */
+/* Sample productivity report: ILLUSTRATIVE figures only (no real client or batch data),
+   showing the format of the progress report every corporate client receives. */
 const REPORT = {
-  prePost: [{ label: 'Pre-Test', value: 11.3, color: '#5F95D8' }, { label: 'Post-Test', value: 14.0, color: '#1C5DAA' }],
+  prePost: [{ label: 'Pre-Test', value: 10.5, color: '#5F95D8' }, { label: 'Post-Test', value: 14.2, color: '#1C5DAA' }],
   topics: [
-    { label: 'Fundamentals of Civil Engg.', short: 'Fundamentals', value: 20.4 },
-    { label: 'Foundation', short: 'Foundation', value: 22.7 },
-    { label: 'RC Design', short: 'RC Design', value: 21.2 },
-    { label: 'Design of Steel Structure', short: 'Steel Structure', value: 20.3 },
-    { label: 'Codes & Standards', short: 'Codes & Std.', value: 19.5 },
-    { label: 'Pipe Support', short: 'Pipe Support', value: 20.7 },
+    { label: 'Engineering Fundamentals', short: 'Fundamentals', value: 20.5 },
+    { label: 'Codes & Standards', short: 'Codes & Std.', value: 19.0 },
+    { label: 'Design Calculations', short: 'Design Calcs', value: 21.5 },
+    { label: 'Drawings & Documentation', short: 'Drawings', value: 22.0 },
+    { label: 'Engineering Software', short: 'Software', value: 20.0 },
+    { label: 'Project Case Study', short: 'Case Study', value: 21.0 },
   ],
   weeks: [
-    { label: 'Week 1', note: '12 to 15 Nov · Common training', value: 32 },
-    { label: 'Week 2', note: '17 to 22 Nov · Civil', value: 48 },
-    { label: 'Week 3', note: '24 to 29 Nov · Civil', value: 48 },
-    { label: 'Week 4', note: '1 to 6 Dec · Civil', value: 48 },
-    { label: 'Week 5', note: '8 to 9 Dec · Civil', value: 16 },
+    { label: 'Week 1', note: 'Common training', value: 36 },
+    { label: 'Week 2', note: 'Discipline training', value: 40 },
+    { label: 'Week 3', note: 'Discipline training', value: 40 },
+    { label: 'Week 4', note: 'Discipline training', value: 40 },
+    { label: 'Week 5', note: 'Case study & final exam', value: 24 },
   ],
 };
 
@@ -130,37 +130,39 @@ function BarChart({ data, max, unit, height = 220, ariaLabel }: { data: Bar[]; m
 }
 
 function SampleReport() {
-  const lift = Math.round(((14.0 - 11.3) / 11.3) * 100);
+  const [pre, post] = [REPORT.prePost[0].value, REPORT.prePost[1].value];
+  const lift = Math.round(((post - pre) / pre) * 100);
+  const hours = REPORT.weeks.reduce((t, w) => t + w.value, 0);
   return (
     <div className="ct-report" data-fade>
       <div className="ct-report-head">
-        <span className="ct-eyebrow">Sample report · TCE Utkarsh, Jamshedpur</span>
-        <h3>Civil Engineering Batch, November to December 2025</h3>
-        <p>A real example of the progress report every client receives: before and after scores, topic-wise assessment and training hours delivered.</p>
+        <span className="ct-eyebrow">Sample report · Illustrative example</span>
+        <h3>What Your Progress Report Looks Like</h3>
+        <p>Every corporate client receives a report like this at the end of training: before and after scores, topic-wise assessment and the training hours delivered. <em className="ct-sample-note">Figures shown are sample values for illustration.</em></p>
       </div>
       <div className="ct-kpis">
-        <div><b>70</b><span>Diploma holders trained</span></div>
-        <div><b>192</b><span>Training hours (32 common + 160 civil)</span></div>
-        <div><b>5</b><span>Weeks, 12 Nov to 9 Dec 2025</span></div>
-        <div className="is-lift"><b>+{lift}%</b><span>Rise in batch average score, 11.3 to 14.0</span></div>
+        <div><b>60</b><span>Participants trained</span></div>
+        <div><b>{hours}</b><span>Training hours (common + discipline)</span></div>
+        <div><b>5</b><span>Weeks of structured training</span></div>
+        <div className="is-lift"><b>+{lift}%</b><span>Rise in batch average score, {pre} to {post}</span></div>
       </div>
       <div className="ct-charts">
         <figure className="ct-chart-card">
           <figcaption><b>Pre-Test vs Post-Test</b><span>Batch average marks</span></figcaption>
-          <BarChart data={REPORT.prePost} max={16} unit=" marks" ariaLabel="Batch average marks: Pre-Test 11.3, Post-Test 14.0" />
+          <BarChart data={REPORT.prePost} max={16} unit=" marks" ariaLabel={`Sample batch average marks: Pre-Test ${pre}, Post-Test ${post}`} />
           <div className="ct-legend"><span><i style={{ background: '#5F95D8' }} />Pre-Test</span><span><i style={{ background: '#1C5DAA' }} />Post-Test</span></div>
         </figure>
         <figure className="ct-chart-card is-wide">
           <figcaption><b>Assessment by Topic</b><span>Batch average assessment marks</span></figcaption>
-          <BarChart data={REPORT.topics} max={25} unit=" marks" ariaLabel="Average assessment marks by topic" />
+          <BarChart data={REPORT.topics} max={25} unit=" marks" ariaLabel="Sample average assessment marks by topic" />
         </figure>
         <figure className="ct-chart-card is-full">
-          <figcaption><b>Training Hours by Week</b><span>192 hours delivered in five weeks</span></figcaption>
-          <BarChart data={REPORT.weeks} max={50} unit=" hours" height={200} ariaLabel="Training hours per week: 32, 48, 48, 48, 16" />
+          <figcaption><b>Training Hours by Week</b><span>{hours} hours delivered in five weeks</span></figcaption>
+          <BarChart data={REPORT.weeks} max={50} unit=" hours" height={200} ariaLabel={`Sample training hours per week: ${REPORT.weeks.map((w) => w.value).join(", ")}`} />
         </figure>
       </div>
       <details className="ct-report-data">
-        <summary>View the data</summary>
+        <summary>View the sample data</summary>
         <table>
           <thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead>
           <tbody>
@@ -635,7 +637,17 @@ export default function CorporateTrainingPage() {
             <div className="ct-banner" data-fade>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={IMG('tcepune2.jpg')} alt="Classroom training for Tata Consulting Engineers trainees, Pune" loading="lazy" />
-              <div className="ct-banner-copy"><p className="ct-banner-title">Engineers Training Engineers.</p><p>Our trainers are retired, experienced professionals who believe in ‘Engineers Training Engineers’ and in making engineers ready for projects.</p><p>They are trainers who wish to impart their experience and knowledge to the next generation.</p></div>
+              <div className="ct-banner-copy">
+                <p className="ct-banner-kicker">Our Trainers</p>
+                <p className="ct-banner-title">Engineers Training Engineers.</p>
+                <p>Every SIT trainer is a retired, experienced engineering professional. They teach the way projects are actually run, so your engineers walk out ready for real work.</p>
+                <p>Their purpose is simple: to pass a career’s worth of experience and knowledge on to the next generation of engineers.</p>
+                <ul className="ct-banner-points">
+                  <li>Retired industry professionals</li>
+                  <li>Project-ready teaching</li>
+                  <li>Mentors for the next generation</li>
+                </ul>
+              </div>
             </div>
           </div>
         </section>

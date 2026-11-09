@@ -1417,3 +1417,8 @@
 @media (max-width: 760px) { .ct-section { padding-block: 48px; } .ct-hero + .ct-ticker { padding-top: 70px; } }
 
 .ct-tailor-steps::before { left: 41px; }
+.ct-sample-note { display: block; margin-top: 6px; font-style: normal; font-size: 13px; color: var(--blue); font-weight: 500; }
+.ct-banner .ct-banner-copy p.ct-banner-kicker { font: 600 11.5px/1 var(--mono); letter-spacing: .18em; text-transform: uppercase; color: #8FB6E8; margin: 0; }
+.ct-banner-points { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.ct-banner-points li { font: 600 13px/1 var(--body); color: #fff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); padding: 9px 12px 9px 28px; border-radius: 999px; position: relative; }
+.ct-banner-points li::before { content: ""; position: absolute; left: 12px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 0 3px rgba(250,228,82,.25); }
