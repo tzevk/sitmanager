@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
-import { Archivo, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './corporate.css';
 
 // Typefaces for this page only: Archivo (sturdy, slightly widened display),
 // IBM Plex Sans for reading, IBM Plex Mono for labels and figures.
-const display = Archivo({ subsets: ['latin'], axes: ['wdth'], variable: '--font-ct-display', display: 'swap' });
-const sans = IBM_Plex_Sans({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--font-ct-sans', display: 'swap' });
-const mono = IBM_Plex_Mono({ subsets: ['latin'], weight: ['500', '600'], variable: '--font-ct-mono', display: 'swap' });
+// Self-hosted (files in ./fonts) so builds never depend on downloading from Google Fonts.
+const display = localFont({ src: [{ path: './fonts/archivo.woff2', weight: '100 900', style: 'normal' }], declarations: [{ prop: 'font-stretch', value: '62% 125%' }], variable: '--font-ct-display', display: 'swap' });
+const sans = localFont({ src: [{ path: './fonts/plex-sans.woff2', weight: '100 700', style: 'normal' }], variable: '--font-ct-sans', display: 'swap' });
+const mono = localFont({ src: [{ path: './fonts/plex-mono-500.woff2', weight: '500', style: 'normal' }, { path: './fonts/plex-mono-600.woff2', weight: '600', style: 'normal' }], variable: '--font-ct-mono', display: 'swap' });
 
 const SITE = 'https://suvidya.app';
 const PATH = '/public/corporate-training';

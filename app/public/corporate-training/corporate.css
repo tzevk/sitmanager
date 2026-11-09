@@ -1589,3 +1589,93 @@
 @media (max-width: 760px) and (prefers-reduced-motion: reduce) { .ct-mbar { transition: none; } }
 .ct .ct-form .ct-ferr { color: #B42318; }
 @media (max-width: 760px) { .ct { padding-bottom: calc(84px + env(safe-area-inset-bottom)); } }
+
+/* ═══════════ REFINED FINISH (Nov 2026) ═══════════
+   Calm, high-contrast baseline: clean canvas, alternating white/cool sections,
+   no background textures or floating blobs, one accent (yellow) used sparingly,
+   hairline cards with soft shadows, buttons without hard offset shadows.
+   Sits last so it wins over the earlier experimental layers above. */
+.ct { --paper: #F5F7FB; --paper-2: #FFFFFF; --card: #FFFFFF; --line: #E2E7F0; --muted: #4F5A73; background: var(--paper); }
+
+/* sections: flat colour, alternating */
+.ct-section.ct-paper, .ct .ct-dark:not(.ct-hero), .ct-light, #conducted.ct-paper, #evaluation.ct-paper, #csr, #enquiry.ct-dark { background: var(--paper) !important; }
+#conducted.ct-paper, #method, #csr, #enquiry.ct-dark { background: #FFFFFF !important; }
+.ct main > section.ct-section::before, .ct main > section.ct-section::after,
+.ct-paper::before, .ct-paper::after, .ct .ct-dark:not(.ct-hero)::before, .ct .ct-dark:not(.ct-hero)::after, .ct-light::before, .ct-light::after,
+.ct-hero::after, .ct-section > .ct-wrap::before, .ct-section > .ct-wrap::after { display: none !important; }
+.ct-grain { display: none; }
+.ct main > section.ct-section { box-shadow: 0 -1px 0 var(--line), 0 -30px 60px -50px rgba(10,35,66,.35); }
+
+/* headings: one blue accent, no highlighter bands */
+.ct .ct-head h2 em, .ct .ct-dark .ct-head h2 em, .ct-light .ct-head h2 em { color: var(--indigo); background: none !important; animation: none !important; text-shadow: none; padding: 0; }
+.ct-track h3 mark, .ct-tailor-line mark { background: none !important; animation: none !important; color: inherit; padding: 0; }
+.ct-head h2 { letter-spacing: -.025em; }
+.ct-head p { color: var(--muted); }
+.ct-head[data-num]::before { display: none; }
+.ct-eyebrow::before { display: none; }
+.ct .ct-eyebrow b, .ct .ct-dark .ct-eyebrow b { background: rgba(28,93,170,.08); color: var(--indigo); border: 0; border-radius: 6px; }
+
+/* hero: photo stays vivid, copy sits on a soft light panel of gradient */
+.ct-reel::after { background:
+  linear-gradient(90deg, rgba(245,247,251,.97) 0%, rgba(245,247,251,.9) 34%, rgba(245,247,251,.45) 52%, rgba(245,247,251,0) 70%),
+  linear-gradient(180deg, rgba(245,247,251,.6) 0%, transparent 22%, transparent 78%, var(--paper) 100%) !important; }
+.ct-reel img { filter: saturate(1.05) contrast(1.04); }
+.ct-hero h1 { text-shadow: none; }
+.ct-hero h1 .ct-word.is-hi { color: var(--indigo); background-image: linear-gradient(var(--yellow), var(--yellow)) !important; background-size: 100% .14em !important; background-position: 0 92% !important; background-repeat: no-repeat !important; animation: ct-word 1.2s var(--ease) forwards !important; }
+.ct-since { background: #fff; box-shadow: 0 1px 2px rgba(10,35,66,.06), 0 10px 30px -18px rgba(10,35,66,.4); border-color: var(--line); }
+.ct-stats { background: rgba(255,255,255,.96) !important; border: 1px solid var(--line); backdrop-filter: blur(10px); }
+
+/* cards: white, hairline, soft depth */
+.ct-acc, .ct-event, .ct-more li, .ct-prog, .ct-track, .ct-step, .ct-letter, .ct-contact, .ct-certs li, .ct-ledger-list li, .ct-tailor, .ct-form, .ct-csr-nums, .ct-trainers p {
+  background: #FFFFFF !important; border: 1px solid var(--line) !important;
+  box-shadow: 0 1px 2px rgba(10,35,66,.04), 0 12px 32px -20px rgba(10,35,66,.28) !important; }
+.ct-prog:hover, .ct-certs li:hover, .ct-track:hover, .ct-letter:hover, .ct-ledger-list li:hover, .ct-more li:hover {
+  background: #FFFFFF !important; border-color: rgba(28,93,170,.35) !important;
+  box-shadow: 0 1px 2px rgba(10,35,66,.05), 0 22px 44px -24px rgba(10,35,66,.38) !important; }
+#conducted .ct-more li, #method .ct-pr, #csr .ct-csr-nums, #enquiry .ct-contact, .ct-tailor-steps li, .ct-form input, .ct-form select, .ct-form textarea { background: var(--paper) !important; }
+.ct-form input:focus, .ct-form select:focus, .ct-form textarea:focus { background: #fff !important; border-color: var(--indigo) !important; box-shadow: 0 0 0 4px rgba(28,93,170,.12) !important; }
+.ct-tailor { background: linear-gradient(180deg, #FFFFFF, #F8FAFD) !important; }
+.ct-ticker { background: #FFFFFF; border-block: 1px solid var(--line); box-shadow: none; }
+
+/* buttons: soft elevation, no hard bottom bar */
+.ct .ct-btn-yellow { box-shadow: 0 1px 0 rgba(255,255,255,.5) inset, 0 8px 20px -8px rgba(201,170,20,.55) !important; }
+.ct .ct-btn-indigo, .ct .ct-form .ct-btn-indigo { box-shadow: 0 1px 0 rgba(255,255,255,.18) inset, 0 10px 24px -10px rgba(28,93,170,.6) !important; }
+.ct .ct-btn-yellow:hover { box-shadow: 0 1px 0 rgba(255,255,255,.5) inset, 0 14px 30px -10px rgba(201,170,20,.65) !important; }
+.ct .ct-btn-indigo:hover { background: #174E91; }
+
+/* audience badges: calmer, no dashed ring */
+.ct-track .ct-tag.ct-tag-pill::after { display: none; }
+.ct-track .ct-tag.ct-tag-pill { box-shadow: 0 8px 18px -10px rgba(10,35,66,.5); border-radius: 10px; padding: 10px 16px; }
+
+/* evaluation timeline nodes on white */
+.ct-node { box-shadow: 0 0 0 6px var(--paper) !important; }
+
+/* report frame: quieter border animation */
+.ct-report { background: #FFFFFF !important; border: 1px solid var(--line) !important; box-shadow: 0 30px 70px -40px rgba(10,35,66,.35) !important; }
+.ct-report::before { opacity: .55; }
+/* method principles: four equal cards, one consistent accent */
+#method .ct-pr, #method .ct-pr:nth-child(odd) { padding: 22px 22px 20px; border: 1px solid var(--line) !important; border-top: 3px solid var(--indigo) !important; border-radius: 14px; align-content: start; }
+#method .ct-pr b { font-size: 17px; }
+
+/* background texture (subtle): dot grid + fine grain on grey sections, grain only on white ones */
+.ct { --ct-dots: radial-gradient(rgba(28,93,170,.22) 1.1px, transparent 1.5px);
+  --ct-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .04 0 0 0 0 .14 0 0 0 0 .26 0 0 0 .12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.ct, .ct-section.ct-paper, .ct .ct-dark:not(.ct-hero), .ct-light, #evaluation.ct-paper {
+  background-color: var(--paper) !important;
+  background-image: var(--ct-grain), var(--ct-dots), radial-gradient(1000px 500px at 85% 0%, rgba(28,93,170,.06), transparent 65%) !important;
+  background-size: 200px 200px, 24px 24px, auto !important; }
+#conducted.ct-paper, #method, #csr, #enquiry.ct-dark {
+  background-color: #FFFFFF !important;
+  background-image: var(--ct-grain), radial-gradient(900px 480px at 10% 0%, rgba(250,228,82,.07), transparent 65%) !important;
+  background-size: 200px 200px, auto !important; }
+
+/* texture across the entire page */
+#conducted.ct-paper, #method, #csr, #enquiry.ct-dark {
+  background-image: var(--ct-grain), radial-gradient(rgba(28,93,170,.16) 1.1px, transparent 1.5px), radial-gradient(900px 480px at 10% 0%, rgba(250,228,82,.07), transparent 65%) !important;
+  background-size: 200px 200px, 24px 24px, auto !important; }
+.ct-hero { background-image: var(--ct-grain), var(--ct-dots) !important; background-size: 200px 200px, 24px 24px !important; }
+.ct-reel { z-index: -1; }
+.ct-reel::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background-image: var(--ct-grain), radial-gradient(rgba(28,93,170,.12) 1px, transparent 1.3px); background-size: 200px 200px, 24px 24px;
+  -webkit-mask: linear-gradient(90deg, #000 0%, #000 45%, transparent 75%); mask: linear-gradient(90deg, #000 0%, #000 45%, transparent 75%); }
+.ct-ticker { background-image: var(--ct-grain), radial-gradient(rgba(28,93,170,.14) 1.1px, transparent 1.5px) !important; background-size: 200px 200px, 24px 24px !important; background-color: #fff !important; }
+.ct-foot { background-color: #0A2342 !important; background-image: var(--ct-grain), radial-gradient(rgba(250,228,82,.16) 1.1px, transparent 1.5px), radial-gradient(900px 420px at 90% 0%, rgba(47,123,208,.35), transparent 65%), linear-gradient(170deg, #0F3466 0%, #0A2342 70%) !important; background-size: 200px 200px, 24px 24px, auto, auto !important; }
