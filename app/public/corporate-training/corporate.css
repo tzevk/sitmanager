@@ -1231,3 +1231,74 @@
 .ct-hero { overflow: visible; z-index: 2; position: relative; }
 .ct-reel { border-radius: 0 0 0 0; }
 .ct-ticker { z-index: 1; }
+
+/* ═══════════ FANCY PASS ═══════════ */
+/* richer texture: diagonal engineering hatch + dot matrix on top of grid, grain and linen */
+.ct-section > .ct-wrap > *:first-child { position: relative; }
+.ct main > section.ct-section::before {
+  background-image:
+    radial-gradient(rgba(28,93,170,.16) 1px, transparent 1.2px),
+    repeating-linear-gradient(135deg, rgba(28,93,170,.035) 0 1px, transparent 1px 14px),
+    linear-gradient(rgba(28,93,170,.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(28,93,170,.07) 1px, transparent 1px);
+  background-size: 22px 22px, auto, 128px 128px, 128px 128px;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 30%, transparent 100%); opacity: .9; }
+
+/* big outlined section numerals behind headings */
+.ct-head[data-num] { position: relative; }
+.ct-head[data-num]::before { content: attr(data-num); position: absolute; z-index: -1; right: 0; top: -0.28em; font: 800 clamp(120px, 16vw, 240px)/1 var(--display); font-stretch: 120%; letter-spacing: -.04em; color: transparent; -webkit-text-stroke: 1.5px rgba(28,93,170,.14); pointer-events: none; }
+@media (max-width: 900px) { .ct-head[data-num]::before { right: -6px; top: -.18em; font-size: 120px; } }
+
+/* gradient hairline borders that warm up on hover */
+.ct-prog, .ct-certs li, .ct-track, .ct-tailor, .ct-form, .ct-letter, .ct-ledger-list li, .ct-contact { border: 1px solid transparent !important;
+  background: linear-gradient(180deg, #FAFBFD, #F2F4F9) padding-box, linear-gradient(140deg, rgba(42,107,181,.45), rgba(205,210,226,.6) 40%, rgba(250,228,82,.55)) border-box !important; }
+.ct-prog:hover, .ct-certs li:hover, .ct-track:hover, .ct-letter:hover, .ct-ledger-list li:hover {
+  background: linear-gradient(180deg, #FFFFFF, #F6F7FB) padding-box, linear-gradient(140deg, rgba(42,107,181,.9), rgba(250,228,82,.95)) border-box !important; }
+.ct-track { border-top-width: 1px !important; }
+
+/* gold shimmer on highlighted heading words */
+.ct-head h2 em, .ct-hero h1 .ct-word.is-hi, .ct-tailor-line mark, .ct-track h3 mark {
+  background-image: linear-gradient(90deg, rgba(250,228,82,.95) 0%, rgba(255,242,170,.95) 45%, rgba(250,228,82,.95) 60%, rgba(244,214,62,.95) 100%);
+  background-size: 220% 34%; background-position: 0% 92%; background-repeat: no-repeat; animation: ct-shimmer 6s ease-in-out infinite; }
+@keyframes ct-shimmer { 0%, 100% { background-position: 0% 92%; } 50% { background-position: 100% 92%; } }
+
+/* ornamental eyebrow: small diamond before the label */
+.ct-eyebrow::before { content: ""; width: 7px; height: 7px; transform: rotate(45deg); background: linear-gradient(135deg, var(--yellow), #E9C900); box-shadow: 0 0 0 3px rgba(250,228,82,.25); }
+
+/* trusted-by strip: proper gap between label and logos */
+.ct-ticker { padding-block: 34px 34px; }
+.ct-ticker-label { margin-bottom: 40px !important; display: flex; align-items: center; justify-content: center; gap: 16px; }
+.ct-ticker-label::before, .ct-ticker-label::after { content: ""; width: 48px; height: 1px; background: linear-gradient(90deg, transparent, rgba(28,93,170,.5)); }
+.ct-ticker-label::after { transform: scaleX(-1); }
+
+/* syllabus steps: a connected four-step journey */
+.ct-tailor { grid-template-columns: 1fr; }
+.ct-tailor-steps { grid-template-columns: repeat(4, 1fr); gap: 16px; position: relative; }
+.ct-tailor-steps::before { content: ""; position: absolute; left: 6%; right: 6%; top: 36px; height: 2px; background: linear-gradient(90deg, var(--blue), var(--yellow)); opacity: .5; }
+.ct-tailor-steps li { position: relative; grid-template-columns: 1fr; text-align: left; align-content: start; gap: 8px; padding: 18px; }
+.ct-tailor-steps li span { grid-row: auto; width: 40px; height: 40px; font-size: 16px; box-shadow: 0 0 0 6px #F2F4F9, 0 8px 18px -8px rgba(10,35,66,.6); }
+.ct-tailor-steps li:last-child span { background: linear-gradient(135deg, var(--yellow), #F2CF1F); color: var(--indigo-ink); }
+.ct-tailor-steps li:last-child { background: linear-gradient(180deg, #FFFBE6, #FFF6CC) padding-box, linear-gradient(140deg, rgba(250,228,82,1), rgba(42,107,181,.5)) border-box !important; border: 1px solid transparent; }
+@media (max-width: 1000px) { .ct-tailor-steps { grid-template-columns: 1fr 1fr; } .ct-tailor-steps::before { display: none; } }
+@media (max-width: 520px) { .ct-tailor-steps { grid-template-columns: 1fr; } }
+
+/* certification logos: real logos sit on a clean white plate */
+.ct-cert-logo { background: #fff; box-shadow: inset 0 0 0 1px rgba(28,93,170,.1); }
+.ct-certs li { grid-template-columns: 110px 1fr; }
+.ct-cert-logo { width: 110px; height: 78px; }
+.ct-foot-certs span { width: 84px; height: 56px; }
+
+/* buttons: glossy sheen sweep on hover */
+.ct-btn { position: relative; overflow: hidden; }
+.ct-btn::after { content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent); transition: left .9s var(--ease); pointer-events: none; }
+.ct-btn:hover::after { left: 130%; }
+
+@media (prefers-reduced-motion: reduce) { .ct-head h2 em, .ct-hero h1 .ct-word.is-hi, .ct-tailor-line mark, .ct-track h3 mark { animation: none; } }
+
+/* caption sits low, just above the stats, never over the top of the photos */
+.ct-credit { position: relative; top: auto; right: auto; bottom: auto; z-index: 2; width: max-content; max-width: 100%; margin: 28px 0 16px auto; }
+@media (max-width: 940px) { .ct-credit { display: block; margin: 24px 0 14px auto; } }
+
+/* logos always fit inside their plates */
+.ct-cert-logo { overflow: hidden; padding: 8px; }
+.ct-cert-logo img { width: 100%; height: 100%; object-fit: contain; }

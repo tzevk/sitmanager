@@ -336,10 +336,6 @@ export default function CorporateTrainingPage() {
               <img key={r.file} src={IMG(`${r.file}.jpg`)} alt="" className={i === reel ? 'is-on' : ''} />
             ))}
           </div>
-          <div className="ct-credit" aria-live="off">
-            <b>{REEL[reel].tag}</b>{REEL[reel].client}
-            <div className="ct-dots">{REEL.map((r, i) => <i key={r.file} className={i === reel ? 'is-on' : ''} style={{ animationDuration: `${r.seconds}s` }} />)}</div>
-          </div>
           <div className="ct-wrap">
             <div className="ct-hero-grid">
               <div>
@@ -357,6 +353,10 @@ export default function CorporateTrainingPage() {
                   <a className="ct-btn ct-btn-line" href="#conducted">See Trainings Conducted</a>
                 </div>
               </div>
+            </div>
+            <div className="ct-credit" aria-live="off">
+              <b>{REEL[reel].tag}</b>{REEL[reel].client}
+              <div className="ct-dots">{REEL.map((r, i) => <i key={r.file} className={i === reel ? 'is-on' : ''} style={{ animationDuration: `${r.seconds}s` }} />)}</div>
             </div>
             <div className="ct-stats">
               <div className="ct-stat"><b><span data-count="250">250</span><i>+</i></b><span>Corporate trainings delivered for EPC companies, refineries, chemical plants and government bodies</span></div>
@@ -380,7 +380,7 @@ export default function CorporateTrainingPage() {
         {/* ── 1. Trainings conducted ── */}
         <section className="ct-section ct-paper" id="conducted" style={{ background: 'var(--paper-2)' }}>
           <div className="ct-wrap">
-            <div className="ct-head" data-fade>
+            <div className="ct-head" data-fade data-num="01">
               <span className="ct-eyebrow"><b>01</b>Trainings conducted</span>
               <h2>Corporate Trainings <em>We Have Delivered</em></h2>
               <p>Leading engineering companies return to SIT year after year. Every programme here was delivered on site or at SIT, with a syllabus built for that team.</p>
@@ -440,6 +440,7 @@ export default function CorporateTrainingPage() {
                 <li><span>1</span><b>Share Your Requirements</b><em>Tell us the topics, tools and project activities your team works on.</em></li>
                 <li><span>2</span><b>Tailored Syllabus and Level</b><em>We design the syllabus and set the depth: foundation, intermediate or advanced.</em></li>
                 <li><span>3</span><b>Training Delivered</b><em>At your site, at SIT or online, with progress measured throughout.</em></li>
+                <li><span>4</span><b>Increased Team Productivity</b><em>Your engineers apply new skills on live projects and deliver more, sooner.</em></li>
               </ol>
             </div>
           </div>
@@ -470,16 +471,19 @@ export default function CorporateTrainingPage() {
                 <b>Maharashtra Chamber of Commerce</b><span>Member, apex chamber of Maharashtra State</span>
               </li>
               <li data-fade>
-                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">CII</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-cii.png')} alt="Confederation of Indian Industry logo" loading="lazy" /></span>
                 <b>Confederation of Indian Industry</b><span>Member</span>
               </li>
               <li data-fade>
-                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">MSME</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-msme.png')} alt="MSME, Ministry of Micro, Small and Medium Enterprises logo" loading="lazy" /></span>
                 <b>MSME Registered</b><span>Ministry of Micro, Small and Medium Enterprises</span>
               </li>
               <li data-fade>
-                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">DE</span>
-                <b>Fit for Partnership with Germany</b><span>Certified</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-giz.png')} alt="GIZ, Deutsche Gesellschaft für Internationale Zusammenarbeit logo" loading="lazy" /></span>
+                <b>Fit for Partnership with Germany</b><span>Certified under the GIZ programme</span>
               </li>
             </ul>
           </div>
@@ -488,7 +492,7 @@ export default function CorporateTrainingPage() {
         {/* ── 2. Programmes ── */}
         <section className="ct-section ct-paper" id="programmes">
           <div className="ct-wrap">
-            <div className="ct-head" data-fade>
+            <div className="ct-head" data-fade data-num="02">
               <span className="ct-eyebrow"><b>02</b>New training programmes</span>
               <h2>Programmes for <em>Every Engineering Team</em></h2>
               <p>From engineering and drafting to software and plant operation, pick a ready programme or combine topics into one tailored course. Software is always taught with the engineering concepts, codes and standards behind it.</p>
@@ -518,7 +522,7 @@ export default function CorporateTrainingPage() {
         {/* ── 4. Training method ── */}
         <section className="ct-section ct-paper" id="method">
           <div className="ct-wrap">
-            <div className="ct-head" data-fade>
+            <div className="ct-head" data-fade data-num="03">
               <span className="ct-eyebrow"><b>03</b>Training method</span>
               <h2>A Holistic Training Method That Makes Employees <em>Productive from Day One</em></h2>
               <p>Our Employability Skill Enhancing Training Program brings concepts, codes, software and hands-on project work together, so your people contribute to live projects sooner.</p>
@@ -544,7 +548,7 @@ export default function CorporateTrainingPage() {
         {/* ── 5. Evaluation ── */}
         <section className="ct-section ct-paper" id="evaluation" style={{ background: 'var(--paper-2)' }}>
           <div className="ct-wrap">
-            <div className="ct-head" data-fade>
+            <div className="ct-head" data-fade data-num="04">
               <span className="ct-eyebrow"><b>04</b>Evaluation</span>
               <h2>Progress and Effectiveness of Training Is <em>Measured</em>, Not Just Conducted</h2>
               <p>Every corporate training follows the same clear evaluation stages, and you receive the results, so you can see exactly what your investment delivered.</p>
@@ -565,7 +569,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-csr-grid">
               <div data-fade>
-                <div className="ct-head" style={{ marginBottom: 0 }}>
+                <div className="ct-head" data-num="05" style={{ marginBottom: 0 }}>
                   <span className="ct-eyebrow"><b>05</b>Sample Productivity Report · Tata Consulting Engineers</span>
                   <h2>Skilling Diploma Holders with <em>Tata Consulting Engineers</em></h2>
                   <p>For Tata Consulting Engineers, SIT turns diploma holders into job-ready talent in piping, electrical and civil engineering. The programme has been delivered at TCE’s Jamshedpur, Pune and Mumbai locations.</p>
@@ -589,7 +593,7 @@ export default function CorporateTrainingPage() {
         {/* ── 6. Client feedback ── */}
         <section className="ct-section ct-light" id="feedback">
           <div className="ct-wrap">
-            <div className="ct-head" data-fade>
+            <div className="ct-head" data-fade data-num="06">
               <span className="ct-eyebrow"><b>06</b>Client feedback</span>
               <h2>What Our Corporate Clients <em>Wrote to Us</em></h2>
               <p>Real letters and certificates from the companies we have trained. Tap any letter to read it in full.</p>
@@ -691,6 +695,12 @@ export default function CorporateTrainingPage() {
                 <span><img src={IMG('cert-iso.png')} alt="ISO 9001:2015, Bureau of Indian Standards" loading="lazy" /></span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <span><img src={IMG('cert-maccia.png')} alt="MACCIA member" loading="lazy" /></span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-cii.png')} alt="CII member" loading="lazy" /></span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-msme.png')} alt="MSME registered" loading="lazy" /></span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-giz.png')} alt="Fit for Partnership with Germany (GIZ)" loading="lazy" /></span>
               </div>
             </div>
             <nav className="ct-foot-col" aria-label="On this page">
