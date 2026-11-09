@@ -1292,7 +1292,13 @@ export async function getInquiryById(id: number): Promise<any | null> {
        si.Nationality, si.Present_Country, si.Discussion,
        CAST(NULLIF(si.OnlineState,'') AS UNSIGNED) as Status_id,
         si.Inquiry_Dt, si.Date_Added, si.Inquiry_From, si.Inquiry_Type,
-       si.Course_Id, si.Batch_Category_id, si.Batch_Code,
+       si.Course_Id,
+       -- Older rows hold the category id (or 'Weekend Batches'); the edit form expects the name.
+       CASE WHEN si.Batch_Category_id = 'Weekend Batches' THEN 'Weekend'
+            ELSE COALESCE((SELECT bc.BatchCategory FROM mst_batchcategory bc
+                           WHERE si.Batch_Category_id REGEXP '^[0-9]+$' AND bc.id = si.Batch_Category_id
+                             AND IFNULL(bc.IsDelete,0)=0 LIMIT 1), si.Batch_Category_id) END as Batch_Category_id,
+       si.Batch_Code,
        si.Qualification, si.Discipline, ${disciplineExpr} as DisciplineName, si.Percentage,
        si.Preferred_Location, si.Reminder_At, ilt.Temperature as lead_temperature,
        c.Course_Name as CourseName, ia.Assigned_User_Id as Assigned_Counsellor_Id
