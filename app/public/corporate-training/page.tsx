@@ -36,6 +36,16 @@ const PROGRAMMES = [
   { cat: 'Operation & Maintenance', img: 'tcepune2', title: 'Operation & Maintenance', items: ['O&M training for technicians and GET engineers', 'Rotating Equipment', 'Inspection and testing', 'Delivered for Tata Chemicals, Mithapur'] },
   { cat: 'Others', img: 'ev14', title: 'Specialised Programmes', items: ['Offshore Engineering and Fundamentals of Offshore', 'Fire Alarm and Protection System', 'Non-Destructive Testing (NDT) Level I & II', 'Custom topics from your working team'] },
 ];
+
+const ic = (d: React.ReactNode) => <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{d}</svg>;
+const PROG_ICON: Record<string, React.ReactNode> = {
+  'Piping & Process Engineering': ic(<><path d="M3 8h7a3 3 0 0 1 3 3v10" /><path d="M3 4h7a7 7 0 0 1 7 7v10" /><path d="M3 4v4M13 21h4" /></>),
+  'Mechanical, Structural & MEP': ic(<><path d="M4 21V9l8-6 8 6v12" /><path d="M4 13h16M4 17h16M9 21V13M15 21V13" /></>),
+  'Design & Drafting': ic(<><path d="M3 21h18" /><path d="m6 17 9-12 3 2-9 12-4 1z" /><path d="M13 7l3 2" /></>),
+  'Engineering Software': ic(<><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M8 20h8M12 16v4" /><path d="m9 8-2 2 2 2M15 8l2 2-2 2" /></>),
+  'Operation & Maintenance': ic(<><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>),
+  'Specialised Programmes': ic(<><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7z" /><path d="m9 12 2 2 4-4" /></>),
+};
 const CATEGORIES = ['All', 'Engineering', 'Design & Drafting', 'Software', 'Operation & Maintenance', 'Others'];
 
 const STEPS = [
@@ -186,6 +196,22 @@ export default function CorporateTrainingPage() {
     return () => { document.removeEventListener('scroll', onScroll, { capture: true }); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf); };
   }, []);
 
+  // Stats count up once when they come into view.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return;
+    const els = Array.from(root.querySelectorAll<HTMLElement>('[data-count]'));
+    const io = new IntersectionObserver((entries) => entries.forEach((en) => {
+      if (!en.isIntersecting) return;
+      io.unobserve(en.target);
+      const el = en.target as HTMLElement; const end = Number(el.dataset.count); const t0 = performance.now(); const dur = 1600;
+      const frame = (t: number) => { const k = Math.min((t - t0) / dur, 1); const v = Math.round(end * (1 - Math.pow(1 - k, 3))); el.textContent = v.toLocaleString('en-IN'); if (k < 1) requestAnimationFrame(frame); };
+      requestAnimationFrame(frame);
+    }), { threshold: 0.6 });
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, []);
+
   // Cursor spotlight on cards.
   useEffect(() => {
     const root = rootRef.current;
@@ -279,15 +305,13 @@ export default function CorporateTrainingPage() {
               </div>
             </div>
             <div className="ct-stats">
-              <div className="ct-stat"><b>250<i>+</i></b><span>Corporate trainings for EPC companies, refineries, chemical plants and government bodies</span></div>
-              <div className="ct-stat"><b>21,000<i>+</i></b><span>Engineers and draughtsmen trained</span></div>
-              <div className="ct-stat"><b>39</b><span>Nationalities trained</span></div>
-              <div className="ct-stat"><b>20<i>+ yrs</i></b><span>Industry experience of our trainers</span></div>
+              <div className="ct-stat"><b><span data-count="250">250</span><i>+</i></b><span>Corporate trainings for EPC companies, refineries, chemical plants and government bodies</span></div>
+              <div className="ct-stat"><b><span data-count="21000">21,000</span><i>+</i></b><span>Engineers and draughtsmen trained</span></div>
+              <div className="ct-stat"><b><span data-count="39">39</span></b><span>Nationalities trained</span></div>
+              <div className="ct-stat"><b><span data-count="20">20</span><i>+ yrs</i></b><span>Industry experience of our trainers</span></div>
             </div>
           </div>
         </section>
-        <div className="ct-hazard" aria-hidden="true" />
-
         {/* ── Client logos ── */}
         <div className="ct-ticker" aria-label="Some of our corporate clients">
           <p className="ct-ticker-label">Trusted by international &amp; Indian companies</p>
@@ -398,10 +422,9 @@ export default function CorporateTrainingPage() {
             <div className="ct-progs">
               {progs.map((p) => (
                 <article className="ct-prog" key={p.title}>
-                  <div className="ct-prog-ph">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={IMG(`${p.img}.jpg`)} alt={`${p.title} training`} loading="lazy" />
-                    <span>{p.cat}</span>
+                  <div className="ct-prog-top">
+                    <span className="ct-prog-icon" aria-hidden="true">{PROG_ICON[p.title]}</span>
+                    <span className="ct-prog-cat">{p.cat}</span>
                   </div>
                   <div className="ct-prog-body">
                     <h3>{p.title}</h3>
@@ -414,7 +437,6 @@ export default function CorporateTrainingPage() {
         </section>
 
         {/* ── 3. CSR – TCE ── */}
-        <div className="ct-hazard" aria-hidden="true" />
         <section className="ct-section ct-dark" id="csr">
           <div className="ct-wrap">
             <div className="ct-csr-grid">
@@ -432,14 +454,13 @@ export default function CorporateTrainingPage() {
                 <div className="ct-chips"><span>Piping</span><span>Electrical</span><span>Civil</span><span>Diploma holders</span></div>
               </div>
               <div className="ct-csr-pics" data-fade>
-                <Zoom file="tcejam2" caption="TCE Jamshedpur – 2023–24 batch, July 2023" onOpen={setShot} />
+                <Zoom file="tcejam3" caption="TCE Jamshedpur – piping session" onOpen={setShot} />
                 <Zoom file="tcejam1" caption="TCE Jamshedpur – batch completion" onOpen={setShot} />
                 <Zoom file="tcemum2" caption="TCE Mumbai – diploma holder training" onOpen={setShot} />
               </div>
             </div>
           </div>
         </section>
-        <div className="ct-hazard" aria-hidden="true" />
 
         {/* ── 4. Training method ── */}
         <section className="ct-section ct-paper" id="method">
@@ -450,8 +471,8 @@ export default function CorporateTrainingPage() {
               <p>The Employability Skill Enhancing Training Program is shaped for where your people are in their careers.</p>
             </div>
             <div className="ct-tracks">
-              <div className="ct-track" data-fade><span className="ct-letter" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span><h3>Case-study training from concept to commissioning</h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
-              <div className="ct-track" data-fade><span className="ct-letter" aria-hidden="true">B</span><span className="ct-tag">For experienced professionals</span><h3>Custom-made training based on your projects</h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
+              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span><h3>Case-study training from concept to commissioning</h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
+              <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">B</span><span className="ct-tag">For experienced professionals</span><h3>Custom-made training based on your projects</h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
             </div>
             <div className="ct-principles">
               <div className="ct-pr" data-fade><b>Rehearsal of actual working</b><span>Training mirrors the activities your team performs on projects.</span></div>
@@ -461,7 +482,7 @@ export default function CorporateTrainingPage() {
             </div>
             <div className="ct-banner" data-fade>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={IMG('tcepune1.jpg')} alt="Classroom training for Tata Consulting Engineers trainees, Pune" loading="lazy" />
+              <img src={IMG('tcepune2.jpg')} alt="Classroom training for Tata Consulting Engineers trainees, Pune" loading="lazy" />
               <p>Trainers with <span>20+ years</span> of industry experience, teaching what they have built.</p>
             </div>
           </div>
@@ -487,7 +508,7 @@ export default function CorporateTrainingPage() {
         </section>
 
         {/* ── 6. Client feedback ── */}
-        <section className="ct-section ct-paper" id="feedback">
+        <section className="ct-section ct-light" id="feedback">
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>06</b>Client feedback</span>
