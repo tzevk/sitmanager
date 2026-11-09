@@ -1131,3 +1131,21 @@
 .ct { --paper: #EAECF3; --paper-2: #E3E6F0; }
 .ct-paper::after, .ct .ct-dark:not(.ct-hero)::after, .ct-light::after { opacity: .2; }
 .ct-paper::before, .ct .ct-dark:not(.ct-hero)::before, .ct-light::before { opacity: .8; }
+
+/* training method: highlight the card headings (no A/B badges) */
+.ct-track h3 { font-size: clamp(20px, 1.7vw, 24px); line-height: 1.25; }
+.ct-track h3 mark { color: var(--head); background: linear-gradient(transparent 56%, rgba(250,228,82,.9) 56%); padding: 0 .08em; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+
+/* trainers banner: whole photo (no crop), a little larger, statement over it */
+.ct-banner { aspect-ratio: auto; margin-top: 44px; border-radius: 20px; }
+.ct-banner img { width: 100%; height: auto; object-fit: contain; transform: none !important; display: block; }
+.ct-banner::after { background: linear-gradient(90deg, rgba(10,35,66,.9) 0%, rgba(10,35,66,.7) 38%, rgba(10,35,66,.15) 70%, transparent 100%); }
+.ct-banner > p { display: none; }
+.ct-banner-copy { position: absolute; z-index: 1; left: clamp(20px, 4vw, 56px); top: 50%; transform: translateY(-50%); max-width: min(560px, 52%); display: grid; gap: 14px; }
+.ct-banner-copy p { color: rgba(233,238,248,.92); font-size: clamp(15px, 1.25vw, 18px); line-height: 1.6; }
+.ct-banner-copy .ct-banner-title { font: 800 clamp(26px, 3vw, 44px)/1.08 var(--display); font-stretch: 112%; letter-spacing: -.025em; color: var(--yellow); }
+@media (max-width: 760px) {
+  .ct-banner { display: flex; flex-direction: column; background: var(--indigo-ink); }
+  .ct-banner::after { display: none; }
+  .ct-banner-copy { position: static; transform: none; max-width: none; padding: 22px 20px 26px; }
+}
