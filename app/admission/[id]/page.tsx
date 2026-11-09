@@ -1010,6 +1010,17 @@ export default function PublicAdmissionFormPage() {
   // convenience only, every field stays editable and is still validated
   // before submit. Only fills fields that are still blank, so it never
   // clobbers something the student already typed.
+  // International candidates have a separate fee structure (shared by the SIT
+  // team), so the form shows them only the bank details: plan = Full Payment,
+  // method = NEFT, and no Indian fee amount is pre-filled anywhere.
+  useEffect(() => {
+    if (!formData.isInternational || currentStep !== 7) return;
+    if (formData.modeOfPayment !== 'Full Payment') setFormData((prev) => ({ ...prev, modeOfPayment: 'Full Payment' }));
+    if (paymentSubMethod !== 'neft') setPaymentSubMethod('neft');
+    if (!paymentConfirmMode) setPaymentConfirmMode('NEFT');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.isInternational, currentStep]);
+
   useEffect(() => {
     if (!formData.modeOfPayment) return;
     if (!paymentConfirmDate) setPaymentConfirmDate(new Date().toISOString().slice(0, 10));
@@ -1017,7 +1028,7 @@ export default function PublicAdmissionFormPage() {
       const fullName = [formData.firstName, formData.middleName, formData.lastName].filter(Boolean).join(' ');
       if (fullName) setPaymentConfirmName(fullName);
     }
-    if (!paymentConfirmAmount) {
+    if (!paymentConfirmAmount && !formData.isInternational) {
       const amt = calculateAdmissionPayableAmount();
       if (amt > 0) setPaymentConfirmAmount(String(amt));
     }
@@ -3590,8 +3601,8 @@ export default function PublicAdmissionFormPage() {
                         <p className="text-sm text-gray-500 mb-4">Please select your preferred mode of payment for the training programme fees.</p>
                       </div>
 
-                      {/* Fees indicator */}
-                      {hasFees ? (
+                      {/* Fees indicator (Indian candidates only) */}
+                      {formData.isInternational ? null : hasFees ? (
                         <div className="bg-gradient-to-r from-[#2E3093] to-[#2A6BB5] rounded-xl p-4 text-white flex items-center justify-between">
                           <div>
                             <p className="text-xs text-white/70 font-medium">Total Fees — {formData.batchCode}</p>
@@ -3614,12 +3625,12 @@ export default function PublicAdmissionFormPage() {
 
                       {formData.isInternational && (
                         <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                          <span className="font-semibold">International candidate:</span> the fee is paid in full at admission. Instalment and loan plans are not available.
+                          <span className="font-semibold">International candidate:</span> the fee structure for international students is different and will be shared with you by the SIT admissions team. Please transfer the amount communicated to you to the bank account below, then enter the transaction details.
                         </div>
                       )}
 
-                      {/* Payment Options */}
-                      <div className="space-y-3">
+                      {/* Payment Options (Indian candidates only) */}
+                      <div className="space-y-3" hidden={formData.isInternational}>
                         {/* Option 1: Full Payment with 5% discount */}
                         {(() => {
                           const isSelected = formData.modeOfPayment === 'Full Payment';
@@ -3954,7 +3965,7 @@ export default function PublicAdmissionFormPage() {
                       </div>
 
                       {/* Selected summary */}
-                      {formData.modeOfPayment && (
+                      {formData.modeOfPayment && !formData.isInternational && (
                         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
                           <i className="fas fa-check-circle text-green-500 text-lg flex-shrink-0"></i>
                           <div>
@@ -3976,7 +3987,7 @@ export default function PublicAdmissionFormPage() {
                         <div className="rounded-xl p-4 space-y-3 border-2 border-emerald-300 bg-emerald-50">
                           <p className="text-xs font-semibold text-emerald-900 flex items-center gap-2">
                             <i className="fas fa-university"></i>
-                            Pay by NEFT — transfer &#8377;{fmt(payableNow)}
+                            {formData.isInternational ? 'Bank Details — transfer by NEFT / wire transfer' : <>Pay by NEFT — transfer &#8377;{fmt(payableNow)}</>}
                           </p>
                           <div className="rounded-xl border border-emerald-200 bg-white p-3 text-xs text-slate-700 space-y-1.5">
                             <p><span className="font-semibold text-slate-900">Bank -</span> {NEFT_BANK_DETAILS.bank}</p>
@@ -4178,7 +4189,7 @@ export default function PublicAdmissionFormPage() {
                               />
                             </div>
                             <div>
-                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Amount (&#8377;) <span className="text-red-500">*</span></label>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">Amount{formData.isInternational ? '' : ' (₹)'} <span className="text-red-500">*</span></label>
                               <input
                                 type="number"
                                 min="1"
