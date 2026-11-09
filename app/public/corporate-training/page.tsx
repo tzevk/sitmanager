@@ -113,6 +113,7 @@ export default function CorporateTrainingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [reel, setReel] = useState(0);
   const [pastHero, setPastHero] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [photoSet, setPhotoSet] = useState<Shot[]>([]);
   const openSet = (list: Shot[], i = 0) => { setPhotoSet(list); setShot(list[i]); };
   const step = (d: number) => { if (!shot || photoSet.length < 2) return; const i = photoSet.findIndex((x) => x.src === shot.src); setShot(photoSet[(i + d + photoSet.length) % photoSet.length]); };
@@ -235,7 +236,14 @@ export default function CorporateTrainingPage() {
             <span className="ct-brand-text"><b>Suvidya Institute of Technology Pvt. Ltd.</b><span>Corporate Training</span></span>
           </a>
           <ul className="ct-links">{NAV.map(([h, l]) => <li key={h}><a href={h}>{l}</a></li>)}</ul>
-          <a className="ct-btn ct-btn-indigo" href="#enquiry">Enquire Now</a>
+          <a className="ct-btn ct-btn-indigo ct-nav-cta" href="#enquiry">Enquire Now</a>
+          <button type="button" className="ct-menu-btn" aria-expanded={menuOpen} aria-controls="ct-menu" aria-label={menuOpen ? 'Close menu' : 'Open menu'} onClick={() => setMenuOpen((o) => !o)}>
+            <span /><span /><span />
+          </button>
+        </div>
+        <div id="ct-menu" className="ct-menu" hidden={!menuOpen}>
+          <ul>{NAV.map(([h, l]) => <li key={h}><a href={h} onClick={() => setMenuOpen(false)}>{l}</a></li>)}</ul>
+          <a className="ct-btn ct-btn-yellow" href="#enquiry" onClick={() => setMenuOpen(false)}>Enquire Now</a>
         </div>
       </header>
 
