@@ -1474,3 +1474,86 @@
 .ct-track:last-child { box-shadow: inset 0 4px 0 #FAE452, var(--rim), var(--e2) !important; }
 .ct-track:last-child .ct-ab { background: linear-gradient(150deg, #FAE452, #F2CF1F); color: var(--indigo-ink); }
 .ct-track:last-child .ct-ab::after { border-color: rgba(242,207,31,.6); }
+
+/* ═══ Track audience tags: take over the old A/B badge styling ═══ */
+.ct-track .ct-tag.ct-tag-pill { position: relative; display: inline-flex; align-items: center; padding: 12px 18px; border-radius: 16px; font: 700 13px/1.2 var(--display); letter-spacing: .04em; text-transform: none; color: var(--yellow); background: linear-gradient(150deg, #1C5DAA 0%, #123E73 100%); box-shadow: 0 1px 0 rgba(255,255,255,.25) inset, 0 12px 24px -12px rgba(10,35,66,.7); transition: transform .8s var(--ease); }
+.ct-track .ct-tag.ct-tag-pill::after { content: ""; position: absolute; inset: -5px; border-radius: 20px; border: 1.5px dashed rgba(28,93,170,.35); pointer-events: none; }
+.ct-track:last-child .ct-tag.ct-tag-pill { background: linear-gradient(150deg, #FAE452, #F2CF1F); color: var(--indigo-ink); }
+.ct-track:last-child .ct-tag.ct-tag-pill::after { border-color: rgba(242,207,31,.6); }
+.ct-track:hover .ct-tag.ct-tag-pill { transform: translateY(-2px) rotate(-1.5deg); }
+
+/* ═══ Full sample report (premium: hairline rims, layered depth, quiet colour) ═══ */
+.ct-charts-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.ct-report .ct-chart-card { border-radius: 20px; padding: 22px 22px 16px; box-shadow: 0 0 0 1px rgba(10,35,66,.04), 0 1px 2px rgba(10,35,66,.06), 0 24px 48px -32px rgba(10,35,66,.4); transition: transform .6s var(--ease), box-shadow .6s var(--ease); }
+.ct-report .ct-chart-card:hover { transform: translateY(-3px); box-shadow: 0 0 0 1px rgba(28,93,170,.12), 0 2px 4px rgba(10,35,66,.06), 0 32px 60px -30px rgba(10,35,66,.5); }
+.ct-report-head .ct-eyebrow { color: var(--blue); }
+.ct-donut { display: grid; grid-template-columns: minmax(130px, 180px) 1fr; gap: 20px; align-items: center; padding: 6px 0; }
+.ct-donut svg { width: 100%; height: auto; }
+.ct-donut circle { transition: stroke-width .3s; }
+.ct-donut circle:hover { stroke-width: 34; }
+.ct-donut-c { font: 800 30px var(--display); fill: var(--head, #0A2342); letter-spacing: -.02em; }
+.ct-donut-s { font: 500 11px var(--mono); fill: #6B7591; letter-spacing: .1em; text-transform: uppercase; }
+.ct-donut-key { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: 13.5px; color: #3B4462; }
+.ct-donut-key li { display: grid; grid-template-columns: 12px 1fr auto; gap: 10px; align-items: center; }
+.ct-donut-key i { width: 12px; height: 12px; border-radius: 4px; }
+.ct-donut-key b { font: 700 13px var(--display); color: var(--head, #0A2342); font-variant-numeric: tabular-nums; }
+.ct-fb { list-style: none; margin: 0; padding: 8px 0 4px; display: grid; gap: 16px; }
+.ct-fb li { display: grid; grid-template-columns: minmax(120px, 160px) 1fr 36px; gap: 12px; align-items: center; font-size: 13.5px; color: #3B4462; }
+.ct-fb-bar { height: 10px; border-radius: 999px; background: #EEF1F7; overflow: hidden; }
+.ct-fb-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5F95D8, #1C5DAA); }
+.ct-fb b { font: 700 14px var(--display); color: var(--head, #0A2342); text-align: right; font-variant-numeric: tabular-nums; }
+.ct-report .ct-sample-note { display: block; margin-top: 16px; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 900px) { .ct-charts-2 { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .ct-donut { grid-template-columns: 1fr; justify-items: center; } .ct-donut svg { max-width: 200px; } .ct-fb li { grid-template-columns: 1fr 36px; } .ct-fb-bar { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ═══ ThreeUI-inspired finish (SIT blue + yellow only) ═══
+   pointer-lit rims, gilded animated borders,
+   gentle 3D tilt, magnetic CTAs. All motion is off under reduced-motion. */
+@property --ct-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+/* 1. Pointer-lit rim + soft spotlight on cards */
+.ct-track, .ct-prog, .ct-chart-card, .ct-letter, .ct-pr, .ct-kpis > div, .ct-film { position: relative; isolation: isolate; }
+.ct-track::before, .ct-prog::before, .ct-chart-card::before, .ct-letter::before, .ct-pr::before, .ct-kpis > div::before, .ct-film::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2; opacity: 0; transition: opacity .5s var(--ease);
+  padding: 1px; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(250,228,82,.95), rgba(42,107,181,.55) 40%, transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+.ct-track::after, .ct-chart-card::after, .ct-pr::after, .ct-kpis > div::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: -1; opacity: 0; transition: opacity .5s var(--ease);
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgba(42,107,181,.08), transparent 60%); }
+.ct-track:hover::before, .ct-prog:hover::before, .ct-chart-card:hover::before, .ct-letter:hover::before, .ct-pr:hover::before, .ct-kpis > div:hover::before, .ct-film:hover::before,
+.ct-track:hover::after, .ct-chart-card:hover::after, .ct-pr:hover::after, .ct-kpis > div:hover::after { opacity: 1; }
+.ct-kpis .is-lift::after { background: radial-gradient(320px circle at var(--mx, 50%) var(--my, 50%), rgba(250,228,82,.18), transparent 60%); }
+
+/* 2. Gentle 3D tilt on feature cards */
+.ct-track, .ct-report .ct-chart-card { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .5s var(--ease), box-shadow .6s var(--ease); will-change: transform; }
+.ct-track:hover { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-6px); }
+.ct-report .ct-chart-card:hover { transform: perspective(1100px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-3px); }
+.ct-track .ct-letter::before { display: none; }
+
+/* 3. Magnetic primary buttons with a light sweep */
+.ct-btn-yellow, .ct-btn-indigo { position: relative; overflow: hidden; translate: var(--bx, 0) var(--by, 0); transition: translate .35s var(--ease), box-shadow .4s, background .4s; }
+.ct-btn-yellow::after, .ct-btn-indigo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%); transform: translateX(-120%); transition: transform .9s var(--ease); pointer-events: none; }
+.ct-btn-yellow:hover::after, .ct-btn-indigo:hover::after { transform: translateX(120%); }
+.ct-btn-yellow:hover { box-shadow: 0 14px 34px -12px rgba(242,207,31,.75); }
+
+/* 5. Gilded animated border on the sample report + enquiry form */
+.ct-report, .ct-form { position: relative; }
+.ct-report::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1.5px; pointer-events: none;
+  background: conic-gradient(from var(--ct-ang), rgba(42,107,181,.15), rgba(250,228,82,.9) 12%, rgba(42,107,181,.55) 24%, rgba(42,107,181,.15) 40%, rgba(42,107,181,.15));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; animation: ct-orbit 9s linear infinite; }
+@keyframes ct-orbit { to { --ct-ang: 360deg; } }
+
+/* 6. Frosted, rim-lit KPI tiles and chart entrance */
+.ct-kpis > div:not(.is-lift) { background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.75)); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 1px 0 #fff inset, 0 0 0 1px rgba(10,35,66,.05), 0 18px 36px -28px rgba(10,35,66,.45); }
+.ct-kpis .is-lift { box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 22px 44px -22px rgba(28,93,170,.8); }
+.ct-report:not(.is-pre) .ct-bar path { animation: ct-grow 1.2s var(--ease) both; transform-box: fill-box; transform-origin: bottom; }
+.ct-report:not(.is-pre) .ct-fb-bar i { animation: ct-fill 1.4s var(--ease) both; transform-origin: left; }
+.ct-report:not(.is-pre) .ct-donut circle + circle { animation: ct-fade 1.2s var(--ease) both; }
+@keyframes ct-grow { from { transform: scaleY(0); } }
+@keyframes ct-fill { from { transform: scaleX(0); } }
+@keyframes ct-fade { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ct-report::before, .ct-report .ct-bar path, .ct-fb-bar i, .ct-donut circle { animation: none !important; }
+  .ct-track, .ct-report .ct-chart-card, .ct-btn-yellow, .ct-btn-indigo { transform: none !important; translate: none !important; }
+}

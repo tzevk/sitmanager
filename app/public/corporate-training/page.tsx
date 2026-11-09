@@ -82,9 +82,6 @@ const NAV = [
 
 /* Sample productivity report: ILLUSTRATIVE figures only (no real client or batch data),
    showing the format of the progress report every corporate client receives. */
-const REPORT = {
-  prePost: [{ label: 'Pre-Test', value: 10.5, color: '#5F95D8' }, { label: 'Post-Test', value: 14.2, color: '#1C5DAA' }],
-};
 
 type Bar = { label: string; short?: string; note?: string; value: number; color?: string };
 function BarChart({ data, max, unit, height = 220, ariaLabel }: { data: Bar[]; max: number; unit: string; height?: number; ariaLabel: string }) {
@@ -114,26 +111,99 @@ function BarChart({ data, max, unit, height = 220, ariaLabel }: { data: Bar[]; m
   );
 }
 
-function SampleReport() {
-  const [pre, post] = [REPORT.prePost[0].value, REPORT.prePost[1].value];
-  const lift = Math.round(((post - pre) / pre) * 100);
+const STUDENTS = [
+  { n: 'Trainee 1', pre: 9, post: 15 }, { n: 'Trainee 2', pre: 11, post: 16 }, { n: 'Trainee 3', pre: 8, post: 13 },
+  { n: 'Trainee 4', pre: 12, post: 17 }, { n: 'Trainee 5', pre: 10, post: 14 }, { n: 'Trainee 6', pre: 13, post: 18 },
+  { n: 'Trainee 7', pre: 9, post: 14 }, { n: 'Trainee 8', pre: 11, post: 15 },
+];
+const WEEKS = [{ label: 'Week 1', short: 'W1', value: 96 }, { label: 'Week 2', short: 'W2', value: 92 }, { label: 'Week 3', short: 'W3', value: 94 }, { label: 'Week 4', short: 'W4', value: 89 }, { label: 'Week 5', short: 'W5', value: 95 }, { label: 'Week 6', short: 'W6', value: 98 }];
+const DEPTS = [{ l: 'Piping', v: 40, c: '#1C5DAA' }, { l: 'Process', v: 20, c: '#5F95D8' }, { l: 'Mechanical', v: 15, c: '#F2CF1F' }, { l: 'Electrical', v: 15, c: '#0A2342' }, { l: 'Civil', v: 10, c: '#A9C4EA' }];
+const GRADES = [{ l: 'Distinction (75%+)', v: 9, c: '#1C5DAA' }, { l: 'First class (60–74%)', v: 14, c: '#5F95D8' }, { l: 'Pass (40–59%)', v: 4, c: '#F2CF1F' }, { l: 'Needs re-test', v: 1, c: '#C7CCDA' }];
+const FEEDBACK = [{ l: 'Trainer knowledge', v: 4.8 }, { l: 'Relevance to projects', v: 4.6 }, { l: 'Course material', v: 4.4 }, { l: 'Practical exercises', v: 4.5 }, { l: 'Overall satisfaction', v: 4.7 }];
+
+function StackedPrePost() {
+  const max = 35, W = 640, H = 260, top = 20, bottom = 34, left = 30, plotH = H - top - bottom;
+  const slot = (W - left - 6) / STUDENTS.length, bw = Math.min(40, slot * 0.55);
   return (
-    <div className="ct-report ct-impact" data-fade>
-      <div className="ct-impact-copy">
-        <span className="ct-eyebrow">Training impact · Sample</span>
-        <h3>Measurable Improvement After Every Programme</h3>
-        <p>Every corporate client receives a progress report comparing each batch before and after training, so the impact is clear and measurable.</p>
-        <div className="ct-impact-stat">
-          <b>+{lift}%</b>
-          <span>Rise in batch average score<br />from Pre-Test to Post-Test</span>
-        </div>
-        <em className="ct-sample-note">Illustrative figures shown for a typical batch.</em>
+    <svg className="ct-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Sample pre-test and post-test marks per trainee, stacked">
+      {[0, 10, 20, 30].map((t) => { const y = top + plotH - (t / max) * plotH; return <g key={t}><line x1={left} x2={W - 6} y1={y} y2={y} className="ct-grid" /><text x={left - 8} y={y + 4} className="ct-tick" textAnchor="end">{t}</text></g>; })}
+      {STUDENTS.map((s, i) => {
+        const x = left + slot * i + (slot - bw) / 2, hPre = (s.pre / max) * plotH, hPost = (s.post / max) * plotH, yPre = top + plotH - hPre, yPost = yPre - hPost;
+        return (
+          <g key={s.n} className="ct-bar">
+            <title>{`${s.n}: Pre-Test ${s.pre}, Post-Test ${s.post} (out of 20)`}</title>
+            <path d={`M${x},${top + plotH} V${yPre} H${x + bw} V${top + plotH} Z`} fill="#A9C4EA" />
+            <path d={`M${x},${yPre - 1} V${yPost + 4} Q${x},${yPost} ${x + 4},${yPost} H${x + bw - 4} Q${x + bw},${yPost} ${x + bw},${yPost + 4} V${yPre - 1} Z`} fill="#1C5DAA" />
+            <text x={x + bw / 2} y={yPost - 7} className="ct-val" textAnchor="middle">+{s.post - s.pre}</text>
+            <text x={x + bw / 2} y={top + plotH + 18} className="ct-cat" textAnchor="middle">{`T${i + 1}`}</text>
+          </g>
+        );
+      })}
+      <line x1={left} x2={W - 6} y1={top + plotH} y2={top + plotH} className="ct-axis" />
+    </svg>
+  );
+}
+
+function Donut({ data, label, centre, sub }: { data: { l: string; v: number; c: string }[]; label: string; centre: string; sub: string }) {
+  const total = data.reduce((a, d) => a + d.v, 0), R = 70, C = 2 * Math.PI * R;
+  let acc = 0;
+  return (
+    <div className="ct-donut">
+      <svg viewBox="0 0 200 200" role="img" aria-label={label}>
+        <circle cx="100" cy="100" r={R} fill="none" stroke="#EEF1F7" strokeWidth="30" />
+        {data.map((d) => { const len = (d.v / total) * C, off = acc; acc += len; return (
+          <circle key={d.l} cx="100" cy="100" r={R} fill="none" stroke={d.c} strokeWidth="30" strokeDasharray={`${Math.max(len - 2, 0)} ${C}`} strokeDashoffset={-off} transform="rotate(-90 100 100)"><title>{`${d.l}: ${d.v}`}</title></circle>
+        ); })}
+        <text x="100" y="98" textAnchor="middle" className="ct-donut-c">{centre}</text>
+        <text x="100" y="118" textAnchor="middle" className="ct-donut-s">{sub}</text>
+      </svg>
+      <ul className="ct-donut-key">{data.map((d) => <li key={d.l}><i style={{ background: d.c }} />{d.l}<b>{Math.round((d.v / total) * 100)}%</b></li>)}</ul>
+    </div>
+  );
+}
+
+function SampleReport() {
+  const preAvg = STUDENTS.reduce((a, s) => a + s.pre, 0) / STUDENTS.length, postAvg = STUDENTS.reduce((a, s) => a + s.post, 0) / STUDENTS.length;
+  const lift = Math.round(((postAvg - preAvg) / preAvg) * 100);
+  const att = Math.round(WEEKS.reduce((a, w) => a + w.value, 0) / WEEKS.length);
+  const passed = GRADES.slice(0, 3).reduce((a, g) => a + g.v, 0), all = GRADES.reduce((a, g) => a + g.v, 0);
+  return (
+    <div className="ct-report" data-fade>
+      <div className="ct-report-head">
+        <span className="ct-eyebrow">Sample Report · Based on Sample Data</span>
+        <h3>The Report Your Company Receives After Every Training</h3>
+        <p>Scores, attendance, participant mix, assessment results and feedback, all in one report, so the impact of the training is clear and measurable.</p>
       </div>
-      <figure className="ct-chart-card">
-        <figcaption><b>Pre-Test vs Post-Test</b><span>Batch average marks</span></figcaption>
-        <BarChart data={REPORT.prePost} max={16} unit=" marks" height={240} ariaLabel={`Sample batch average marks: Pre-Test ${pre}, Post-Test ${post}`} />
-        <div className="ct-legend"><span><i style={{ background: '#5F95D8' }} />Pre-Test (before training)</span><span><i style={{ background: '#1C5DAA' }} />Post-Test (after training)</span></div>
-      </figure>
+      <div className="ct-kpis">
+        <div className="is-lift"><b>+{lift}%</b><span>Rise in average score, Pre-Test to Post-Test</span></div>
+        <div><b>{att}%</b><span>Average weekly attendance</span></div>
+        <div><b>{passed}/{all}</b><span>Participants cleared the final assessment</span></div>
+        <div><b>4.6/5</b><span>Average feedback rating</span></div>
+      </div>
+      <div className="ct-charts ct-charts-2">
+        <figure className="ct-chart-card is-full">
+          <figcaption><b>Pre-Test vs Post-Test, per Trainee</b><span>Marks out of 20, stacked</span></figcaption>
+          <StackedPrePost />
+          <div className="ct-legend"><span><i style={{ background: '#A9C4EA' }} />Pre-Test</span><span><i style={{ background: '#1C5DAA' }} />Post-Test</span></div>
+        </figure>
+        <figure className="ct-chart-card">
+          <figcaption><b>Attendance per Week</b><span>% of participants present</span></figcaption>
+          <BarChart data={WEEKS.map((w) => ({ ...w, color: w.value >= 95 ? '#1C5DAA' : '#5F95D8' }))} max={100} unit="%" height={240} ariaLabel="Sample weekly attendance percentages" />
+        </figure>
+        <figure className="ct-chart-card">
+          <figcaption><b>Attendees by Department</b><span>Share of participants</span></figcaption>
+          <Donut data={DEPTS} label="Sample split of attendees by department" centre={`${DEPTS.reduce((a, d) => a + d.v, 0)}`} sub="participants" />
+        </figure>
+        <figure className="ct-chart-card">
+          <figcaption><b>Assessment Result</b><span>Final assessment grades</span></figcaption>
+          <Donut data={GRADES} label="Sample final assessment grade distribution" centre={`${Math.round((passed / all) * 100)}%`} sub="passed" />
+        </figure>
+        <figure className="ct-chart-card">
+          <figcaption><b>Feedback Analysis</b><span>Average rating out of 5</span></figcaption>
+          <ul className="ct-fb">{FEEDBACK.map((f) => <li key={f.l}><span>{f.l}</span><div className="ct-fb-bar"><i style={{ width: `${(f.v / 5) * 100}%` }} /></div><b>{f.v.toFixed(1)}</b></li>)}</ul>
+        </figure>
+      </div>
+      <em className="ct-sample-note">Illustrative figures based on sample data.</em>
     </div>
   );
 }
@@ -378,6 +448,35 @@ export default function CorporateTrainingPage() {
 
   const progs = PROGRAMMES.filter((p) => cat === 'All' || p.cat === cat);
 
+  // ThreeUI-style pointer light: cards get a rim glow that follows the cursor,
+  // feature cards tilt slightly, primary CTAs lean towards the pointer.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !window.matchMedia('(hover: hover) and (pointer: fine)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const LIT = '.ct-track, .ct-prog, .ct-chart-card, .ct-letter, .ct-pr, .ct-kpis > div, .ct-film';
+    const onMove = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      const card = t.closest<HTMLElement>(LIT);
+      if (card) {
+        const r = card.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+        card.style.setProperty('--mx', `${x}px`); card.style.setProperty('--my', `${y}px`);
+        if (card.matches('.ct-track, .ct-chart-card')) {
+          card.style.setProperty('--rx', `${((y / r.height) - 0.5) * -4}deg`); card.style.setProperty('--ry', `${((x / r.width) - 0.5) * 4}deg`);
+        }
+      }
+      const btn = t.closest<HTMLElement>('.ct-btn-yellow, .ct-btn-indigo');
+      if (btn) { const r = btn.getBoundingClientRect(); btn.style.setProperty('--bx', `${(e.clientX - r.left - r.width / 2) * 0.18}px`); btn.style.setProperty('--by', `${(e.clientY - r.top - r.height / 2) * 0.3}px`); }
+    };
+    const onLeave = (e: PointerEvent) => {
+      const el = e.target as HTMLElement;
+      if (el.matches?.('.ct-track, .ct-chart-card')) { el.style.removeProperty('--rx'); el.style.removeProperty('--ry'); }
+      if (el.matches?.('.ct-btn-yellow, .ct-btn-indigo')) { el.style.removeProperty('--bx'); el.style.removeProperty('--by'); }
+    };
+    root.addEventListener('pointermove', onMove, { passive: true });
+    root.addEventListener('pointerout', onLeave, { passive: true });
+    return () => { root.removeEventListener('pointermove', onMove); root.removeEventListener('pointerout', onLeave); };
+  }, []);
+
   return (
     <div className="ct" ref={rootRef}>
       <div className="ct-progress" aria-hidden="true" />
@@ -414,7 +513,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-hero-grid">
               <div>
-                <div className="ct-since"><b>24+ Years</b> of corporate training across India &amp; abroad</div>
+                <div className="ct-since"><b>24+ Years</b> of Corporate Training across India &amp; abroad</div>
                 <h1 aria-label="Training That Is a Rehearsal of Actual Working for Your Engineering Teams.">
                   {HEADLINE.map((w, i) => (
                     <span key={i} aria-hidden="true">
@@ -603,8 +702,8 @@ export default function CorporateTrainingPage() {
               <p>Our Employability Skill Enhancing Training Program brings concepts, codes, software and hands-on project work together, so your people contribute to live projects sooner.</p>
             </div>
             <div className="ct-tracks">
-              <div className="ct-track" data-fade><div className="ct-track-top"><span className="ct-ab" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span></div><h3><mark>Case-Study Training from Concept to Commissioning</mark></h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
-              <div className="ct-track" data-fade><div className="ct-track-top"><span className="ct-ab" aria-hidden="true">B</span><span className="ct-tag">For experienced professionals</span></div><h3><mark>Custom-Made Training Based on Your Projects</mark></h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
+              <div className="ct-track" data-fade><div className="ct-track-top"><span className="ct-tag ct-tag-pill">For Graduate Trainee Engineers</span></div><h3><mark>Case-Study Training from Concept to Commissioning</mark></h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
+              <div className="ct-track" data-fade><div className="ct-track-top"><span className="ct-tag ct-tag-pill">For Experienced Professionals</span></div><h3><mark>Custom-Made Training Based on Your Projects</mark></h3><p>Engineers who have worked on projects for years sharpen their skills in new technologies, concepts, codes and standards, and statutory requirements. Topics are collected from the working team, so the training reduces mistakes on real projects.</p></div>
             </div>
             <div className="ct-principles">
               <div className="ct-pr" data-fade><b>Rehearsal of actual working</b><span>Training mirrors the activities your team performs on projects.</span></div>
