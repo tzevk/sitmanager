@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { publicFormRateLimiter } from '@/lib/rate-limit';
 import { createCorporateInquiry } from '@/lib/services/corporate-inquiry.service';
+import { getPool } from '@/lib/db';
 
 export const runtime = 'nodejs';
 
@@ -47,11 +48,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Please enter a valid phone number.' }, { status: 400 });
     }
 
-    const location = modeKey === 'site' ? 'At client site' : modeKey === 'sit' ? 'At SIT' : 'Online';
+    const where = modeKey === 'site' ? "At company's site" : modeKey === 'sit' ? 'At SIT' : 'Online';
+    const location = modeKey === 'site' && city ? `${where} – ${city}` : where;
+    // The staff form picks a course; website enquiries use "Others" + the chosen area as free text.
+    const [oc] = await getPool().query("SELECT Course_Id FROM course_mst WHERE LOWER(TRIM(Course_Name)) = 'others' AND (IsDelete = 0 OR IsDelete IS NULL) LIMIT 1");
+    const othersCourseId = (oc as Array<{ Course_Id?: unknown }>)[0]?.Course_Id;
     const remark = [
       'Enquiry from the public Corporate Training page.',
       `Training area: ${area}`,
-      `Preferred mode: ${location}`,
+      `Where: ${where}`,
       message ? `Requirements: ${message}` : '',
     ].filter(Boolean).join('\n');
 
@@ -63,18 +68,19 @@ export async function POST(req: NextRequest) {
       City: city || undefined,
       Mobile: phone,
       Email: email,
+      Course_Id: othersCourseId != null ? String(othersCourseId) : undefined,
       CourseOther: area,
       TrainingMode: MODES[modeKey],
       TrainingLocation: location,
       Participants_Fresher: count(body.freshers),
       Participants_Experienced: count(body.experienced),
-      business: 'Website – Corporate Training page',
+      business: area,
       Remark: remark,
     });
 
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error: unknown) {
     console.error('public corporate-inquiry error:', error);
-    return NextResponse.json({ error: 'We could not send your enquiry. Please call +91 98215 69885.' }, { status: 500 });
+    return NextResponse.json({ error: 'We could not send your enquiry. Please call +91 91672 19401.' }, { status: 500 });
   }
 }

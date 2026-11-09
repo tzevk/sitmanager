@@ -52,10 +52,10 @@ const STEPS = [
   ['Pre-test', 'Checks each participant’s starting level before training begins.'],
   ['Assessment', 'Regular checks of understanding during the programme.'],
   ['Assignments', 'Practical work based on real project activities.'],
-  ['Final exam', 'A closing test of what each participant has learned.'],
   ['Training material', 'Recorded as part of each participant’s evaluation.'],
   ['Attendance', 'Recorded for every session.'],
   ['Feedback', 'Collected from participants and from the client.'],
+  ['Final exam', 'A closing test of what each participant has learned.'],
   ['SIT Certificate', 'Issued on the basis of performance and attendance.'],
 ];
 
@@ -73,9 +73,9 @@ const LETTERS = [
 const NAV = [
   ['#conducted', 'Trainings Conducted'],
   ['#programmes', 'Programmes'],
-  ['#csr', 'CSR – TCE'],
   ['#method', 'Training Method'],
   ['#evaluation', 'Evaluation'],
+  ['#csr', 'Sample Progress Reports'],
   ['#feedback', 'Client Feedback'],
 ];
 
@@ -240,10 +240,10 @@ export default function CorporateTrainingPage() {
     try {
       const res = await fetch('/api/public/corporate-inquiry', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'We could not send your enquiry. Please call +91 98215 69885.');
+      if (!res.ok) throw new Error(data.error || 'We could not send your enquiry. Please call +91 91672 19401.');
       setSent(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'We could not send your enquiry. Please call +91 98215 69885.');
+      setError(err instanceof Error ? err.message : 'We could not send your enquiry. Please call +91 91672 19401.');
     } finally { setSending(false); }
   }
 
@@ -461,37 +461,11 @@ export default function CorporateTrainingPage() {
           </div>
         </section>
 
-        {/* ── 3. CSR – TCE ── */}
-        <section className="ct-section ct-dark" id="csr">
-          <div className="ct-wrap">
-            <div className="ct-csr-grid">
-              <div data-fade>
-                <div className="ct-head" style={{ marginBottom: 0 }}>
-                  <span className="ct-eyebrow"><b>03</b>CSR report · Tata Consulting Engineers</span>
-                  <h2>Skilling diploma holders with <em>Tata Consulting Engineers</em></h2>
-                  <p>SIT delivers TCE’s training programme for diploma holders, building job-ready skills in piping, electrical and civil engineering. The programme has run at TCE’s Jamshedpur, Pune and Mumbai locations.</p>
-                </div>
-                <div className="ct-csr-nums">
-                  <div><b>162</b><span>trainees in the Jamshedpur 2023–24 batch</span></div>
-                  <div><b>3</b><span>disciplines: piping, electrical, civil</span></div>
-                  <div><b>3</b><span>locations: Jamshedpur, Pune, Mumbai</span></div>
-                </div>
-                <div className="ct-chips"><span>Piping</span><span>Electrical</span><span>Civil</span><span>Diploma holders</span></div>
-              </div>
-              <div className="ct-csr-pics" data-fade>
-                <Zoom file="tcejam3" caption="TCE Jamshedpur – piping session" onOpen={setShot} />
-                <Zoom file="tcejam1" caption="TCE Jamshedpur – batch completion" onOpen={setShot} />
-                <Zoom file="tcemum2" caption="TCE Mumbai – diploma holder training" onOpen={setShot} />
-              </div>
-            </div>
-          </div>
-        </section>
-
         {/* ── 4. Training method ── */}
         <section className="ct-section ct-paper" id="method">
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
-              <span className="ct-eyebrow"><b>04</b>Training method</span>
+              <span className="ct-eyebrow"><b>03</b>Training method</span>
               <h2>A holistic training method that makes employees <em>productive from day one</em></h2>
               <p>The Employability Skill Enhancing Training Program covers concepts, codes, software and hands-on project work, shaped for where your people are in their careers.</p>
             </div>
@@ -521,7 +495,7 @@ export default function CorporateTrainingPage() {
         <section className="ct-section ct-paper" id="evaluation" style={{ background: 'var(--paper-2)' }}>
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
-              <span className="ct-eyebrow"><b>05</b>Evaluation</span>
+              <span className="ct-eyebrow"><b>04</b>Evaluation</span>
               <h2>Progress and effectiveness of training is <em>measured</em>, not just conducted</h2>
               <p>Each corporate training is tracked through the same evaluation stages, and the results are shared with your team.</p>
             </div>
@@ -533,6 +507,32 @@ export default function CorporateTrainingPage() {
                 </li>
               ))}
             </ol>
+          </div>
+        </section>
+
+        {/* ── 5. Sample progress reports ── */}
+        <section className="ct-section ct-dark" id="csr">
+          <div className="ct-wrap">
+            <div className="ct-csr-grid">
+              <div data-fade>
+                <div className="ct-head" style={{ marginBottom: 0 }}>
+                  <span className="ct-eyebrow"><b>05</b>Sample progress reports · Tata Consulting Engineers</span>
+                  <h2>Skilling diploma holders with <em>Tata Consulting Engineers</em></h2>
+                  <p>SIT delivers TCE’s training programme for diploma holders, building job-ready skills in piping, electrical and civil engineering. The programme has run at TCE’s Jamshedpur, Pune and Mumbai locations.</p>
+                </div>
+                <div className="ct-csr-nums">
+                  <div><b>162</b><span>trainees in the Jamshedpur 2023–24 batch</span></div>
+                  <div><b>3</b><span>disciplines: piping, electrical, civil</span></div>
+                  <div><b>3</b><span>locations: Jamshedpur, Pune, Mumbai</span></div>
+                </div>
+                <div className="ct-chips"><span>Piping</span><span>Electrical</span><span>Civil</span><span>Diploma holders</span></div>
+              </div>
+              <div className="ct-csr-pics" data-fade>
+                <Zoom file="tcejam3" caption="TCE Jamshedpur – piping session" onOpen={setShot} />
+                <Zoom file="tcejam1" caption="TCE Jamshedpur – batch completion" onOpen={setShot} />
+                <Zoom file="tcemum2" caption="TCE Mumbai – diploma holder training" onOpen={setShot} />
+              </div>
+            </div>
           </div>
         </section>
 
@@ -568,7 +568,7 @@ export default function CorporateTrainingPage() {
                   <p>Share a few details and our corporate training team will contact you with a proposal: syllabus, schedule and mode to fit your project.</p>
                 </div>
                 <div className="ct-contacts">
-                  <div className="ct-contact"><span className="ct-ic">{Icon.phone}</span><div><b>Call or WhatsApp</b><a href="tel:+919821569885">+91 98215 69885</a><a href="tel:+919167219405">+91 91672 19405</a></div></div>
+                  <div className="ct-contact"><span className="ct-ic">{Icon.phone}</span><div><b>Call or WhatsApp</b><a href="tel:+919167219401">+91 91672 19401</a></div></div>
                   <div className="ct-contact"><span className="ct-ic">{Icon.mail}</span><div><b>Email</b><a href="mailto:enquiry@suvidya.ac.in">enquiry@suvidya.ac.in</a></div></div>
                   <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Mumbai Branch</b><span>18/140, Anand Nagar, Nehru Road, Near Vakola Police Station, Vakola, Santacruz (East), Mumbai – 400 055</span></div></div>
                   <div className="ct-contact"><span className="ct-ic">{Icon.pin}</span><div><b>Pune Branch</b><span>303, Success Square, Karve Road, Paschimanagri, Kothrud, Pune – 411 038</span></div></div>
@@ -580,7 +580,7 @@ export default function CorporateTrainingPage() {
                   <div className="ct-done" role="status">
                     <span className="ct-tick">{Icon.tick}</span>
                     <h3>Thank you, we have your enquiry</h3>
-                    <p>Our corporate training team will contact you shortly. For anything urgent, call +91 98215 69885.</p>
+                    <p>Our corporate training team will contact you shortly. For anything urgent, call +91 91672 19401.</p>
                     <button type="button" className="ct-btn ct-btn-indigo" onClick={() => { setForm(EMPTY_FORM); setSent(false); }}>Send another enquiry</button>
                   </div>
                 ) : (
@@ -598,7 +598,7 @@ export default function CorporateTrainingPage() {
                         <option>Engineering</option><option>Design &amp; Drafting</option><option>Software</option><option>Operation &amp; Maintenance</option><option>Specialised / Other</option>
                       </select></label>
                       <label>Where<select id="ct-mode" value={form.mode} onChange={set('mode')}>
-                        <option value="site">At our site</option><option value="sit">At SIT</option><option value="online">Online</option>
+                        <option value="site">At company&apos;s site</option><option value="sit">At SIT</option><option value="online">Online</option>
                       </select></label>
                       <label>Freshers / GETs<input id="ct-freshers" type="number" min={0} inputMode="numeric" value={form.freshers} onChange={set('freshers')} placeholder="0" /></label>
                       <label>Experienced staff<input id="ct-experienced" type="number" min={0} inputMode="numeric" value={form.experienced} onChange={set('experienced')} placeholder="0" /></label>
@@ -619,19 +619,57 @@ export default function CorporateTrainingPage() {
 
       <footer className="ct-foot">
         <div className="ct-wrap">
-          <div className="ct-foot-grid">
+          <div className="ct-foot-cta">
             <div>
-              <p className="ct-foot-name">Suvidya Institute of Technology Pvt. Ltd.</p>
-              <p>Suvidya Institute of Technology Pvt. Ltd. Making engineers and draughtsmen eligible for working in global industry.</p>
+              <p className="ct-foot-kicker">Corporate training</p>
+              <p className="ct-foot-cta-line">Plan a training for your team, built around your syllabus and level.</p>
             </div>
-            <div><b>Corporate Training</b><ul>{NAV.map(([h, l]) => <li key={h}><a href={h}>{l}</a></li>)}<li><a href="#enquiry">Enquiry</a></li></ul></div>
-            <div><b>More from SIT</b><ul>
-              <li><a href="https://suvidya.ac.in/" target="_blank" rel="noopener noreferrer">suvidya.ac.in</a></li>
-              <li><a href="https://suvidya.ac.in/aboutus/" target="_blank" rel="noopener noreferrer">About Us</a></li>
-              <li><a href="https://suvidya.ac.in/placement/" target="_blank" rel="noopener noreferrer">Placements</a></li>
-            </ul></div>
+            <div className="ct-foot-cta-actions">
+              <a className="ct-btn ct-btn-yellow" href="#enquiry">Enquire Now →</a>
+              <a className="ct-foot-phone" href="tel:+919167219401">+91 91672 19401</a>
+            </div>
           </div>
-          <div className="ct-foot-bottom"><span>© 2026 Suvidya Institute of Technology Pvt. Ltd.</span><span>ISO 9001:2015 · ECITB UK affiliated</span></div>
+
+          <div className="ct-foot-grid">
+            <div className="ct-foot-brand">
+              <p className="ct-foot-name">Suvidya Institute of Technology Pvt. Ltd.</p>
+              <p className="ct-foot-tag">Making engineers and draughtsmen eligible for working in global industry, with <b>Engineers training Engineers</b> for 24+ years.</p>
+              <div className="ct-foot-certs" aria-label="Accreditations">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-ecitb.png')} alt="ECITB, United Kingdom" loading="lazy" /></span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-iso.png')} alt="ISO 9001:2015, Bureau of Indian Standards" loading="lazy" /></span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span><img src={IMG('cert-maccia.png')} alt="MACCIA member" loading="lazy" /></span>
+              </div>
+            </div>
+            <nav className="ct-foot-col" aria-label="On this page">
+              <b>Explore</b>
+              <ul>{NAV.map(([h, l]) => <li key={h}><a href={h}>{l}</a></li>)}<li><a href="#enquiry">Enquiry</a></li></ul>
+            </nav>
+            <div className="ct-foot-col">
+              <b>Contact</b>
+              <ul className="ct-foot-contact">
+                <li><span>Phone / WhatsApp</span><a href="tel:+919167219401">+91 91672 19401</a></li>
+                <li><span>Email</span><a href="mailto:enquiry@suvidya.ac.in">enquiry@suvidya.ac.in</a></li>
+                <li><span>Mumbai</span>18/140, Anand Nagar, Nehru Road, Vakola, Santacruz (East), Mumbai – 400 055</li>
+                <li><span>Pune</span>303, Success Square, Karve Road, Kothrud, Pune – 411 038</li>
+              </ul>
+            </div>
+            <div className="ct-foot-col">
+              <b>More from SIT</b>
+              <ul>
+                <li><a href="https://suvidya.ac.in/" target="_blank" rel="noopener noreferrer">suvidya.ac.in ↗</a></li>
+                <li><a href="https://suvidya.ac.in/aboutus/" target="_blank" rel="noopener noreferrer">About Us ↗</a></li>
+                <li><a href="https://suvidya.ac.in/placement/" target="_blank" rel="noopener noreferrer">Placements ↗</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="ct-foot-bottom">
+            <span>© 2026 Suvidya Institute of Technology Pvt. Ltd. All rights reserved.</span>
+            <span>ISO 9001:2015 certified · ECITB UK affiliated</span>
+          </div>
         </div>
       </footer>
 
