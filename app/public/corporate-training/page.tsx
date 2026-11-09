@@ -166,7 +166,7 @@ function Donut({ data, label, centre, sub }: { data: { l: string; v: number; c: 
    with process flow running through the lines. Each station opens that
    programme area below. */
 const PLANT: { id: string; cat: string; label: string; x: number; y: number; lx: number; ly: number; a?: 'start' | 'middle' | 'end' }[] = [
-  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120, lx: 214, ly: 274 },
+  { id: 'col', cat: 'Engineering', label: 'Process & Piping Engineering', x: 170, y: 120, lx: 214, ly: 250 },
   { id: 'rack', cat: 'Design & Drafting', label: 'Design & Drafting', x: 420, y: 92, lx: 434, ly: 100 },
   { id: 'pump', cat: 'Operation & Maintenance', label: 'Operation & Maintenance', x: 560, y: 300, lx: 574, ly: 292 },
   { id: 'tank', cat: 'Others', label: 'Fire, NDT & Offshore', x: 770, y: 150, lx: 770, ly: 124, a: 'middle' },

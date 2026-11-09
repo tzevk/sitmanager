@@ -1609,3 +1609,12 @@
 @media (max-width: 640px) { .ct-letters.ct-carousel { grid-auto-columns: 72%; } }
 
 .ct-kpis b .ct-countup { font: inherit; color: inherit; letter-spacing: inherit; display: inline; line-height: inherit; }
+.ct-plant-chips { display: none; }
+@media (max-width: 760px) {
+  .ct-plant .ct-bp-tag, .ct-plant .ct-bp-dim, .ct-plant-hint, .ct-plant-legend { display: none; }
+  .ct-plant-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .ct-plant-chips button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(169,196,234,.35); background: rgba(255,255,255,.06); color: #fff; font: 600 13px/1.2 var(--body); cursor: pointer; }
+  .ct-plant-chips button i { width: 8px; height: 8px; border-radius: 50%; background: var(--yellow); flex: none; }
+  .ct-plant-chips button[aria-pressed="true"] { background: var(--yellow); color: #0A2342; border-color: var(--yellow); }
+  .ct-plant-chips button[aria-pressed="true"] i { background: #0A2342; }
+}
