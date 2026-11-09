@@ -91,11 +91,11 @@ function Zoom({ file, caption, onOpen }: { file: string; caption: string; onOpen
 }
 
 const REEL = [
-  { file: 'tcejam2', tag: 'CSR · Diploma holders', client: 'Tata Consulting Engineers, Jamshedpur' },
-  { file: 'man3', tag: 'Instrumentation & Control', client: 'MAN Energy Solutions, Aurangabad' },
-  { file: 'tcemum1', tag: 'Piping · Electrical · Civil', client: 'Tata Consulting Engineers, Mumbai' },
-  { file: 'ev2', tag: 'Corporate training', client: 'SIT corporate batch' },
-  { file: 'tcepune1', tag: 'Diploma holder programme', client: 'Tata Consulting Engineers, Pune' },
+  { file: 'ev2', tag: 'Corporate training', client: 'SIT corporate batch', seconds: 10 },
+  { file: 'man3', tag: 'Instrumentation & Control', client: 'MAN Energy Solutions, Aurangabad', seconds: 6 },
+  { file: 'tcemum1', tag: 'Piping · Electrical · Civil', client: 'Tata Consulting Engineers, Mumbai', seconds: 6 },
+  { file: 'tcepune1', tag: 'Diploma holder programme', client: 'Tata Consulting Engineers, Pune', seconds: 6 },
+  { file: 'tcejam2', tag: 'CSR · Diploma holders', client: 'Tata Consulting Engineers, Jamshedpur', seconds: 6 },
 ];
 
 const HEADLINE = 'Training that is a|rehearsal of actual working|for your engineering teams.'
@@ -151,9 +151,9 @@ export default function CorporateTrainingPage() {
   // Hero reel: slow Ken Burns crossfade through real training photos.
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const t = window.setInterval(() => setReel((r) => (r + 1) % REEL.length), 6000);
-    return () => window.clearInterval(t);
-  }, []);
+    const t = window.setTimeout(() => setReel((r) => (r + 1) % REEL.length), REEL[reel].seconds * 1000);
+    return () => window.clearTimeout(t);
+  }, [reel]);
 
   // Fade blocks in (blur + rise, staggered among siblings) as they scroll up;
   // anything already on screen stays visible.
@@ -284,20 +284,20 @@ export default function CorporateTrainingPage() {
           </div>
           <div className="ct-credit" aria-live="off">
             <b>{REEL[reel].tag}</b>{REEL[reel].client}
-            <div className="ct-dots">{REEL.map((r, i) => <i key={r.file} className={i === reel ? 'is-on' : ''} />)}</div>
+            <div className="ct-dots">{REEL.map((r, i) => <i key={r.file} className={i === reel ? 'is-on' : ''} style={{ animationDuration: `${r.seconds}s` }} />)}</div>
           </div>
           <div className="ct-wrap">
             <div className="ct-hero-grid">
               <div>
-                <div className="ct-since"><b>2009 – 2026</b> Corporate training across India &amp; abroad</div>
+                <div className="ct-since"><b>24+ Years</b> of corporate training across India &amp; abroad</div>
                 <h1 aria-label="Training that is a rehearsal of actual working for your engineering teams.">
                   {HEADLINE.map((w, i) => (
                     <span key={i} aria-hidden="true">
-                      <span className="ct-word" style={{ animationDelay: `${0.15 + i * 0.07}s`, color: w.hi ? 'var(--yellow)' : undefined }}>{w.t}</span>{' '}
+                      <span className={`ct-word${w.hi ? ' is-hi' : ''}`} style={{ animationDelay: `${0.15 + i * 0.07}s` }}>{w.t}</span>{' '}
                     </span>
                   ))}
                 </h1>
-                <p className="ct-lede">Suvidya Institute of Technology designs customised training for company employees in engineering design, procurement, construction, operation and maintenance, built around your current project requirements.</p>
+                <p className="ct-lede">Suvidya Institute of Technology designs <strong>customised training for company employees</strong> in engineering design, procurement, construction, operation and maintenance, built around your current project requirements.</p>
                 <div className="ct-cta">
                   <a className="ct-btn ct-btn-yellow" href="#enquiry">Plan a Training →</a>
                   <a className="ct-btn ct-btn-line" href="#conducted">See Trainings Conducted</a>
@@ -323,34 +323,11 @@ export default function CorporateTrainingPage() {
           </div>
         </div>
 
-        {/* ── Accreditation ── */}
-        <section className="ct-section ct-paper" id="about">
-          <div className="ct-wrap">
-            <div className="ct-head" data-fade>
-              <span className="ct-eyebrow">Accreditation &amp; association</span>
-              <h2>Certified, affiliated and <em>trusted by industry</em></h2>
-              <p>SIT was formed to make engineers and draughtsmen eligible for working in global industry. Our corporate programmes carry the same accreditation as our professional courses.</p>
-            </div>
-            <div className="ct-feature" data-fade>
-              <span className="ct-seal">Only in India</span>
-              <strong>ECITB, United Kingdom</strong>
-              <p>SIT is the only institute in India affiliated with the Engineering Construction Industry Training Board, for the Plant Layout Design training programme.</p>
-            </div>
-            <dl className="ct-creds">
-              <div data-fade><dt>ISO 9001:2015</dt><dd>Certified by Bureau of Indian Standards</dd></div>
-              <div data-fade><dt>NSDC</dt><dd>Partner, National Skill Development Corporation</dd></div>
-              <div data-fade><dt>Germany</dt><dd>Certified Fit for Partnership</dd></div>
-              <div data-fade><dt>MSME</dt><dd>Registered with the Ministry of MSME</dd></div>
-              <div data-fade><dt>CII · MCC</dt><dd>Member, Confederation of Indian Industry and Maharashtra Chamber of Commerce</dd></div>
-            </dl>
-          </div>
-        </section>
-
         {/* ── 1. Trainings conducted ── */}
         <section className="ct-section ct-paper" id="conducted" style={{ background: 'var(--paper-2)' }}>
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
-              <span className="ct-eyebrow"><b>01</b>2009 – 2026 · Trainings conducted</span>
+              <span className="ct-eyebrow"><b>01</b>Trainings conducted</span>
               <h2>Corporate trainings <em>we have delivered</em></h2>
               <p>Over two decades, clients have come back to us for repeat training. Each programme below was delivered on site or at SIT, with a syllabus built for that team.</p>
             </div>
@@ -382,8 +359,8 @@ export default function CorporateTrainingPage() {
             </div>
             <div className="ct-ledger" data-fade>
               <p className="ct-ledger-title">Also delivered</p>
-              <ul>
-                {MORE_EVENTS.map(([c, t]) => <li key={c + t}><b>{c}</b><span>{t}</span></li>)}
+              <ul className="ct-ledger-list" tabIndex={0} aria-label="Other trainings delivered (scroll for more)">
+                {MORE_EVENTS.map(([c, t]) => <li key={c + t}><b>{t}</b><span>{c}</span></li>)}
               </ul>
             </div>
           </div>
@@ -398,11 +375,59 @@ export default function CorporateTrainingPage() {
             </div>
           </div>
           <div className="ct-wrap">
-            <div className="ct-syllabus" data-fade>
-              <div className="ct-ico">{Icon.doc}</div>
-              <div><b>Every syllabus is custom-made</b><p>We collect the list of topics from your working team and turn it into a training programme, so the training covers the work your engineers actually do.</p></div>
-              <a className="ct-btn ct-btn-yellow" href="#enquiry">Request a sample syllabus</a>
+            <div className="ct-tailor" data-fade>
+              <div className="ct-tailor-main">
+                <span className="ct-eyebrow">Built around your team</span>
+                <p className="ct-tailor-line"><mark>Training will be provided as per your syllabus and training level.</mark></p>
+                <p className="ct-tailor-sub">Share the topics your engineers work on. We shape the syllabus, depth and pace to match, whether they are new graduates or senior professionals.</p>
+                <a className="ct-btn ct-btn-indigo" href="#enquiry">Request a sample syllabus →</a>
+              </div>
+              <ol className="ct-tailor-steps">
+                <li><span>1</span><b>Share your topics</b><em>From your working team and current projects</em></li>
+                <li><span>2</span><b>We set syllabus &amp; level</b><em>Fresher, intermediate or advanced</em></li>
+                <li><span>3</span><b>Your team is trained</b><em>On site, at SIT or online</em></li>
+              </ol>
             </div>
+          </div>
+        </section>
+
+        {/* ── Accreditation ── */}
+        <section className="ct-section ct-paper" id="about">
+          <div className="ct-wrap">
+            <div className="ct-head" data-fade>
+              <span className="ct-eyebrow">Accreditation &amp; association</span>
+              <h2>Certified, affiliated and <em>trusted by industry</em></h2>
+              <p>SIT was formed to make engineers and draughtsmen eligible for working in global industry. Our corporate programmes carry the same accreditation as our professional courses.</p>
+            </div>
+            <ul className="ct-certs">
+              <li data-fade>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-ecitb.png')} alt="ECITB logo" loading="lazy" /></span>
+                <b>ECITB, United Kingdom</b><span>Affiliated for Plant Layout Design training</span>
+              </li>
+              <li data-fade>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-iso.png')} alt="ISO 9001:2015 certification mark, Bureau of Indian Standards" loading="lazy" /></span>
+                <b>ISO 9001:2015</b><span>Certified by Bureau of Indian Standards</span>
+              </li>
+              <li data-fade>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <span className="ct-cert-logo"><img src={IMG('cert-maccia.png')} alt="MACCIA logo" loading="lazy" /></span>
+                <b>Maharashtra Chamber of Commerce</b><span>Member, apex chamber of Maharashtra State</span>
+              </li>
+              <li data-fade>
+                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">CII</span>
+                <b>Confederation of Indian Industry</b><span>Member</span>
+              </li>
+              <li data-fade>
+                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">MSME</span>
+                <b>MSME Registered</b><span>Ministry of Micro, Small and Medium Enterprises</span>
+              </li>
+              <li data-fade>
+                <span className="ct-cert-logo ct-cert-text" aria-hidden="true">DE</span>
+                <b>Fit for Partnership with Germany</b><span>Certified</span>
+              </li>
+            </ul>
           </div>
         </section>
 
@@ -467,8 +492,8 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>04</b>Training method</span>
-              <h2>Two tracks, one goal: <em>productive from day one</em></h2>
-              <p>The Employability Skill Enhancing Training Program is shaped for where your people are in their careers.</p>
+              <h2>A holistic training method that makes employees <em>productive from day one</em></h2>
+              <p>The Employability Skill Enhancing Training Program covers concepts, codes, software and hands-on project work, shaped for where your people are in their careers.</p>
             </div>
             <div className="ct-tracks">
               <div className="ct-track" data-fade><span className="ct-mark" aria-hidden="true">A</span><span className="ct-tag">For graduate trainee engineers</span><h3>Case-study training from concept to commissioning</h3><p>To bring new engineers into working in the shortest time, they are trained and guided through the project activities done regularly from concept to commissioning, using case studies.</p></div>
@@ -480,10 +505,14 @@ export default function CorporateTrainingPage() {
               <div className="ct-pr" data-fade><b>Codes &amp; standards</b><span>Detailed concept engineering with the relevant codes and standards.</span></div>
               <div className="ct-pr" data-fade><b>Industry software</b><span>PDMS, E3D, CAESAR II, AutoCAD and more, taught with the engineering concepts.</span></div>
             </div>
+            <div className="ct-trainers" data-fade>
+              <p>Our trainers are retired, experienced professionals who believe in <b>‘Engineers training Engineers’</b> and in making engineers ready for projects.</p>
+              <p>They are trainers who wish to impart their experience and knowledge to the next generation.</p>
+            </div>
             <div className="ct-banner" data-fade>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={IMG('tcepune2.jpg')} alt="Classroom training for Tata Consulting Engineers trainees, Pune" loading="lazy" />
-              <p>Trainers with <span>20+ years</span> of industry experience, teaching what they have built.</p>
+              <p><span>Engineers training Engineers.</span> All of our trainers are retired, experienced professionals who make your engineers ready for projects.</p>
             </div>
           </div>
         </section>
@@ -493,7 +522,7 @@ export default function CorporateTrainingPage() {
           <div className="ct-wrap">
             <div className="ct-head" data-fade>
               <span className="ct-eyebrow"><b>05</b>Evaluation</span>
-              <h2>Every participant is <em>measured</em>, not just attended</h2>
+              <h2>Progress and effectiveness of training is <em>measured</em>, not just conducted</h2>
               <p>Each corporate training is tracked through the same evaluation stages, and the results are shared with your team.</p>
             </div>
             <ol className="ct-line">
@@ -602,7 +631,7 @@ export default function CorporateTrainingPage() {
               <li><a href="https://suvidya.ac.in/placement/" target="_blank" rel="noopener noreferrer">Placements</a></li>
             </ul></div>
           </div>
-          <div className="ct-foot-bottom"><span>© 2026 Suvidya Institute of Technology Pvt. Ltd.</span><span>ISO 9001:2015 · ECITB UK · NSDC Partner</span></div>
+          <div className="ct-foot-bottom"><span>© 2026 Suvidya Institute of Technology Pvt. Ltd.</span><span>ISO 9001:2015 · ECITB UK affiliated</span></div>
         </div>
       </footer>
 
