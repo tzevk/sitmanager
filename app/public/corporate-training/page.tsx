@@ -12,7 +12,7 @@ const CLIENT_LOGOS = ['27', '28-1', '29-1', '30-1', '33-1', '34', '35-1', '36-1'
 
 const EVENTS = [
   { client: 'MAN Energy Solutions India Pvt. Ltd, Aurangabad', title: 'Instrumentation & Control Training', desc: 'Instrumentation and control engineering for the in-house engineering team.', pics: ['man1', 'man2', 'man3'] },
-  { client: 'Tata Consulting Engineers Ltd, Jamshedpur', title: 'Piping, Electrical & Civil Training for Diploma Holders', desc: '2023–24 batch of 162 trainees, started July 2023.', pics: ['tcejam2', 'tcejam1', 'tcejam3'] },
+  { client: 'Tata Consulting Engineers Ltd, Jamshedpur', title: 'Piping, Electrical & Civil Training for Diploma Holders', desc: '2023–24 batch of 162 trainees, started July 2023.', pics: ['tcejam2', 'tcejam1', 'tcejam3'], mirror: true },
   { client: 'Tata Consulting Engineers Ltd, Pune', title: 'Piping, Electrical & Civil Training for Diploma Holders', desc: 'Job-ready discipline training for diploma holders joining TCE.', pics: ['tcepune1', 'tcepune2'] },
   { client: 'Tata Consulting Engineers Ltd, Mumbai', title: 'Piping, Electrical & Civil Training for Diploma Holders', desc: 'The diploma-holder programme, delivered for TCE Mumbai.', pics: ['tcemum1', 'tcemum2'] },
 ];
@@ -484,7 +484,7 @@ export default function CorporateTrainingPage() {
               {EVENTS.map((ev) => (
                 <button
                   type="button"
-                  className="ct-film"
+                  className={`ct-film${(ev as { mirror?: boolean }).mirror ? ' is-mirror' : ''}`}
                   key={ev.client}
                   data-fade
                   aria-label={`View photos: ${ev.client}: ${ev.title}`}
