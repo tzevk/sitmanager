@@ -79,6 +79,101 @@ const NAV = [
   ['#feedback', 'Client Feedback'],
 ];
 
+
+/* Sample productivity report: TCE Utkarsh, Jamshedpur, Civil Engineering batch, 12 Nov to 9 Dec 2025.
+   Figures from SIT's completion report for that batch (no individual student data shown). */
+const REPORT = {
+  prePost: [{ label: 'Pre-Test', value: 11.3, color: '#5F95D8' }, { label: 'Post-Test', value: 14.0, color: '#1C5DAA' }],
+  topics: [
+    { label: 'Fundamentals of Civil Engg.', short: 'Fundamentals', value: 20.4 },
+    { label: 'Foundation', short: 'Foundation', value: 22.7 },
+    { label: 'RC Design', short: 'RC Design', value: 21.2 },
+    { label: 'Design of Steel Structure', short: 'Steel Structure', value: 20.3 },
+    { label: 'Codes & Standards', short: 'Codes & Std.', value: 19.5 },
+    { label: 'Pipe Support', short: 'Pipe Support', value: 20.7 },
+  ],
+  weeks: [
+    { label: 'Week 1', note: '12 to 15 Nov · Common training', value: 32 },
+    { label: 'Week 2', note: '17 to 22 Nov · Civil', value: 48 },
+    { label: 'Week 3', note: '24 to 29 Nov · Civil', value: 48 },
+    { label: 'Week 4', note: '1 to 6 Dec · Civil', value: 48 },
+    { label: 'Week 5', note: '8 to 9 Dec · Civil', value: 16 },
+  ],
+};
+
+type Bar = { label: string; short?: string; note?: string; value: number; color?: string };
+function BarChart({ data, max, unit, height = 220, ariaLabel }: { data: Bar[]; max: number; unit: string; height?: number; ariaLabel: string }) {
+  const W = 100 * data.length + 40, H = height, top = 26, bottom = 40, left = 34;
+  const plotH = H - top - bottom, slot = (W - left - 6) / data.length, bw = Math.min(56, slot * 0.56);
+  const ticks = [0, max / 2, max];
+  return (
+    <svg className="ct-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={ariaLabel} preserveAspectRatio="xMidYMid meet">
+      {ticks.map((t) => {
+        const y = top + plotH - (t / max) * plotH;
+        return (<g key={t}><line x1={left} x2={W - 6} y1={y} y2={y} className="ct-grid" /><text x={left - 8} y={y + 4} className="ct-tick" textAnchor="end">{Number.isInteger(t) ? t : t.toFixed(1)}</text></g>);
+      })}
+      {data.map((d, i) => {
+        const h = (d.value / max) * plotH, x = left + slot * i + (slot - bw) / 2, y = top + plotH - h, r = Math.min(4, h / 2);
+        return (
+          <g key={d.label} className="ct-bar">
+            <title>{`${d.label}${d.note ? ` (${d.note})` : ''}: ${d.value}${unit}`}</title>
+            <rect x={left + slot * i} y={top} width={slot} height={plotH + bottom} fill="transparent" />
+            <path d={`M${x},${top + plotH} V${y + r} Q${x},${y} ${x + r},${y} H${x + bw - r} Q${x + bw},${y} ${x + bw},${y + r} V${top + plotH} Z`} fill={d.color || '#1C5DAA'} />
+            <text x={x + bw / 2} y={y - 8} className="ct-val" textAnchor="middle">{d.value}</text>
+            <text x={x + bw / 2} y={top + plotH + 18} className="ct-cat" textAnchor="middle">{d.short || d.label}</text>
+          </g>
+        );
+      })}
+      <line x1={left} x2={W - 6} y1={top + plotH} y2={top + plotH} className="ct-axis" />
+    </svg>
+  );
+}
+
+function SampleReport() {
+  const lift = Math.round(((14.0 - 11.3) / 11.3) * 100);
+  return (
+    <div className="ct-report" data-fade>
+      <div className="ct-report-head">
+        <span className="ct-eyebrow">Sample report · TCE Utkarsh, Jamshedpur</span>
+        <h3>Civil Engineering Batch, November to December 2025</h3>
+        <p>A real example of the progress report every client receives: before and after scores, topic-wise assessment and training hours delivered.</p>
+      </div>
+      <div className="ct-kpis">
+        <div><b>70</b><span>Diploma holders trained</span></div>
+        <div><b>192</b><span>Training hours (32 common + 160 civil)</span></div>
+        <div><b>5</b><span>Weeks, 12 Nov to 9 Dec 2025</span></div>
+        <div className="is-lift"><b>+{lift}%</b><span>Rise in batch average score, 11.3 to 14.0</span></div>
+      </div>
+      <div className="ct-charts">
+        <figure className="ct-chart-card">
+          <figcaption><b>Pre-Test vs Post-Test</b><span>Batch average marks</span></figcaption>
+          <BarChart data={REPORT.prePost} max={16} unit=" marks" ariaLabel="Batch average marks: Pre-Test 11.3, Post-Test 14.0" />
+          <div className="ct-legend"><span><i style={{ background: '#5F95D8' }} />Pre-Test</span><span><i style={{ background: '#1C5DAA' }} />Post-Test</span></div>
+        </figure>
+        <figure className="ct-chart-card is-wide">
+          <figcaption><b>Assessment by Topic</b><span>Batch average assessment marks</span></figcaption>
+          <BarChart data={REPORT.topics} max={25} unit=" marks" ariaLabel="Average assessment marks by topic" />
+        </figure>
+        <figure className="ct-chart-card is-full">
+          <figcaption><b>Training Hours by Week</b><span>192 hours delivered in five weeks</span></figcaption>
+          <BarChart data={REPORT.weeks} max={50} unit=" hours" height={200} ariaLabel="Training hours per week: 32, 48, 48, 48, 16" />
+        </figure>
+      </div>
+      <details className="ct-report-data">
+        <summary>View the data</summary>
+        <table>
+          <thead><tr><th scope="col">Measure</th><th scope="col">Value</th></tr></thead>
+          <tbody>
+            {REPORT.prePost.map((d) => <tr key={d.label}><td>{d.label} batch average</td><td>{d.value} marks</td></tr>)}
+            {REPORT.topics.map((d) => <tr key={d.label}><td>Assessment: {d.label}</td><td>{d.value} marks</td></tr>)}
+            {REPORT.weeks.map((d) => <tr key={d.label}><td>{d.label} ({d.note})</td><td>{d.value} hours</td></tr>)}
+          </tbody>
+        </table>
+      </details>
+    </div>
+  );
+}
+
 type Shot = { src: string; caption: string };
 
 function Zoom({ file, caption, onOpen }: { file: string; caption: string; onOpen: (s: Shot) => void }) {
@@ -587,6 +682,7 @@ export default function CorporateTrainingPage() {
                 <Zoom file="tcemum2" caption="TCE Mumbai: diploma holder training" onOpen={setShot} />
               </div>
             </div>
+            <SampleReport />
           </div>
         </section>
 

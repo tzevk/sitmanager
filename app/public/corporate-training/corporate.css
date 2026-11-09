@@ -1302,3 +1302,72 @@
 /* logos always fit inside their plates */
 .ct-cert-logo { overflow: hidden; padding: 8px; }
 .ct-cert-logo img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ═══ Sample productivity report: KPIs + charts ═══ */
+.ct-report { margin-top: clamp(40px, 5vw, 64px); border-radius: 24px; padding: clamp(22px, 3.5vw, 44px); border: 1px solid transparent;
+  background: linear-gradient(180deg, #FBFCFE, #F2F4F9) padding-box, linear-gradient(140deg, rgba(42,107,181,.45), rgba(205,210,226,.6) 45%, rgba(250,228,82,.55)) border-box;
+  box-shadow: var(--rim), var(--e3); }
+.ct-report-head { display: grid; gap: 10px; max-width: 760px; margin-bottom: 26px; }
+.ct-report-head h3 { font: 800 clamp(22px, 2.2vw, 30px)/1.15 var(--display); font-stretch: 110%; letter-spacing: -.02em; color: var(--head); }
+.ct-report-head p { color: var(--muted); }
+.ct-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.ct-kpis div { background: #fff; border: 1px solid rgba(28,93,170,.12); border-radius: 14px; padding: 16px 18px; display: grid; gap: 4px; box-shadow: var(--e1); }
+.ct-kpis b { font: 800 clamp(28px, 2.8vw, 40px)/1 var(--display); color: var(--head); font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.ct-kpis span { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.ct-kpis .is-lift { background: linear-gradient(160deg, #1C5DAA, #123E73); border-color: transparent; }
+.ct-kpis .is-lift b { color: var(--yellow); }
+.ct-kpis .is-lift span { color: rgba(233,238,248,.9); }
+.ct-charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
+.ct-chart-card { margin: 0; background: #fff; border: 1px solid rgba(28,93,170,.12); border-radius: 16px; padding: 18px 18px 12px; box-shadow: var(--e1); display: grid; gap: 8px; min-width: 0; }
+.ct-chart-card.is-full { grid-column: 1 / -1; }
+.ct-chart-card figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+.ct-chart-card figcaption b { font: 700 16px/1.2 var(--display); color: var(--head); }
+.ct-chart-card figcaption span { font-size: 12.5px; color: var(--muted); }
+.ct-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.ct-chart .ct-grid { stroke: rgba(28,93,170,.12); stroke-width: 1; }
+.ct-chart .ct-axis { stroke: rgba(10,35,66,.35); stroke-width: 1; }
+.ct-chart .ct-tick { font: 500 11px var(--mono); fill: #6B7591; }
+.ct-chart .ct-val { font: 700 13px var(--display); fill: var(--head); }
+.ct-chart .ct-cat { font: 500 11.5px var(--body); fill: #3B4462; }
+.ct-chart .ct-bar path { transition: opacity .3s, filter .3s; }
+.ct-chart:hover .ct-bar path { opacity: .55; }
+.ct-chart .ct-bar:hover path { opacity: 1; filter: drop-shadow(0 6px 10px rgba(28,93,170,.35)); }
+.ct-legend { display: flex; gap: 16px; font-size: 13px; color: #3B4462; padding: 0 4px 4px; }
+.ct-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ct-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.ct-report-data { margin-top: 16px; }
+.ct-report-data summary { cursor: pointer; color: var(--indigo); font-weight: 600; font-size: 14px; min-height: 44px; display: inline-flex; align-items: center; }
+.ct-report-data table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 8px; background: #fff; border-radius: 12px; overflow: hidden; }
+.ct-report-data th, .ct-report-data td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.ct-report-data td:last-child, .ct-report-data th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 1000px) { .ct-kpis { grid-template-columns: 1fr 1fr; } .ct-charts { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .ct-chart .ct-cat { font-size: 13px; } }
+
+/* full-width chart: keep text at the same scale as the other charts */
+.ct-chart-card.is-full .ct-chart { max-width: 760px; margin: 0 auto; }
+
+/* ═══ Nav: links visible on laptops, Corporate Training highlighted ═══ */
+.ct-brand-text span { display: inline-block; justify-self: start; font: 800 11.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--indigo-ink) !important; background: linear-gradient(135deg, #FAE452, #F2CF1F); padding: 5px 9px 4px; border-radius: 6px; box-shadow: 0 4px 10px -6px rgba(10,35,66,.5); }
+.ct-brand-text b { font-size: 15px; }
+@media (min-width: 1181px) {
+  .ct-links { display: flex !important; margin-left: auto; margin-right: 6px; gap: 0; }
+  .ct-menu-btn { display: none !important; }
+  .ct-menu { display: none !important; }
+  .ct-nav-cta { margin-left: 4px; }
+}
+@media (min-width: 1181px) and (max-width: 1440px) {
+  .ct-links a { font-size: 13px; padding: 10px 7px; }
+  .ct-brand img { height: 50px; }
+  .ct-brand-text b { font-size: 13.5px; max-width: 17ch; white-space: normal; line-height: 1.2; }
+  .ct-nav-cta { padding: 12px 16px; font-size: 13.5px; }
+}
+@media (max-width: 1180px) {
+  .ct-links { display: none !important; }
+  .ct-menu-btn { display: grid !important; margin-left: var(--s1); }
+  .ct-nav-cta { margin-left: auto; }
+}
+@media (max-width: 520px) { .ct-menu-btn { margin-left: auto; } }
+@media (max-width: 400px) { .ct-brand-text { display: grid !important; } .ct-brand-text b { display: none; } }
+
+.ct-menu-btn { flex: none; }
+@media (max-width: 520px) { .ct-brand { min-width: 0; gap: 10px; } .ct-brand-text { padding-left: 10px; } .ct-brand-text span { font-size: 10px; padding: 4px 7px 3px; letter-spacing: .1em; } }
