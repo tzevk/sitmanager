@@ -147,7 +147,7 @@ function ContactActionIcon({ channel }: { channel: string }) {
   return <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.9 5.25a2 2 0 002.2 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>;
 }
 
-export default function AddInquiryPage() {
+function AddInquiryForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get('editId') ? parseInt(searchParams.get('editId')!) : null;
@@ -1540,4 +1540,14 @@ export default function AddInquiryPage() {
       )}
     </div>
   );
+}
+
+// The sidebar's "Add Inquiry" link and the edit links all land on this same route,
+// so Next.js keeps the component mounted and only swaps the query string. Without a
+// remount, going from ?editId=X to a blank "Add" kept X's name/mobile/etc. in state
+// (ticket #83: new-inquiry form kept showing the previous lead). Keying on the query
+// string gives every add/edit/prefill URL a fresh form.
+export default function AddInquiryPage() {
+  const searchParams = useSearchParams();
+  return <AddInquiryForm key={searchParams.toString()} />;
 }
