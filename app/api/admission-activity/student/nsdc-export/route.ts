@@ -28,6 +28,42 @@ function buildSearch(field: string, value: string) {
   };
 }
 
+const mobileKey = (v: unknown) => String(v ?? '').replace(/\D/g, '').slice(-10);
+const textKey = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9@.]/g, '');
+
+// Some people were admitted more than once into the same batch, so they have
+// 2-3 student records. NSDC needs one row per candidate. Rows are merged only
+// when mobile AND batch match AND the name or e-mail also matches, so two
+// different people sharing a phone number are never merged. The kept row is
+// the one marked Admitted (Status_id 8), otherwise the newest.
+function dedupeCandidates(rows: any[]): any[] {
+  const groups = new Map<string, any[]>();
+  const out: any[] = [];
+  for (const r of rows) {
+    const m = mobileKey(r.Present_Mobile);
+    if (m.length < 10 || /^(\d)\1+$/.test(m)) { out.push(r); continue; }
+    const k = `${m}|${String(r.Batch_Code ?? '').trim()}`;
+    const g = groups.get(k);
+    if (g) g.push(r); else groups.set(k, [r]);
+  }
+  for (const g of groups.values()) {
+    const kept: any[] = [];
+    for (const r of g) {
+      const same = kept.findIndex((k) =>
+        (textKey(k.Student_Name) && textKey(k.Student_Name) === textKey(r.Student_Name)) ||
+        (textKey(k.Email) && textKey(k.Email) === textKey(r.Email)));
+      if (same < 0) { kept.push(r); continue; }
+      const cur = kept[same];
+      const better = (Number(r.Status_id) === 8) !== (Number(cur.Status_id) === 8)
+        ? Number(r.Status_id) === 8
+        : Number(r.Student_Id) > Number(cur.Student_Id);
+      if (better) kept[same] = r;
+    }
+    out.push(...kept);
+  }
+  return out.sort((a, b) => Number(b.Student_Id) - Number(a.Student_Id));
+}
+
 function csvCell(v: unknown): string {
   return `"${String(v ?? '').replace(/"/g, '""')}"`;
 }
@@ -83,8 +119,16 @@ export async function POST(req: NextRequest) {
          sm.Student_Id, sm.Student_Name, sm.Father_Name, sm.Mother_Name, sm.Sex, sm.DOB,
          sm.Aadhar_Number, sm.Social_Category, sm.Present_Mobile, sm.Email,
          sm.Present_Address, sm.Present_City, sm.Present_State, sm.Present_Pin,
-         sm.Qualification, sm.Batch_Code, c.Course_Name
+         sm.Qualification, sm.Batch_Code, sm.Status_id, c.Course_Name
        FROM student_master sm
+       -- Admitted students only, one row each (same rule as the student list).
+       -- Without this, enquiry-stage rows for the same person were exported too,
+       -- so each candidate appeared 2-3 times (ticket 86).
+       JOIN (
+         SELECT DISTINCT Student_Id
+         FROM admission_master
+         WHERE IsDelete = 0 AND IsActive = 1
+       ) adm ON adm.Student_Id = sm.Student_Id
        LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id
        WHERE (sm.IsDelete = 0 OR sm.IsDelete IS NULL) ${clause}
        ORDER BY sm.Student_Id DESC
@@ -102,7 +146,7 @@ export async function POST(req: NextRequest) {
       'Qualification', 'Course', 'Batch Code',
     ];
     const csvLines = [headers.map(csvCell).join(',')];
-    for (const r of rows) {
+    for (const r of dedupeCandidates(rows)) {
       csvLines.push([
         r.Student_Id, r.Student_Name, r.Father_Name, r.Mother_Name, r.Sex, r.DOB,
         r.Aadhar_Number, r.Social_Category, r.Present_Mobile, r.Email,
