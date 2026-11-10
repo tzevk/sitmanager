@@ -227,6 +227,8 @@ export default function PublicAdmissionFormPage() {
     middleName: '',
     lastName: '',
     shortName: '',
+    fatherName: '',
+    motherName: '',
     dob: '',
     gender: '',
     isInternational: false,
@@ -1591,6 +1593,8 @@ export default function PublicAdmissionFormPage() {
         middleName: formData.middleName,
         lastName: formData.lastName,
         shortName: formData.shortName,
+        fatherName: formData.fatherName,
+        motherName: formData.motherName,
         dob: formData.dob,
         gender: formData.gender,
         isInternational: formData.isInternational,
@@ -2166,6 +2170,14 @@ export default function PublicAdmissionFormPage() {
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Short Name (For ID Card)</label>
                             <input type="text" value={formData.shortName} onChange={(e) => handleChange('shortName', e.target.value)} placeholder="e.g. Alex J." className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Father&apos;s Name</label>
+                            <input type="text" value={formData.fatherName} onChange={(e) => handleChange('fatherName', e.target.value)} placeholder="Enter father's full name" autoComplete="off" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Mother&apos;s Name</label>
+                            <input type="text" value={formData.motherName} onChange={(e) => handleChange('motherName', e.target.value)} placeholder="Enter mother's full name" autoComplete="off" className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#2A6BB5] focus:ring-1 focus:ring-[#2A6BB5]/10 transition-all" />
                           </div>
                           <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Date of Birth <span className="text-red-500">*</span></label>

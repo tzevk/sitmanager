@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     const { clause, params } = buildSearch(field, search);
     const [rows] = await pool.query<any[]>(
       `SELECT
-         sm.Student_Id, sm.Student_Name, sm.Father_Name, sm.Sex, sm.DOB,
+         sm.Student_Id, sm.Student_Name, sm.Father_Name, sm.Mother_Name, sm.Sex, sm.DOB,
          sm.Aadhar_Number, sm.Social_Category, sm.Present_Mobile, sm.Email,
          sm.Present_Address, sm.Present_City, sm.Present_State, sm.Present_Pin,
          sm.Qualification, sm.Batch_Code, c.Course_Name
@@ -97,14 +97,14 @@ export async function POST(req: NextRequest) {
     }
 
     const headers = [
-      'Student Id', 'Candidate Name', "Father's Name", 'Gender', 'DOB',
+      'Student Id', 'Candidate Name', "Father's Name", "Mother's Name", 'Gender', 'DOB',
       'Aadhar Number', 'Category', 'Mobile', 'Email', 'Address', 'City', 'State', 'Pincode',
       'Qualification', 'Course', 'Batch Code',
     ];
     const csvLines = [headers.map(csvCell).join(',')];
     for (const r of rows) {
       csvLines.push([
-        r.Student_Id, r.Student_Name, r.Father_Name, r.Sex, r.DOB,
+        r.Student_Id, r.Student_Name, r.Father_Name, r.Mother_Name, r.Sex, r.DOB,
         r.Aadhar_Number, r.Social_Category, r.Present_Mobile, r.Email,
         r.Present_Address, r.Present_City, r.Present_State, r.Present_Pin,
         r.Qualification, r.Course_Name, r.Batch_Code,

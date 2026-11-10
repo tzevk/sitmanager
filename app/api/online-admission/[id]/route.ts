@@ -386,6 +386,8 @@ export async function GET(
       middleName,
       lastName,
       shortName:      payload.shortName  || '',
+      fatherName:     payload.fatherName || '',
+      motherName:     payload.motherName || '',
       dob:            (si.Student_DOB ? String(si.Student_DOB).slice(0, 10) : '') || payload.dob || (si.DOB ? String(si.DOB).slice(0, 10) : ''),
       gender:         si.Student_Sex || payload.gender || si.Sex || '',
       nationality:    si.Student_Nationality || payload.nationality || si.Nationality || 'Indian',

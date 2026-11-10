@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
     const nsdcFormat = searchParams.get('format') === 'nsdc';
     if (nsdcFormat) await ensureNsdcColumns(pool);
     const NSDC_COLUMNS = nsdcFormat
-      ? `, sm.Father_Name, sm.DOB, sm.Sex, sm.Aadhar_Number, sm.Social_Category, sm.Qualification, c.Course_Name`
+      ? `, sm.Father_Name, sm.Mother_Name, sm.DOB, sm.Sex, sm.Aadhar_Number, sm.Social_Category, sm.Qualification, c.Course_Name`
       : '';
     const NSDC_JOIN = nsdcFormat ? `LEFT JOIN course_mst c ON c.Course_Id = sm.Course_Id` : '';
 

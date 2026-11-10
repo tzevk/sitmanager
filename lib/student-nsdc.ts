@@ -16,7 +16,7 @@ export async function ensureNsdcColumns(pool: Pool): Promise<void> {
   const [existingCols] = await pool.query(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_master'
-       AND COLUMN_NAME IN ('Aadhar_Number', 'Social_Category')`
+       AND COLUMN_NAME IN ('Aadhar_Number', 'Social_Category', 'Father_Name', 'Mother_Name')`
   ) as [any[], any];
 
   const present = new Set((existingCols as any[]).map((c) => c.COLUMN_NAME));
@@ -26,6 +26,13 @@ export async function ensureNsdcColumns(pool: Pool): Promise<void> {
   }
   if (!present.has('Social_Category')) {
     await pool.query(`ALTER TABLE student_master ADD COLUMN \`Social_Category\` VARCHAR(20) NULL`);
+  }
+
+  if (!present.has('Father_Name')) {
+    await pool.query(`ALTER TABLE student_master ADD COLUMN \`Father_Name\` VARCHAR(150) NULL`);
+  }
+  if (!present.has('Mother_Name')) {
+    await pool.query(`ALTER TABLE student_master ADD COLUMN \`Mother_Name\` VARCHAR(150) NULL`);
   }
 
   nsdcColumnsReady = true;

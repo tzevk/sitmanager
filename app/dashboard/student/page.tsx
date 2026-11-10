@@ -26,6 +26,7 @@ interface StudentRow {
   Cancelled?: number | null;
   // NSDC candidate-format fields — only populated when fetched with format=nsdc
   Father_Name?: string | null;
+  Mother_Name?: string | null;
   DOB?: string | null;
   Sex?: string | null;
   Aadhar_Number?: string | null;
@@ -336,6 +337,7 @@ export default function StudentPage() {
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Student Id</th>
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Candidate Name</th>
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Father&apos;s Name</th>
+                  <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Mother&apos;s Name</th>
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Gender</th>
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">DOB</th>
                   <th className="text-left py-1.5 px-3 font-bold whitespace-nowrap">Aadhar Number</th>
@@ -366,19 +368,20 @@ export default function StudentPage() {
             )}
             <tbody>
               {loading ? (
-                <tr><td colSpan={12} className="py-10 text-center">
+                <tr><td colSpan={13} className="py-10 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-6 h-6 border-2 border-[#2E3093] border-t-transparent rounded-full animate-spin" />
                     <span className="text-xs text-slate-500">Loading students…</span>
                   </div>
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={12} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
+                <tr><td colSpan={13} className="py-10 text-center text-xs text-slate-400">No students found</td></tr>
               ) : nsdcMode ? rows.map((r, index) => (
                 <tr key={r.Admission_Id ?? `${r.Student_Id}-${index}`} className="border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
                   <td className="py-1.5 px-3 text-xs text-slate-700 font-mono whitespace-nowrap">{r.Student_Id}</td>
                   <td className="py-1.5 px-3 font-semibold text-slate-900 text-xs whitespace-nowrap">{r.Student_Name || '—'}</td>
                   <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Father_Name || '—'}</td>
+                  <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Mother_Name || '—'}</td>
                   <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.Sex || '—'}</td>
                   <td className="py-1.5 px-3 text-slate-600 text-xs whitespace-nowrap">{r.DOB || '—'}</td>
                   <td className="py-1.5 px-3 whitespace-nowrap">

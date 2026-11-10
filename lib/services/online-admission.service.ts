@@ -103,6 +103,8 @@ const FORM_COLUMNS: [string, string][] = [
   ['Telephone',         'VARCHAR(20) NULL'],
   ['Family_Contact',    'VARCHAR(100) NULL'],
   ['Aadhar_Number',     'VARCHAR(20) NULL'],
+  ['Father_Name',       'VARCHAR(150) NULL'],
+  ['Mother_Name',       'VARCHAR(150) NULL'],
   ['ID_Proof_Type',     'VARCHAR(100) NULL'],
   // Present address
   ['Present_Flat',      'VARCHAR(100) NULL'],
@@ -469,6 +471,8 @@ export async function saveStructuredAdmissionData(
     ['Telephone',       n(input.telephone)],
     ['Family_Contact',  n(input.familyContact)],
     ['Aadhar_Number',   normalizeAadhar(input.aadharNumber)],
+    ['Father_Name',     n(input.fatherName)],
+    ['Mother_Name',     n(input.motherName)],
     ['ID_Proof_Type',   n(input.idProofType)],
     // Present address
     ['Present_Flat',      n(input.presentFlat)],
@@ -1125,6 +1129,19 @@ export async function syncOnlineAdmissionIntoCurrentDb(
     await pool.query(
       `UPDATE \`${studentMasterTable}\` SET Aadhar_Number = ? WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [aadhar, resolvedStudentId]
+    );
+  }
+
+  const fatherName = String(input.fatherName ?? '').trim();
+  const motherName = String(input.motherName ?? '').trim();
+  if ((fatherName || motherName) && resolvedStudentId > 0) {
+    await ensureNsdcColumns(pool);
+    await pool.query(
+      `UPDATE \`${studentMasterTable}\`
+          SET Father_Name = COALESCE(NULLIF(?, ''), Father_Name),
+              Mother_Name = COALESCE(NULLIF(?, ''), Mother_Name)
+        WHERE Student_Id = ? AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      [fatherName.slice(0, 150), motherName.slice(0, 150), resolvedStudentId]
     );
   }
 
