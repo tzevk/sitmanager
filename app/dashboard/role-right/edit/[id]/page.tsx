@@ -62,7 +62,12 @@ export default function EditRolePage() {
         setTitle(r.title ?? '');
         setDescription(r.description ?? '');
         setDashboardDepartment(r.dashboard_department ?? '');
-        const perms = new Set<string>(r.permissions ?? []);
+        // Drop retired permission ids still stored on the role (e.g. the old
+        // sales_tracker.view) — otherwise Save fails with "Invalid permissions".
+        const known = permData.success
+          ? new Set<string>((permData.data as PermissionGroup[]).flatMap(g => g.permissions.map(p => p.id)))
+          : null;
+        const perms = new Set<string>((r.permissions ?? []).filter(id => !known || known.has(id)));
         setSelectedPermissions(perms);
         // Expand groups that have at least one selected permission
         const withSelection = new Set<string>();
