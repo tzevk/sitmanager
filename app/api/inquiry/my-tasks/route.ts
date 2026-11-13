@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
 
     const [leads, appointments, [staffRows], canAssign] = await Promise.all([
       getMyTaskLeads({
-        date, owner, scope, all: sp.get('view') === 'all',
+        date, owner, scope, all: sp.get('view') === 'all', days: Number(sp.get('days')) || undefined,
         statuses: list(sp.get('status')),
         courseIds: list(sp.get('course'))?.map(Number).filter(Number.isFinite),
         modes: list(sp.get('mode')),

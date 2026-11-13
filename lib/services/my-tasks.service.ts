@@ -72,6 +72,8 @@ export interface MyTasksFilters {
   owner: string;
   /** All leads view: the last 90 days of leads and every follow-up, not just this day's list. */
   all?: boolean;
+  /** All leads view: how many days back new leads and follow-ups reach (default 90). */
+  days?: number;
   statuses?: string[];
   courseIds?: number[];
   modes?: string[];
@@ -97,6 +99,9 @@ export interface TaskLead {
   OwnerName: string | null;
   /** The counsellor who wrote the first discussion; set only for the initiated scope. */
   InitiatedByName?: string | null;
+  /** True when the lead came in through Meta (Facebook / Instagram) lead ads. */
+  IsMeta: boolean;
+  MetaCampaign: string | null;
   Reason: TaskReason;
 }
 
@@ -128,16 +133,17 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
   //    reminders that went off, and — for leads with an owner — never-contacted leads and leads
   //    whose latest discussion left no next step.
   const queue = isToday && !f.all;
+  const lookback = Math.min(3650, Math.max(1, Math.floor(Number(f.days) || 90)));
   const [due, fresh, reminders, ownedRecent] = await Promise.all([
     guarded(
       `SELECT d.Inquiry_id AS iid, DATE_FORMAT(d.nextdate, '%Y-%m-%d') AS nextdate, d.created_by
          FROM awt_inquirydiscussion d
-        WHERE d.deleted = 0 AND ${f.all ? 'd.nextdate >= DATE_SUB(?, INTERVAL 90 DAY)' : isToday ? `d.nextdate BETWEEN DATE_SUB(?, INTERVAL ${ACTION_QUEUE_DAYS} DAY) AND ?` : 'd.nextdate = ?'}
+        WHERE d.deleted = 0 AND ${f.all ? `d.nextdate >= DATE_SUB(?, INTERVAL ${lookback} DAY)` : isToday ? `d.nextdate BETWEEN DATE_SUB(?, INTERVAL ${ACTION_QUEUE_DAYS} DAY) AND ?` : 'd.nextdate = ?'}
           AND NOT EXISTS (SELECT 1 FROM awt_inquirydiscussion d2 WHERE d2.Inquiry_id = d.Inquiry_id AND d2.deleted = 0 AND d2.id > d.id)`,
       isToday && !f.all ? [f.date, f.date] : [f.date]
     ),
     guarded(
-      `SELECT Inquiry_Id FROM student_inquiry WHERE ${f.all ? '_inquiry_date >= DATE_SUB(?, INTERVAL 90 DAY)' : '_inquiry_date = ?'} AND (IsDelete = 0 OR IsDelete IS NULL)`,
+      `SELECT Inquiry_Id FROM student_inquiry WHERE ${f.all ? `_inquiry_date >= DATE_SUB(?, INTERVAL ${lookback} DAY)` : '_inquiry_date = ?'} AND (IsDelete = 0 OR IsDelete IS NULL)`,
       [f.date]
     ),
     queue
@@ -219,9 +225,18 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
     mine
   );
 
-  const [users] = await pool.query(
-    `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name FROM awt_adminuser`
-  );
+  const [[users], metaRows] = await Promise.all([
+    pool.query(
+      `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name FROM awt_adminuser`
+    ),
+    // Meta lead-ad leads are mirrored into student_inquiry; this table links them back.
+    guarded(
+      `SELECT inquiry_id, MAX(COALESCE(NULLIF(campaign_name, ''), NULLIF(form_name, ''))) AS campaign
+         FROM meta_ads_lead_sync WHERE inquiry_id IN (${marks2}) GROUP BY inquiry_id`,
+      mine
+    ).catch(() => [] as any[]), // table is created lazily by the Meta integration
+  ]);
+  const metaCampaign = new Map<number, string | null>(metaRows.map((m) => [Number(m.inquiry_id), m.campaign ?? null]));
   const userName = new Map<number, string>((users as any[]).map((u) => [Number(u.id), String(u.name)]));
 
   const needle = f.q?.trim().toLowerCase();
@@ -250,6 +265,7 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
       StatusLabel: r.StatusLabel, Temperature: r.Temperature,
       NextFollowUpDate: d?.next ?? null, InquiryDate: r.InquiryDate,
       OwnerId: ownerId, OwnerName: ownerId != null ? userName.get(ownerId) ?? null : null,
+      IsMeta: metaCampaign.has(id), MetaCampaign: metaCampaign.get(id) ?? null,
       ...(initiated ? { InitiatedByName: firstBy.has(id) ? userName.get(firstBy.get(id)!) ?? null : null } : {}),
       Reason: isDue && d!.next < f.date ? 'Overdue'
         : isReminder ? 'Reminder'
@@ -261,7 +277,7 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
   }
   const rank = { 'Overdue': 0, 'Reminder': 1, 'Not contacted': 2, 'Follow-up due': 3, 'No next step': 4, 'Upcoming': 5, 'New lead': 6, 'Lead': 7 } as const;
   out.sort((a, b) => rank[a.Reason] - rank[b.Reason] || b.Inquiry_Id - a.Inquiry_Id);
-  return out.slice(0, f.all ? 1500 : 500);
+  return out.slice(0, f.all ? 5000 : 1000);
 }
 
 export interface TaskAppointment {
