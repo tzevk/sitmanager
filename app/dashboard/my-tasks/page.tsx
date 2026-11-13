@@ -489,7 +489,7 @@ export default function MyTasksPage() {
                           <div className="flex items-center gap-1.5">
                             <span className="font-semibold text-slate-800">{l.Student_Name || '—'}</span>
                             {l.Temperature && <span className={`rounded px-1 text-[9px] font-bold uppercase ${TEMP_STYLE[l.Temperature] || ''}`}>{l.Temperature}</span>}
-                            {l.IsMeta && <span title={l.MetaCampaign ?? 'Meta lead ad'} className="rounded bg-blue-600 px-1 text-[9px] font-bold uppercase text-white">Meta</span>}
+                            {l.IsMeta && <span title={`${l.MetaCampaign ?? 'Meta lead ad'} · not converted yet — assigning converts it to an inquiry`} className="rounded bg-blue-600 px-1 text-[9px] font-bold uppercase text-white">Meta</span>}
                             {freshIds.has(l.Inquiry_Id) && <span className="rounded bg-emerald-500 px-1 text-[9px] font-bold uppercase text-white">New</span>}
                           </div>
                           <div className="font-mono text-[10px] text-slate-400">{l.Present_Mobile || '—'}</div>
@@ -512,7 +512,9 @@ export default function MyTasksPage() {
                           ) : (l.OwnerName || <span className="text-slate-300">Unassigned</span>)}
                         </td>
                         <td className="px-2 py-1.5 text-right">
-                          <Link href={`/dashboard/inquiry/add?editId=${l.Inquiry_Id}&returnTo=${encodeURIComponent('/dashboard/my-tasks')}`} className="text-[10px] font-bold text-[#2E3093] hover:underline">Open</Link>
+                          {l.Inquiry_Id < 0
+                            ? <Link href="/dashboard/meta-leads" className="text-[10px] font-bold text-blue-600 hover:underline">Open</Link>
+                            : <Link href={`/dashboard/inquiry/add?editId=${l.Inquiry_Id}&returnTo=${encodeURIComponent('/dashboard/my-tasks')}`} className="text-[10px] font-bold text-[#2E3093] hover:underline">Open</Link>}
                         </td>
                       </tr>
                     );

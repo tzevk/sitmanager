@@ -99,8 +99,10 @@ export interface TaskLead {
   OwnerName: string | null;
   /** The counsellor who wrote the first discussion; set only for the initiated scope. */
   InitiatedByName?: string | null;
-  /** True when the lead came in through Meta (Facebook / Instagram) lead ads. */
+  /** True for a Meta (Facebook / Instagram) lead-ad lead not yet converted to an inquiry.
+   *  Such rows carry a negative Inquiry_Id (-meta row id) and MetaLeadId. */
   IsMeta: boolean;
+  MetaLeadId?: string;
   MetaCampaign: string | null;
   Reason: TaskReason;
 }
@@ -225,18 +227,9 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
     mine
   );
 
-  const [[users], metaRows] = await Promise.all([
-    pool.query(
-      `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name FROM awt_adminuser`
-    ),
-    // Meta lead-ad leads are mirrored into student_inquiry; this table links them back.
-    guarded(
-      `SELECT inquiry_id, MAX(COALESCE(NULLIF(campaign_name, ''), NULLIF(form_name, ''))) AS campaign
-         FROM meta_ads_lead_sync WHERE inquiry_id IN (${marks2}) GROUP BY inquiry_id`,
-      mine
-    ).catch(() => [] as any[]), // table is created lazily by the Meta integration
-  ]);
-  const metaCampaign = new Map<number, string | null>(metaRows.map((m) => [Number(m.inquiry_id), m.campaign ?? null]));
+  const [users] = await pool.query(
+    `SELECT id, COALESCE(NULLIF(TRIM(CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, ''))), ''), username) AS name FROM awt_adminuser`
+  );
   const userName = new Map<number, string>((users as any[]).map((u) => [Number(u.id), String(u.name)]));
 
   const needle = f.q?.trim().toLowerCase();
@@ -265,7 +258,7 @@ export async function getMyTaskLeads(f: MyTasksFilters): Promise<TaskLead[]> {
       StatusLabel: r.StatusLabel, Temperature: r.Temperature,
       NextFollowUpDate: d?.next ?? null, InquiryDate: r.InquiryDate,
       OwnerId: ownerId, OwnerName: ownerId != null ? userName.get(ownerId) ?? null : null,
-      IsMeta: metaCampaign.has(id), MetaCampaign: metaCampaign.get(id) ?? null,
+      IsMeta: false, MetaCampaign: null,
       ...(initiated ? { InitiatedByName: firstBy.has(id) ? userName.get(firstBy.get(id)!) ?? null : null } : {}),
       Reason: isDue && d!.next < f.date ? 'Overdue'
         : isReminder ? 'Reminder'
@@ -556,4 +549,59 @@ export async function getDaywiseSummary(from: string, to: string, owner = 'all')
     newInquiries: Object.fromEntries(fresh.map((r) => [r.day, Number(r.n)])),
     counsellors: [...seen.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
+}
+
+/**
+ * Meta lead-ad leads that have NOT been converted to an inquiry yet (inquiry_id IS NULL).
+ * They have no owner, so they only appear for "All counsellors" / "Unassigned".
+ * Converted Meta leads are ordinary inquiries and come through getMyTaskLeads as usual.
+ */
+export async function getUnconvertedMetaLeads(f: MyTasksFilters): Promise<TaskLead[]> {
+  if ((f.scope ?? 'allocated') !== 'allocated' || (f.owner !== 'all' && f.owner !== 'unowned')) return [];
+  const isToday = f.date === nowLocal().date;
+  const lookback = f.all ? Math.min(3650, Math.max(1, Math.floor(Number(f.days) || 90))) : isToday ? ACTION_QUEUE_DAYS : 0;
+  let rows: any[] = [];
+  try {
+    const [r] = await getPool().query(
+      `SET STATEMENT max_statement_time=15 FOR
+       SELECT id, meta_lead_id, student_name, mobile, email, course_name, batch_code, source_label,
+              COALESCE(NULLIF(campaign_name, ''), NULLIF(form_name, '')) AS campaign,
+              DATE_FORMAT(created_at, '%Y-%m-%d') AS day
+         FROM meta_ads_lead_sync
+        WHERE inquiry_id IS NULL
+          AND created_at >= DATE_SUB(?, INTERVAL ? DAY) AND created_at < DATE_ADD(?, INTERVAL 1 DAY)
+        ORDER BY created_at DESC
+        LIMIT 3000`,
+      [f.date, lookback, f.date]
+    );
+    rows = r as any[];
+  } catch (err: any) {
+    if (/doesn't exist/i.test(String(err?.message))) return []; // Meta integration never set up
+    throw err;
+  }
+  const needle = f.q?.trim().toLowerCase();
+  return rows
+    .filter((m) => !needle || `${m.student_name} ${m.mobile} ${m.email}`.toLowerCase().includes(needle))
+    .map((m) => ({
+      Inquiry_Id: -Number(m.id), MetaLeadId: String(m.meta_lead_id),
+      Student_Name: m.student_name, Present_Mobile: m.mobile, Email: m.email,
+      CourseName: m.course_name, Course_Id: null, Batch_Code: m.batch_code, Inquiry_From: m.source_label || 'Meta',
+      StatusLabel: 'Not converted', Temperature: null, NextFollowUpDate: null, InquiryDate: m.day,
+      OwnerId: null, OwnerName: null, IsMeta: true, MetaCampaign: m.campaign ?? null,
+      Reason: (m.day === f.date ? 'New lead' : f.all ? 'Lead' : 'Not contacted') as TaskReason,
+    }));
+}
+
+/** Convert Meta leads (by negative task id) to inquiries; returns the new inquiry ids. */
+export async function convertMetaTaskLeads(negIds: number[], by: number): Promise<number[]> {
+  const rowIds = [...new Set(negIds.filter((n) => Number.isInteger(n) && n < 0).map((n) => -n))].slice(0, 200);
+  if (!rowIds.length) return [];
+  const { convertMetaLeadToInquiry } = await import('@/lib/services/meta-ads.service');
+  const pool = getPool();
+  const [rows] = await pool.query(`SELECT id, meta_lead_id FROM meta_ads_lead_sync WHERE id IN (${rowIds.map(() => '?').join(',')})`, rowIds);
+  for (const r of rows as any[]) await convertMetaLeadToInquiry(String(r.meta_lead_id), by);
+  const [after] = await pool.query(
+    `SELECT inquiry_id FROM meta_ads_lead_sync WHERE id IN (${rowIds.map(() => '?').join(',')}) AND inquiry_id IS NOT NULL`, rowIds
+  );
+  return (after as any[]).map((r) => Number(r.inquiry_id)).filter((n) => n > 0);
 }

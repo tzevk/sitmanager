@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requirePermission } from '@/lib/api-auth';
 import { getPool } from '@/lib/db';
 import { notifyManualAssignment } from '@/lib/services/lead-allocation.service';
-import { assignLeads, canSeeAllTasks, getMyTaskAppointments, getMyTaskLeads, getMyTasksMonth, getDailyActivity, unassignLeads } from '@/lib/services/my-tasks.service';
+import { assignLeads, canSeeAllTasks, convertMetaTaskLeads, getUnconvertedMetaLeads, getMyTaskAppointments, getMyTaskLeads, getMyTasksMonth, getDailyActivity, unassignLeads } from '@/lib/services/my-tasks.service';
 
 export const runtime = 'nodejs';
 
@@ -39,16 +39,19 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ...(await getDailyActivity(date.slice(0, 7), owner)), me: auth.session.userId, owner, canSeeAll });
     }
 
-    const [leads, appointments, [staffRows], canAssign] = await Promise.all([
-      getMyTaskLeads({
-        date, owner, scope, all: sp.get('view') === 'all', days: Number(sp.get('days')) || undefined,
-        statuses: list(sp.get('status')),
-        courseIds: list(sp.get('course'))?.map(Number).filter(Number.isFinite),
-        modes: list(sp.get('mode')),
-        temps: list(sp.get('temp')),
-        batches: list(sp.get('batch')),
-        q: sp.get('q') || undefined,
-      }),
+    const filters = {
+      date, owner, scope, all: sp.get('view') === 'all', days: Number(sp.get('days')) || undefined,
+      statuses: list(sp.get('status')),
+      courseIds: list(sp.get('course'))?.map(Number).filter(Number.isFinite),
+      modes: list(sp.get('mode')),
+      temps: list(sp.get('temp')),
+      batches: list(sp.get('batch')),
+      q: sp.get('q') || undefined,
+    } as const;
+    const [inquiryLeads, metaLeads, appointments, [staffRows], canAssign] = await Promise.all([
+      getMyTaskLeads(filters),
+      // Unconverted Meta leads; skipped when a filter they can't satisfy is set.
+      filters.statuses?.length || filters.courseIds?.length || filters.temps?.length ? Promise.resolve([]) : getUnconvertedMetaLeads(filters),
       getMyTaskAppointments(date, owner, scope),
       getPool().query(
         `SELECT c.user_id AS id, COALESCE(NULLIF(TRIM(c.display_name), ''), u.username) AS name
@@ -57,6 +60,7 @@ export async function GET(req: NextRequest) {
       ) as Promise<[{ id: number; name: string }[], unknown]>,
       canAssignLeads(auth.session.userId),
     ]);
+    const leads = [...inquiryLeads, ...metaLeads];
     return NextResponse.json({
       leads, appointments,
       staff: canSeeAll ? staffRows : staffRows.filter((u) => u.id === auth.session.userId),
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only the Mayur account can assign or unassign leads' }, { status: 403 });
     }
     const body = await req.json();
-    const ids = Array.isArray(body.inquiryIds) ? body.inquiryIds.map(Number) : [];
+    let ids: number[] = Array.isArray(body.inquiryIds) ? body.inquiryIds.map(Number) : [];
     if (body.action === 'unassign') {
       if (!ids.length) return NextResponse.json({ error: 'Pick leads to unassign' }, { status: 400 });
       return NextResponse.json({ success: true, unassigned: await unassignLeads(ids) });
@@ -89,6 +93,11 @@ export async function POST(req: NextRequest) {
     if (!Number.isInteger(userId) || userId <= 0 || !ids.length) return NextResponse.json({ error: 'Pick leads and a counsellor' }, { status: 400 });
     const [ok] = await getPool().query('SELECT 1 FROM appt_counsellors WHERE user_id = ? LIMIT 1', [userId]);
     if (!(ok as unknown[]).length) return NextResponse.json({ error: 'Leads can only be assigned to a counsellor' }, { status: 400 });
+    // Negative ids are unconverted Meta leads: convert them to inquiries first, then assign.
+    if (ids.some((n) => n < 0)) {
+      const converted = await convertMetaTaskLeads(ids, auth.session.userId);
+      ids = [...ids.filter((n) => n > 0), ...converted];
+    }
     const count = await assignLeads(ids, userId, auth.session.userId);
     await notifyManualAssignment(ids, userId).catch((err) => console.error('Manual assign notify:', err));
     return NextResponse.json({ success: true, assigned: count });
