@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
               gfr.Label1, gfr.Label2,
               fm1.Faculty_Name AS faculty1,
               fm2.Faculty_Name AS faculty2,
-              ap.Faculty_Name  AS approve_by,
+              COALESCE(NULLIF(TRIM(oe.Employee_Name), ''), ap.Faculty_Name) AS approve_by,
               cm.Course_Name, bm.Batch_code,
               -- Brief description: the batch's own text, else the course master's
               -- (many older batches were saved without one).
@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
        LEFT JOIN faculty_master fm1 ON fm1.Faculty_Id = gfr.Faculty1
        LEFT JOIN faculty_master fm2 ON fm2.Faculty_Id = gfr.Faculty2
        LEFT JOIN faculty_master ap  ON ap.Faculty_Id = gfr.Approve
+       LEFT JOIN office_employee_mst oe ON oe.Emp_Id = gfr.Approve
        WHERE gfr.Id = ? AND (gfr.IsDelete = 0 OR gfr.IsDelete IS NULL)`,
       [genId]
     );

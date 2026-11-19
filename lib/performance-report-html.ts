@@ -131,7 +131,12 @@ export function renderPerformanceReportHtml(data: any): string {
     .crit td { border: none; border-bottom: 1px solid #000; padding: 1.5px 6px; font-size: 10.5px; width: 50%; }
     .crit tr:last-child td { border-bottom: none; }
     .sec .no { text-align: center; }
+    /* Keep labels and values on a single line so every row lines up. */
+    .sec .k, .sec td { white-space: nowrap; }
+    .sec .k { font-size: 10.5px; }
+    .sec .nopad { white-space: normal; }
     .tag { float: right; padding-right: 30px; }
+    .grid th, .grid td { white-space: nowrap; }
     .grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .grid th, .grid td { border: none; border-right: 1px solid #999; text-align: center; padding: 2px 1px; font-size: 10px; }
     .grid th { font-weight: 600; color: #444; border-bottom: 1px solid #999; }
