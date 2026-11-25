@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useId } from 'react';
 import Link from 'next/link';
 import { usePermissions } from '@/lib/permissions-context';
 import MonitoringWeeklyTable, { type MonitoringDayRow } from './MonitoringWeeklyTable';
@@ -9,7 +9,7 @@ interface AdminUserOption {
   id: number;
   firstname: string | null;
   lastname: string | null;
-  email: string | null;
+  email?: string | null;
 }
 
 function formatDate(d: string): string {
@@ -25,9 +25,9 @@ function getMonday(base: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function shiftWeek(weekStart: string, weeks: number): string {
-  const d = new Date(`${weekStart}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + weeks * 7);
+function shiftDays(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -39,51 +39,125 @@ function employeeName(e: AdminUserOption): string {
  * Dashboard-home monitoring widget.
  * - Administration (super admin): can pick any employee from a dropdown and view their
  *   weekly progress, via the admin /api/monitoring/weekly endpoint.
- * - Everyone else: always sees just their own report, no dropdown, via the self-service
- *   /api/monitoring/weekly/me endpoint keyed off the session.
+ * - Everyone else: defaults to their own editable report and can switch to an authorized
+ *   teammate's read-only report when the team endpoint offers one.
  */
 export default function MonitoringWidget() {
+  const employeeSelectId = useId();
   const { session, isSuperAdmin, loading: sessionLoading } = usePermissions();
-  const [employees, setEmployees] = useState<AdminUserOption[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+  const selfId = session?.userId ?? null;
+  const [optionsState, setOptionsState] = useState<{
+    key: string;
+    employees: AdminUserOption[];
+    error: string | null;
+    loading: boolean;
+  }>({ key: '', employees: [], error: null, loading: false });
+  const [adminEmployeeId, setAdminEmployeeId] = useState<number | null>(null);
+  const [teammateEmployeeId, setTeammateEmployeeId] = useState<number | null>(null);
   const [weekStart, setWeekStart] = useState<string>(() => getMonday(new Date()));
-  const [days, setDays] = useState<MonitoringDayRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [weekState, setWeekState] = useState<{
+    key: string;
+    loading: boolean;
+    days: MonitoringDayRow[];
+    error: string | null;
+  }>({ key: '', loading: true, days: [], error: null });
   const [collapsed, setCollapsed] = useState(false);
 
+  const optionsKey = `${isSuperAdmin ? 'admin' : 'team'}:${selfId ?? 'none'}`;
+  const currentOptions = optionsState.key === optionsKey ? optionsState : null;
+  const employees = currentOptions?.employees ?? [];
+  const optionsError = currentOptions?.error ?? null;
+  const hasTeammateOptions = selfId !== null && employees.some((e) => e.id !== selfId);
+  const isTeamScoped = !isSuperAdmin && hasTeammateOptions;
+  const selectedTeammateId = !isSuperAdmin
+    && hasTeammateOptions
+    && teammateEmployeeId !== null
+    && teammateEmployeeId !== selfId
+    && employees.some((e) => e.id === teammateEmployeeId)
+    ? teammateEmployeeId
+    : null;
+  const selectedEmployeeId = isSuperAdmin ? adminEmployeeId : selectedTeammateId ?? selfId;
+  const reportMode = isSuperAdmin ? 'admin' : selectedTeammateId === null ? 'self' : 'team';
+  const reportKey = `${reportMode}:${selfId ?? 'none'}:${selectedEmployeeId ?? 'none'}:${weekStart}`;
+
   useEffect(() => {
-    if (!isSuperAdmin || !session) return;
-    fetch('/api/monitoring/employees')
-      .then((res) => res.json())
-      .then((data) => {
-        const list: AdminUserOption[] = data.employees || [];
-        setEmployees(list);
-        setSelectedEmployeeId((prev) => prev ?? session.userId ?? list[0]?.id ?? null);
+    if (sessionLoading || selfId === null) return;
+
+    const controller = new AbortController();
+    let active = true;
+    const url = isSuperAdmin ? '/api/monitoring/employees' : '/api/monitoring/weekly/team';
+
+    setOptionsState({ key: optionsKey, employees: [], error: null, loading: true });
+    if (!isSuperAdmin) setTeammateEmployeeId(null);
+
+    fetch(url, { signal: controller.signal })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error('Unable to load employee options');
+        return data;
       })
-      .catch(() => {});
-  }, [isSuperAdmin, session]);
+      .then((data: { employees?: AdminUserOption[] }) => {
+        if (!active) return;
+        const list = Array.isArray(data.employees) ? data.employees : [];
+        setOptionsState({ key: optionsKey, employees: list, error: null, loading: false });
+        if (isSuperAdmin) setAdminEmployeeId((prev) => prev ?? selfId ?? list[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setOptionsState({ key: optionsKey, employees: [], error: 'Unable to load employee options.', loading: false });
+      });
 
-  const fetchWeek = useCallback(async () => {
-    if (!session) return;
-    if (isSuperAdmin && !selectedEmployeeId) return;
-    setLoading(true);
-    try {
-      const url = isSuperAdmin
-        ? `/api/monitoring/weekly?adminUserId=${selectedEmployeeId}&weekStart=${weekStart}`
-        : `/api/monitoring/weekly/me?weekStart=${weekStart}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      setDays(data.days || []);
-    } catch {
-      setDays([]);
-    }
-    setLoading(false);
-  }, [session, isSuperAdmin, selectedEmployeeId, weekStart]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isSuperAdmin, optionsKey, selfId, sessionLoading]);
 
-  useEffect(() => { fetchWeek(); }, [fetchWeek]);
+  useEffect(() => {
+    if (sessionLoading || selfId === null) return;
+    if (isSuperAdmin && selectedEmployeeId === null) return;
+
+    const controller = new AbortController();
+    let active = true;
+    const url = isSuperAdmin
+      ? `/api/monitoring/weekly?adminUserId=${selectedEmployeeId}&weekStart=${weekStart}`
+      : selectedEmployeeId === selfId
+        ? `/api/monitoring/weekly/me?weekStart=${weekStart}`
+        : `/api/monitoring/weekly/team?employeeId=${selectedEmployeeId}&weekStart=${weekStart}`;
+
+    setWeekState({ key: reportKey, loading: true, days: [], error: null });
+
+    const loadWeek = async () => {
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) throw new Error('Unable to load weekly report');
+        if (!active) return;
+        setWeekState({
+          key: reportKey,
+          loading: false,
+          days: Array.isArray(data.days) ? data.days : [],
+          error: null,
+        });
+      } catch {
+        if (!active) return;
+        setWeekState({ key: reportKey, loading: false, days: [], error: 'Unable to load weekly report.' });
+      }
+    };
+
+    void loadWeek();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isSuperAdmin, reportKey, selectedEmployeeId, selfId, sessionLoading, weekStart]);
 
   const handleSaveDay = async (row: MonitoringDayRow) => {
-    setDays((prev) => prev.map((d) => (d.date === row.date ? row : d)));
+    if (reportMode === 'team' || selectedEmployeeId === null) return;
+    setWeekState((prev) => prev.key === reportKey
+      ? { ...prev, days: prev.days.map((d) => (d.date === row.date ? row : d)) }
+      : prev);
     const payload = {
       date: row.date,
       firstHalfSummary: row.firstHalfSummary,
@@ -111,10 +185,20 @@ export default function MonitoringWidget() {
 
   if (sessionLoading || !session) return null;
 
-  const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || null;
-  const employeeLabel = isSuperAdmin
-    ? (selectedEmployee ? employeeName(selectedEmployee) : '—')
-    : `${session.firstName ?? ''} ${session.lastName ?? ''}`.trim() || session.email || 'Me';
+  const employeeOptions: AdminUserOption[] = isSuperAdmin || employees.some((e) => e.id === session.userId)
+    ? employees
+    : [
+      { id: session.userId, firstname: session.firstName ?? null, lastname: session.lastName ?? null, email: session.email ?? null },
+      ...employees,
+    ];
+  const selectedEmployee = employeeOptions.find((e) => e.id === selectedEmployeeId) || null;
+  const selfLabel = `${session.firstName ?? ''} ${session.lastName ?? ''}`.trim() || session.email || 'Me';
+  const employeeLabel = selectedEmployee
+    ? employeeName(selectedEmployee)
+    : isSuperAdmin ? '—' : selfLabel;
+  const currentWeek = weekState.key === reportKey ? weekState : null;
+  const reportLoading = !currentWeek || currentWeek.loading;
+  const canEdit = reportMode !== 'team';
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -123,7 +207,7 @@ export default function MonitoringWidget() {
           <svg className="w-4 h-4 text-[#2A6BB5]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
           </svg>
-          {isSuperAdmin ? 'Employee Monitoring' : 'My Weekly Report'}
+          {isSuperAdmin ? 'Employee Monitoring' : isTeamScoped ? 'Weekly Report' : 'My Weekly Report'}
         </h3>
         <div className="flex items-center gap-3">
           <Link href="/dashboard/monitoring" className="text-xs font-semibold text-[#2E3093] hover:underline">
@@ -144,15 +228,21 @@ export default function MonitoringWidget() {
       {!collapsed && (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            {isSuperAdmin && (
+            {(isSuperAdmin || hasTeammateOptions) && (
               <div className="relative">
+                <label htmlFor={employeeSelectId} className="sr-only">Employee</label>
                 <select
+                  id={employeeSelectId}
                   value={selectedEmployeeId ?? ''}
-                  onChange={(e) => setSelectedEmployeeId(e.target.value ? Number(e.target.value) : null)}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    if (isSuperAdmin) setAdminEmployeeId(id);
+                    else setTeammateEmployeeId(id === selfId ? null : id);
+                  }}
                   className="appearance-none pl-2.5 pr-7 py-1 border border-slate-200 rounded-lg text-[11px] font-semibold text-slate-700 bg-slate-50 h-7 min-w-[160px] hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-[#2E3093]/15 focus:border-[#2E3093]"
                 >
-                  <option value="">Select Employee</option>
-                  {employees.map((e) => (
+                  {isSuperAdmin && <option value="">Select Employee</option>}
+                  {employeeOptions.map((e) => (
                     <option key={e.id} value={e.id}>{employeeName(e)}</option>
                   ))}
                 </select>
@@ -162,9 +252,13 @@ export default function MonitoringWidget() {
               </div>
             )}
 
+            {!canEdit && (
+              <span className="text-[11px] font-semibold text-slate-500">Read-only</span>
+            )}
+
             <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5 w-fit">
               <button
-                onClick={() => setWeekStart((w) => shiftWeek(w, -1))}
+                onClick={() => setWeekStart((w) => shiftDays(w, -7))}
                 className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
                 title="Previous week"
               >
@@ -173,10 +267,10 @@ export default function MonitoringWidget() {
                 </svg>
               </button>
               <span className="text-[11px] font-bold text-slate-700 px-2 min-w-[110px] text-center">
-                {days.length ? `${formatDate(days[0].date)} – ${formatDate(days[6].date)}` : ''}
+                {formatDate(weekStart)} – {formatDate(shiftDays(weekStart, 6))}
               </span>
               <button
-                onClick={() => setWeekStart((w) => shiftWeek(w, 1))}
+                onClick={() => setWeekStart((w) => shiftDays(w, 7))}
                 className="w-6 h-6 flex items-center justify-center rounded-md text-slate-500 hover:bg-white hover:text-[#2E3093] hover:shadow-sm transition-all"
                 title="Next week"
               >
@@ -193,15 +287,23 @@ export default function MonitoringWidget() {
             </div>
           </div>
 
-          {loading ? (
+          {optionsError && (
+            <div className="text-[11px] text-red-600 py-2 text-center">{optionsError}</div>
+          )}
+
+          {isSuperAdmin && selectedEmployeeId === null && optionsError ? null : isSuperAdmin && selectedEmployeeId === null && currentOptions?.loading === false ? (
+            <div className="text-[11px] text-slate-500 py-6 text-center">Select an employee to view a report.</div>
+          ) : currentWeek?.error ? (
+            <div className="text-[11px] text-red-600 py-6 text-center">{currentWeek.error}</div>
+          ) : reportLoading ? (
             <div className="text-[11px] text-slate-400 py-6 text-center">Loading...</div>
           ) : (
             <MonitoringWeeklyTable
               employeeLabel={employeeLabel}
-              days={days}
-              canEdit
+              days={currentWeek?.days ?? []}
+              canEdit={canEdit}
               onSaveDay={handleSaveDay}
-              refreshKey={isSuperAdmin ? `${selectedEmployeeId ?? 'none'}:${weekStart}` : 'me'}
+              refreshKey={reportKey}
             />
           )}
         </div>

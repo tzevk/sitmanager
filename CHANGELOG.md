@@ -5,6 +5,14 @@ Format: `[Date] Module — Description`
 
 ---
 
+## 2026-11-25
+
+### Dashboard — Weekly Report access
+- Mayur can switch between his own Weekly Report and read-only reports for Jeena, Gayatri, Vignesh, and Vaidehi, including past weeks. Editing his own report and access through Full Monitoring are unchanged.
+- To change this dashboard-only grant, update `TEAMMATES_BY_VIEWER` in `app/api/monitoring/weekly/team/route.ts` with verified `awt_adminuser.id` values and redeploy. Removing an account from the grant removes access to all its report weeks through this panel without changing Role Right.
+
+---
+
 ## 2026-07-20
 
 ### Attendance — Facescan Sync
